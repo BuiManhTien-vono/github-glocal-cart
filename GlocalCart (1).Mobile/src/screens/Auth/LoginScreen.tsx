@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../../../context/AuthContext';
 import { colors, spacing, fontSize, borderRadius, shadow } from '../../theme/colors';
 
 const { width } = Dimensions.get('window');

@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { Loading } from '../components/common/Loading';
+import { Loading } from '../../components/common/Loading';
 import { colors } from '../theme/colors';
 
 // Auth Screens
@@ -19,10 +19,10 @@ import ChangePasswordScreen from '../screens/Profile/ChangePasswordScreen';
 import PaymentMethodsScreen from '../screens/Profile/PaymentMethodsScreen';
 
 // Admin Screens
-import AdminDashboardScreen from '../screens/Admin/AdminDashboardScreen';
-import AdminCategoriesScreen from '../screens/Admin/AdminCategoriesScreen';
-import AdminUsersScreen from '../screens/Admin/AdminUsersScreen';
-import AdminProductsScreen from '../screens/Admin/AdminProductsScreen';
+import AdminDashboardScreen from '../src/screens/Admin/AdminDashboardScreen';
+import AdminCategoriesScreen from '../src/screens/Admin/AdminCategoriesScreen';
+import AdminUsersScreen from '../src/screens/Admin/AdminUsersScreen';
+import AdminProductsScreen from '../src/screens/Admin/AdminProductsScreen';
 
 // ─── Placeholder screens (sẽ do FE2 & FE3 hoàn thiện) ───
 import { View, Text, StyleSheet } from 'react-native';
@@ -41,11 +41,11 @@ const ph = StyleSheet.create({
 });
 
 // ─── Screen dành cho FE2 / FE3 (placeholder) ───
-import HomeScreen from '../screens/Shop/HomeScreen';
-import CategoryScreen from '../screens/Shop/CategoryScreen';
-import ProductDetailScreen from '../screens/Shop/ProductDetailScreen';
-import CartScreen from '../screens/Shop/CartScreen';
-import SearchScreen from '../screens/Shop/SearchScreen';
+import HomeScreen from '../src/screens/Shop/HomeScreen';
+import CategoryScreen from '../src/screens/Shop/CategoryScreen';
+import ProductDetailScreen from '../src/screens/Shop/ProductDetailScreen';
+import CartScreen from '../src/screens/Shop/CartScreen';
+import SearchScreen from '../src/screens/Shop/SearchScreen';
 const NotificationsScreen = () => <PlaceholderScreen title="Thông Báo (FE3)" />;
 
 // ─── Stacks ───
