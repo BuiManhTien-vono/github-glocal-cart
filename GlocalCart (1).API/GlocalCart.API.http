@@ -1,0 +1,6 @@
+@GlocalCart.API_HostAddress = http://localhost:5171
+
+GET {{GlocalCart.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
