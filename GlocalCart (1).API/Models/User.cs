@@ -1,30 +1,25 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Identity;
 using GlocalCart.API.Enums;
 
 namespace GlocalCart.API.Models
 {
     /// <summary>
     /// Bảng Users - Tài khoản người dùng (Account trong UML)
+    /// Kế thừa IdentityUser<int> để tích hợp ASP.NET Identity Framework
     /// Hỗ trợ đa vai trò: Member (Buyer), Seller, Admin
     /// </summary>
-    public class User
+    public class User : IdentityUser<int>
     {
-        public int Id { get; set; }
-
-        [Required, MaxLength(100)]
-        public string UserName { get; set; } = string.Empty;
-
-        [Required, MaxLength(200)]
-        public string Email { get; set; } = string.Empty;
-
-        [Required]
-        public string PasswordHash { get; set; } = string.Empty;
+        // IdentityUser<int> đã cung cấp sẵn:
+        // - int Id
+        // - string UserName
+        // - string Email
+        // - string PasswordHash
+        // - string PhoneNumber
 
         [Required, MaxLength(150)]
         public string FullName { get; set; } = string.Empty;
-
-        [MaxLength(20)]
-        public string? Phone { get; set; }
 
         public UserRole Role { get; set; } = UserRole.Member;
 

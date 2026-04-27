@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using GlocalCart.API.Helpers;
 using GlocalCart.API.Services.Interfaces;
 
 namespace GlocalCart.API.Controllers
@@ -17,17 +18,17 @@ namespace GlocalCart.API.Controllers
 
         [HttpGet]
         public async Task<IActionResult> GetNotifications([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
-            Ok(await _notifService.GetNotificationsAsync(UserId, page, pageSize));
+            Ok(ApiResponse.Ok(await _notifService.GetNotificationsAsync(UserId, page, pageSize)));
 
         [HttpPatch("{id}/read")]
         public async Task<IActionResult> MarkAsRead(int id)
         {
             await _notifService.MarkAsReadAsync(UserId, id);
-            return Ok(new { success = true, message = "Đã đánh dấu đã đọc." });
+            return Ok(ApiResponse.Ok("Đã đánh dấu đã đọc."));
         }
 
         [HttpGet("unread-count")]
         public async Task<IActionResult> GetUnreadCount() =>
-            Ok(new { count = await _notifService.GetUnreadCountAsync(UserId) });
+            Ok(ApiResponse.Ok(new { count = await _notifService.GetUnreadCountAsync(UserId) }));
     }
 }

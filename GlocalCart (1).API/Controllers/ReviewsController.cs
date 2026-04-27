@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GlocalCart.API.DTOs.Reviews;
+using GlocalCart.API.Helpers;
 using GlocalCart.API.Services.Interfaces;
 
 namespace GlocalCart.API.Controllers
@@ -19,7 +20,7 @@ namespace GlocalCart.API.Controllers
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> GetReviews(int productId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
-            Ok(await _reviewService.GetProductReviewsAsync(productId, page, pageSize));
+            Ok(ApiResponse.Ok(await _reviewService.GetProductReviewsAsync(productId, page, pageSize)));
 
         /// <summary>
         /// Viết đánh giá (chỉ sau khi đơn hàng Complete)
@@ -29,7 +30,7 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> CreateReview(int productId, [FromBody] CreateReviewDto dto)
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            return Ok(await _reviewService.CreateReviewAsync(userId, productId, dto));
+            return Ok(ApiResponse.Created(await _reviewService.CreateReviewAsync(userId, productId, dto), "Đánh giá thành công."));
         }
     }
 }

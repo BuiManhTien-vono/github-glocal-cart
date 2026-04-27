@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using GlocalCart.API.Helpers;
 using GlocalCart.API.Services.Interfaces;
 
 namespace GlocalCart.API.Controllers
@@ -15,6 +16,7 @@ namespace GlocalCart.API.Controllers
         /// Lấy danh sách danh mục phân cấp (Public)
         /// </summary>
         [HttpGet]
-        public async Task<IActionResult> GetCategories() => Ok(await _productService.GetCategoriesAsync());
+        public async Task<IActionResult> GetCategories() =>
+            Ok(ApiResponse.Ok(await _productService.GetCategoriesAsync()));
     }
 }

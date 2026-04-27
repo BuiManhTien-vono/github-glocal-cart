@@ -8,6 +8,7 @@ namespace GlocalCart.API.Helpers
 {
     /// <summary>
     /// Helper tạo và xác thực JWT Token
+    /// Tích hợp với ASP.NET Identity - đọc roles từ UserManager
     /// </summary>
     public class JwtHelper
     {
@@ -20,8 +21,9 @@ namespace GlocalCart.API.Helpers
 
         /// <summary>
         /// Tạo JWT Token cho user đã đăng nhập
+        /// Roles được lấy từ Identity RoleManager thay vì enum
         /// </summary>
-        public string GenerateToken(User user)
+        public string GenerateToken(User user, IList<string> roles)
         {
             var jwtSettings = _config.GetSection("JwtSettings");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!));
@@ -30,11 +32,16 @@ namespace GlocalCart.API.Helpers
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.UserName),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.Role.ToString()),
+                new Claim(ClaimTypes.Name, user.UserName!),
+                new Claim(ClaimTypes.Email, user.Email!),
                 new Claim("IsSeller", user.IsSeller.ToString())
             };
+
+            // Thêm tất cả roles của user vào claims (hỗ trợ multi-role)
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
 
             var token = new JwtSecurityToken(
                 issuer: jwtSettings["Issuer"],

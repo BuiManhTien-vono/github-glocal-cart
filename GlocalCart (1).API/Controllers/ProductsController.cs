@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GlocalCart.API.DTOs.Products;
+using GlocalCart.API.Helpers;
 using GlocalCart.API.Services.Interfaces;
 
 namespace GlocalCart.API.Controllers
@@ -20,13 +21,14 @@ namespace GlocalCart.API.Controllers
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> GetProducts([FromQuery] ProductSearchDto search) =>
-            Ok(await _productService.GetProductsAsync(search));
+            Ok(ApiResponse.Ok(await _productService.GetProductsAsync(search)));
 
         /// <summary>
         /// Chi tiết sản phẩm (Public)
         /// </summary>
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetProduct(int id) => Ok(await _productService.GetProductByIdAsync(id));
+        public async Task<IActionResult> GetProduct(int id) =>
+            Ok(ApiResponse.Ok(await _productService.GetProductByIdAsync(id)));
 
         /// <summary>
         /// Tìm kiếm sản phẩm theo tên hoặc danh mục (UML Search interface)
@@ -35,7 +37,7 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> SearchProducts(
             [FromQuery] string? name, [FromQuery] int? categoryId,
             [FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
-            Ok(await _productService.SearchProductsAsync(name, categoryId, page, pageSize));
+            Ok(ApiResponse.Ok(await _productService.SearchProductsAsync(name, categoryId, page, pageSize)));
 
         /// <summary>
         /// Seller đăng sản phẩm mới
@@ -43,7 +45,7 @@ namespace GlocalCart.API.Controllers
         [HttpPost]
         [Authorize(Roles = "Seller,Admin")]
         public async Task<IActionResult> CreateProduct([FromBody] CreateProductDto dto) =>
-            Ok(await _productService.CreateProductAsync(UserId, dto));
+            Ok(ApiResponse.Created(await _productService.CreateProductAsync(UserId, dto), "Đăng sản phẩm thành công."));
 
         /// <summary>
         /// Seller cập nhật sản phẩm
@@ -51,7 +53,7 @@ namespace GlocalCart.API.Controllers
         [HttpPut("{id}")]
         [Authorize(Roles = "Seller,Admin")]
         public async Task<IActionResult> UpdateProduct(int id, [FromBody] UpdateProductDto dto) =>
-            Ok(await _productService.UpdateProductAsync(UserId, id, dto));
+            Ok(ApiResponse.Ok(await _productService.UpdateProductAsync(UserId, id, dto), "Cập nhật sản phẩm thành công."));
 
         /// <summary>
         /// Seller ẩn/hiện sản phẩm
@@ -61,7 +63,7 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> ToggleVisibility(int id)
         {
             await _productService.ToggleVisibilityAsync(UserId, id);
-            return Ok(new { success = true, message = "Đã cập nhật trạng thái hiển thị." });
+            return Ok(ApiResponse.Ok("Đã cập nhật trạng thái hiển thị."));
         }
 
         /// <summary>
@@ -72,7 +74,7 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> UpdateStock(int id, [FromBody] UpdateStockDto dto)
         {
             await _productService.UpdateStockAsync(UserId, id, dto.AvailableItemCount);
-            return Ok(new { success = true, message = "Đã cập nhật tồn kho." });
+            return Ok(ApiResponse.Ok("Đã cập nhật tồn kho."));
         }
 
         /// <summary>
@@ -81,6 +83,6 @@ namespace GlocalCart.API.Controllers
         [HttpGet("my-products")]
         [Authorize(Roles = "Seller,Admin")]
         public async Task<IActionResult> GetMyProducts([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
-            Ok(await _productService.GetMyProductsAsync(UserId, page, pageSize));
+            Ok(ApiResponse.Ok(await _productService.GetMyProductsAsync(UserId, page, pageSize)));
     }
 }

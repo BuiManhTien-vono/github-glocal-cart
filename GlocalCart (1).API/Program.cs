@@ -1,10 +1,12 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using GlocalCart.API.Data;
 using GlocalCart.API.Helpers;
 using GlocalCart.API.Middleware;
+using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
 using GlocalCart.API.Services.Implementations;
 
@@ -13,6 +15,27 @@ var builder = WebApplication.CreateBuilder(args);
 // === DATABASE ===
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseInMemoryDatabase("GlocalCartDb"));
+
+// === ASP.NET IDENTITY ===
+builder.Services.AddIdentity<User, IdentityRole<int>>(options =>
+{
+    // Password policy
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequiredLength = 6;
+
+    // User settings
+    options.User.RequireUniqueEmail = true;
+
+    // Lockout settings
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.AllowedForNewUsers = true;
+})
+.AddEntityFrameworkStores<AppDbContext>()
+.AddDefaultTokenProviders();
 
 // === JWT AUTHENTICATION ===
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -49,7 +72,11 @@ builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 
 // === CONTROLLERS ===
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+{
+    // Đăng ký AccountStatus filter toàn cục
+    options.Filters.Add<AccountStatusFilter>();
+})
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
@@ -97,8 +124,10 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
     
-    // Đổ dữ liệu mẫu vào DB
-    DbSeeder.SeedAsync(db).Wait();
+    // Đổ dữ liệu mẫu vào DB (dùng UserManager từ Identity)
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
+    await DbSeeder.SeedAsync(db, userManager, roleManager);
 }
 
 app.Run();

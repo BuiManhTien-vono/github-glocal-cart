@@ -1,10 +1,11 @@
 using System.Net;
 using System.Text.Json;
+using GlocalCart.API.Helpers;
 
 namespace GlocalCart.API.Middleware
 {
     /// <summary>
-    /// Global Exception Middleware - Bắt tất cả lỗi, trả JSON chuẩn, ghi log
+    /// Global Exception Middleware - Bắt tất cả lỗi, trả JSON chuẩn ApiResponse, ghi log
     /// </summary>
     public class ExceptionMiddleware
     {
@@ -45,12 +46,7 @@ namespace GlocalCart.API.Middleware
 
             context.Response.StatusCode = (int)statusCode;
 
-            var response = new
-            {
-                success = false,
-                message = message,
-                statusCode = (int)statusCode
-            };
+            var response = ApiResponse.Fail(message, (int)statusCode);
 
             var json = JsonSerializer.Serialize(response, new JsonSerializerOptions
             {
