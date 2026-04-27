@@ -29,10 +29,11 @@ namespace GlocalCart.API.DTOs.Auth
         public string Password { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// Response data cho Login/Register — Success/Message nằm trong ApiResponse wrapper
+    /// </summary>
     public class AuthResponseDto
     {
-        public bool Success { get; set; }
-        public string Message { get; set; } = string.Empty;
         public string? Token { get; set; }
         public UserInfoDto? User { get; set; }
     }

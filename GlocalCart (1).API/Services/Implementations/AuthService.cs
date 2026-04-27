@@ -17,14 +17,14 @@ namespace GlocalCart.API.Services.Implementations
             _jwt = jwt;
         }
 
-        public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
+        public async Task<ApiResponse<AuthResponseDto>> RegisterAsync(RegisterDto dto)
         {
             // Kiểm tra email đã tồn tại
             if (await _userManager.FindByEmailAsync(dto.Email) != null)
-                return new AuthResponseDto { Success = false, Message = "Email đã được sử dụng." };
+                return ApiResponse.Fail<AuthResponseDto>("Email đã được sử dụng.", 400);
 
             if (await _userManager.FindByNameAsync(dto.UserName) != null)
-                return new AuthResponseDto { Success = false, Message = "Tên đăng nhập đã tồn tại." };
+                return ApiResponse.Fail<AuthResponseDto>("Tên đăng nhập đã tồn tại.", 400);
 
             var user = new User
             {
@@ -40,7 +40,7 @@ namespace GlocalCart.API.Services.Implementations
             if (!result.Succeeded)
             {
                 var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                return new AuthResponseDto { Success = false, Message = $"Đăng ký thất bại: {errors}" };
+                return ApiResponse.Fail<AuthResponseDto>($"Đăng ký thất bại: {errors}", 400);
             }
 
             // Gán role Member qua Identity
@@ -49,39 +49,35 @@ namespace GlocalCart.API.Services.Implementations
             var roles = await _userManager.GetRolesAsync(user);
             var token = _jwt.GenerateToken(user, roles);
 
-            return new AuthResponseDto
+            return ApiResponse.Ok(new AuthResponseDto
             {
-                Success = true,
-                Message = "Đăng ký thành công.",
                 Token = token,
                 User = MapToUserInfo(user, roles)
-            };
+            }, "Đăng ký thành công.");
         }
 
-        public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
+        public async Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email)
                 ?? await _userManager.FindByNameAsync(dto.Email);
 
             if (user == null)
-                return new AuthResponseDto { Success = false, Message = "Email hoặc mật khẩu không đúng." };
+                return ApiResponse.Fail<AuthResponseDto>("Email hoặc mật khẩu không đúng.", 401);
 
             if (!await _userManager.CheckPasswordAsync(user, dto.Password))
-                return new AuthResponseDto { Success = false, Message = "Email hoặc mật khẩu không đúng." };
+                return ApiResponse.Fail<AuthResponseDto>("Email hoặc mật khẩu không đúng.", 401);
 
             if (user.AccountStatus != Enums.AccountStatus.Active)
-                return new AuthResponseDto { Success = false, Message = $"Tài khoản đang ở trạng thái: {user.AccountStatus}" };
+                return ApiResponse.Fail<AuthResponseDto>($"Tài khoản đang ở trạng thái: {user.AccountStatus}", 403);
 
             var roles = await _userManager.GetRolesAsync(user);
             var token = _jwt.GenerateToken(user, roles);
 
-            return new AuthResponseDto
+            return ApiResponse.Ok(new AuthResponseDto
             {
-                Success = true,
-                Message = "Đăng nhập thành công.",
                 Token = token,
                 User = MapToUserInfo(user, roles)
-            };
+            }, "Đăng nhập thành công.");
         }
 
         private static UserInfoDto MapToUserInfo(User user, IList<string> roles) => new()

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GlocalCart.API.DTOs.Orders;
+using GlocalCart.API.Helpers;
 using GlocalCart.API.Services.Interfaces;
 
 namespace GlocalCart.API.Controllers
@@ -24,7 +25,7 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> UpdateShipmentStatus(int id, [FromBody] UpdateShipmentStatusDto dto)
         {
             await _orderService.UpdateShipmentStatusAsync(UserId, id, dto);
-            return Ok(new { success = true, message = "Cập nhật trạng thái vận chuyển thành công." });
+            return Ok(ApiResponse.Ok("Cập nhật trạng thái vận chuyển thành công."));
         }
 
         /// <summary>
@@ -32,6 +33,6 @@ namespace GlocalCart.API.Controllers
         /// </summary>
         [HttpGet("{id}/logs")]
         public async Task<IActionResult> GetShipmentLogs(int id) =>
-            Ok(await _orderService.GetShipmentLogsAsync(UserId, id));
+            Ok(ApiResponse.Ok(await _orderService.GetShipmentLogsAsync(UserId, id)));
     }
 }

@@ -32,7 +32,7 @@ namespace GlocalCart.API.Controllers
             var category = new Category { Name = dto.Name, Description = dto.Description, ParentCategoryId = dto.ParentCategoryId };
             _db.Categories.Add(category);
             await _db.SaveChangesAsync();
-            return Ok(new { success = true, category = new { category.Id, category.Name, category.Description, category.ParentCategoryId } });
+            return Ok(ApiResponse.Created(new { category.Id, category.Name, category.Description, category.ParentCategoryId }, "Tạo danh mục thành công."));
         }
 
         [HttpPut("categories/{id}")]
@@ -43,7 +43,7 @@ namespace GlocalCart.API.Controllers
             category.Description = dto.Description;
             if (dto.ParentCategoryId.HasValue) category.ParentCategoryId = dto.ParentCategoryId;
             await _db.SaveChangesAsync();
-            return Ok(new { success = true, message = "Cập nhật danh mục thành công." });
+            return Ok(ApiResponse.Ok("Cập nhật danh mục thành công."));
         }
 
         [HttpDelete("categories/{id}")]
@@ -54,7 +54,7 @@ namespace GlocalCart.API.Controllers
                 throw new InvalidOperationException("Không thể xóa danh mục đang có sản phẩm.");
             _db.Categories.Remove(category);
             await _db.SaveChangesAsync();
-            return Ok(new { success = true, message = "Xóa danh mục thành công." });
+            return Ok(ApiResponse.Ok("Xóa danh mục thành công."));
         }
 
         // === USERS ===
@@ -69,7 +69,7 @@ namespace GlocalCart.API.Controllers
                     Role = u.Role.ToString(), u.IsSeller,
                     AccountStatus = u.AccountStatus.ToString(), u.CreatedAt
                 }).ToPagedResultAsync(page, pageSize);
-            return Ok(result);
+            return Ok(ApiResponse.Ok(result));
         }
 
         [HttpPatch("users/{id}/status")]
@@ -81,7 +81,7 @@ namespace GlocalCart.API.Controllers
             user.AccountStatus = status;
             user.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
-            return Ok(new { success = true, message = $"Đã cập nhật trạng thái tài khoản: {status}" });
+            return Ok(ApiResponse.Ok($"Đã cập nhật trạng thái tài khoản: {status}"));
         }
 
         [HttpPatch("users/{id}/seller")]
@@ -98,7 +98,7 @@ namespace GlocalCart.API.Controllers
                 await _userManager.RemoveFromRoleAsync(user, "Seller");
 
             await _userManager.UpdateAsync(user);
-            return Ok(new { success = true, message = user.IsSeller ? "Đã duyệt Seller." : "Đã thu hồi Seller." });
+            return Ok(ApiResponse.Ok(user.IsSeller ? "Đã duyệt Seller." : "Đã thu hồi Seller."));
         }
 
         // === PRODUCTS ===
@@ -109,7 +109,7 @@ namespace GlocalCart.API.Controllers
             product.IsLocked = !product.IsLocked;
             product.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
-            return Ok(new { success = true, message = product.IsLocked ? "Đã khóa sản phẩm." : "Đã mở khóa sản phẩm." });
+            return Ok(ApiResponse.Ok(product.IsLocked ? "Đã khóa sản phẩm." : "Đã mở khóa sản phẩm."));
         }
 
         // === ORDERS ===
@@ -125,7 +125,7 @@ namespace GlocalCart.API.Controllers
                     BuyerName = o.Buyer.FullName, BuyerEmail = o.Buyer.Email,
                     PaymentStatus = o.Payment != null ? o.Payment.Status.ToString() : "N/A"
                 }).ToPagedResultAsync(page, pageSize);
-            return Ok(result);
+            return Ok(ApiResponse.Ok(result));
         }
 
         [HttpPatch("orders/{id}/status")]
@@ -137,7 +137,7 @@ namespace GlocalCart.API.Controllers
             order.Status = newStatus;
             _db.OrderLogs.Add(new OrderLog { OrderId = id, Status = newStatus, Note = dto.Note ?? "Admin cập nhật." });
             await _db.SaveChangesAsync();
-            return Ok(new { success = true, message = $"Đã cập nhật trạng thái: {newStatus}" });
+            return Ok(ApiResponse.Ok($"Đã cập nhật trạng thái: {newStatus}"));
         }
 
         // === DASHBOARD ===
@@ -151,11 +151,11 @@ namespace GlocalCart.API.Controllers
             var totalRevenue = await _db.Payments.Where(p => p.Status == PaymentStatus.Completed).SumAsync(p => p.Amount);
             var pendingOrders = await _db.Orders.CountAsync(o => o.Status == OrderStatus.Pending);
 
-            return Ok(new
+            return Ok(ApiResponse.Ok(new
             {
                 totalUsers, totalSellers, totalProducts, totalOrders,
                 totalRevenue, pendingOrders
-            });
+            }));
         }
     }
 
