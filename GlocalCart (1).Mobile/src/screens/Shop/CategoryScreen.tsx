@@ -23,7 +23,7 @@ export default function CategoryScreen({ route, navigation }: any) {
     try {
       // In a real app we pass categoryId=XX, currently mock API doesn't filter perfectly but we hit the search endpoint
       const res = await apiClient.get(`/products/search?categoryId=${categoryId || 1}`) as any;
-      setProducts(res?.data?.items || res?.items || res?.Items || (Array.isArray(res) ? res : []));
+      setProducts(res?.items || (Array.isArray(res) ? res : []));
     } catch (error) {
       console.warn("Fetch category products error:", error);
     } finally {

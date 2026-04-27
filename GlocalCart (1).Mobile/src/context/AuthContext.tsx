@@ -75,19 +75,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (emailOrUsername: string, password: string) => {
     const response = await apiClient.post('/auth/login', { email: emailOrUsername, password }) as any;
-    if (!response.success && !response.token) throw new Error(response.message || 'Lỗi đăng nhập');
+    if (!response?.token) throw new Error('Lỗi đăng nhập');
 
-    const token = response.token || response.data?.token;
-    const user = response.user || response.data?.user;
-    await finishLogin(token, user);
+    await finishLogin(response.token, response.user);
   };
 
   const register = async (data: RegisterData) => {
     const response = await apiClient.post('/auth/register', data) as any;
-    if (!response.success && !response.token) throw new Error(response.message || 'Lỗi đăng ký');
+    if (!response?.token) throw new Error('Lỗi đăng ký');
     
     // Trả về data để màn hình Register hiện Alert trước khi tự login
-    return { token: response.token || response.data?.token, user: response.user || response.data?.user };
+    return { token: response.token, user: response.user };
   };
 
   const logout = async () => {

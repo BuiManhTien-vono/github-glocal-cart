@@ -27,25 +27,43 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ─── Response Interceptor: Xử lý lỗi chung ───
+// ─── Response Interceptor: Xử lý chuẩn ApiResponse<T> ───
+// Backend trả về: { success, message, data, statusCode }
+// Interceptor sẽ:
+//   - Success (2xx): trả về response.data (unwrap ApiResponse wrapper)
+//   - Error (4xx/5xx): reject với { message, status } từ ApiResponse
 apiClient.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    const apiResponse = response.data;
+    
+    // Nếu backend trả ApiResponse chuẩn → unwrap lấy .data bên trong
+    if (apiResponse && typeof apiResponse.success === 'boolean' && 'data' in apiResponse) {
+      // Gắn thêm _meta để screen nào cần message/success vẫn đọc được
+      const result = apiResponse.data;
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        result._meta = { success: apiResponse.success, message: apiResponse.message, statusCode: apiResponse.statusCode };
+      }
+      return result;
+    }
+    
+    // Fallback: trả nguyên data (cho trường hợp response không phải ApiResponse)
+    return apiResponse;
+  },
   (error) => {
     if (error.response) {
       const { status, data } = error.response;
+      // Backend lỗi cũng trả ApiResponse: { success: false, message, data: null, statusCode }
+      const message = data?.message || data?.error || `Lỗi từ máy chủ (${status})`;
 
       // Token hết hạn → logout sẽ do AuthContext xử lý
       if (status === 401) {
         if (error.config?.url?.includes('/auth/login')) {
-          return Promise.reject({ message: data?.message || 'Tài khoản hoặc mật khẩu không chính xác.', status });
+          return Promise.reject({ message, status });
         }
         return Promise.reject({ message: 'Phiên đăng nhập hết hạn.', status: 401 });
       }
 
-      return Promise.reject({
-        message: data?.message || data?.error || `Lỗi từ máy chủ (${status})`,
-        status,
-      });
+      return Promise.reject({ message, status });
     }
 
     if (error.code === 'ECONNABORTED') {
