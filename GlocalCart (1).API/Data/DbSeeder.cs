@@ -1,38 +1,72 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using GlocalCart.API.Models;
 using GlocalCart.API.Enums;
-using Microsoft.EntityFrameworkCore;
-using BCrypt.Net;
 
 namespace GlocalCart.API.Data
 {
     public static class DbSeeder
     {
-        public static async Task SeedAsync(AppDbContext context)
+        public static async Task SeedAsync(AppDbContext context, UserManager<User> userManager, RoleManager<IdentityRole<int>> roleManager)
         {
             if (await context.Products.AnyAsync()) return;
 
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword("Password@123");
+            // Đảm bảo roles tồn tại
+            string[] roleNames = { "Member", "Seller", "Admin" };
+            foreach (var roleName in roleNames)
+            {
+                if (!await roleManager.RoleExistsAsync(roleName))
+                {
+                    await roleManager.CreateAsync(new IdentityRole<int> { Name = roleName });
+                }
+            }
+
+            // Tạo Admin user qua Identity
+            var adminUser = new User
+            {
+                UserName = "admin",
+                Email = "admin@glocalcart.com",
+                FullName = "System Admin",
+                PhoneNumber = "0900000000",
+                Role = UserRole.Admin,
+                IsSeller = false,
+                AccountStatus = AccountStatus.Active,
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            };
+            await userManager.CreateAsync(adminUser, "Admin@123");
+            await userManager.AddToRoleAsync(adminUser, "Admin");
+
+            // Tạo 10 user mẫu qua Identity
+            var users = new List<User>();
             var rand = new Random();
 
-            var users = new List<User>();
             for (int i = 1; i <= 10; i++)
             {
-                users.Add(new User
+                var user = new User
                 {
                     UserName = $"user{i}",
                     Email = $"user{i}@example.com",
-                    PasswordHash = passwordHash,
                     FullName = $"Người dùng {i}",
-                    Phone = $"090000000{i % 10}",
+                    PhoneNumber = $"090000000{i % 10}",
                     Role = UserRole.Member,
                     IsSeller = i <= 3,
                     AccountStatus = AccountStatus.Active,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
-                });
+                };
+
+                var result = await userManager.CreateAsync(user, "Password@123");
+                if (result.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(user, "Member");
+                    if (i <= 3)
+                    {
+                        await userManager.AddToRoleAsync(user, "Seller");
+                    }
+                    users.Add(user);
+                }
             }
-            await context.Users.AddRangeAsync(users);
-            await context.SaveChangesAsync();
 
             var sellers = users.Where(u => u.IsSeller).ToList();
             var buyers = users.Where(u => !u.IsSeller).ToList();

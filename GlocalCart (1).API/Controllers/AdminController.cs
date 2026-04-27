@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using GlocalCart.API.Data;
@@ -16,8 +17,13 @@ namespace GlocalCart.API.Controllers
     public class AdminController : ControllerBase
     {
         private readonly AppDbContext _db;
+        private readonly UserManager<User> _userManager;
 
-        public AdminController(AppDbContext db) { _db = db; }
+        public AdminController(AppDbContext db, UserManager<User> userManager)
+        {
+            _db = db;
+            _userManager = userManager;
+        }
 
         // === CATEGORIES ===
         [HttpPost("categories")]
@@ -59,7 +65,7 @@ namespace GlocalCart.API.Controllers
                 .OrderByDescending(u => u.CreatedAt)
                 .Select(u => new
                 {
-                    u.Id, u.UserName, u.Email, u.FullName, u.Phone,
+                    u.Id, u.UserName, u.Email, u.FullName, Phone = u.PhoneNumber,
                     Role = u.Role.ToString(), u.IsSeller,
                     AccountStatus = u.AccountStatus.ToString(), u.CreatedAt
                 }).ToPagedResultAsync(page, pageSize);
@@ -81,11 +87,17 @@ namespace GlocalCart.API.Controllers
         [HttpPatch("users/{id}/seller")]
         public async Task<IActionResult> ToggleSeller(int id)
         {
-            var user = await _db.Users.FindAsync(id) ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+            var user = await _userManager.FindByIdAsync(id.ToString()) ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
             user.IsSeller = !user.IsSeller;
             user.Role = user.IsSeller ? UserRole.Seller : UserRole.Member;
             user.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+
+            if (user.IsSeller)
+                await _userManager.AddToRoleAsync(user, "Seller");
+            else
+                await _userManager.RemoveFromRoleAsync(user, "Seller");
+
+            await _userManager.UpdateAsync(user);
             return Ok(new { success = true, message = user.IsSeller ? "Đã duyệt Seller." : "Đã thu hồi Seller." });
         }
 

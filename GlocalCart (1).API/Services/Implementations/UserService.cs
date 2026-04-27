@@ -1,8 +1,8 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using GlocalCart.API.Data;
 using GlocalCart.API.DTOs.Auth;
 using GlocalCart.API.DTOs.Users;
-using GlocalCart.API.Helpers;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
 
@@ -11,46 +11,56 @@ namespace GlocalCart.API.Services.Implementations
     public class UserService : IUserService
     {
         private readonly AppDbContext _db;
+        private readonly UserManager<User> _userManager;
 
-        public UserService(AppDbContext db) { _db = db; }
+        public UserService(AppDbContext db, UserManager<User> userManager)
+        {
+            _db = db;
+            _userManager = userManager;
+        }
 
         public async Task<UserInfoDto> GetProfileAsync(int userId)
         {
-            var user = await _db.Users.FindAsync(userId)
+            var user = await _userManager.FindByIdAsync(userId.ToString())
                 ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
-            return MapToUserInfo(user);
+            var roles = await _userManager.GetRolesAsync(user);
+            return MapToUserInfo(user, roles);
         }
 
         public async Task<UserInfoDto> UpdateProfileAsync(int userId, UpdateProfileDto dto)
         {
-            var user = await _db.Users.FindAsync(userId)
+            var user = await _userManager.FindByIdAsync(userId.ToString())
                 ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
 
             if (dto.FullName != null) user.FullName = dto.FullName;
-            if (dto.Phone != null) user.Phone = dto.Phone;
+            if (dto.Phone != null) user.PhoneNumber = dto.Phone;
             user.UpdatedAt = DateTime.UtcNow;
 
-            await _db.SaveChangesAsync();
-            return MapToUserInfo(user);
+            await _userManager.UpdateAsync(user);
+            var roles = await _userManager.GetRolesAsync(user);
+            return MapToUserInfo(user, roles);
         }
 
         public async Task<bool> ChangePasswordAsync(int userId, ChangePasswordDto dto)
         {
-            var user = await _db.Users.FindAsync(userId)
+            var user = await _userManager.FindByIdAsync(userId.ToString())
                 ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
 
-            if (!PasswordHelper.VerifyPassword(dto.CurrentPassword, user.PasswordHash))
-                throw new ArgumentException("Mật khẩu hiện tại không đúng.");
+            var result = await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                throw new ArgumentException($"Đổi mật khẩu thất bại: {errors}");
+            }
 
-            user.PasswordHash = PasswordHelper.HashPassword(dto.NewPassword);
             user.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            await _userManager.UpdateAsync(user);
             return true;
         }
 
         public async Task<bool> ActivateSellerAsync(int userId)
         {
-            var user = await _db.Users.FindAsync(userId)
+            var user = await _userManager.FindByIdAsync(userId.ToString())
                 ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
 
             if (user.IsSeller)
@@ -59,7 +69,10 @@ namespace GlocalCart.API.Services.Implementations
             user.IsSeller = true;
             user.Role = Enums.UserRole.Seller;
             user.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+
+            // Thêm role Seller qua Identity
+            await _userManager.AddToRoleAsync(user, "Seller");
+            await _userManager.UpdateAsync(user);
             return true;
         }
 
@@ -179,11 +192,11 @@ namespace GlocalCart.API.Services.Implementations
             return new BankAccountResponseDto { Id = bank.Id, BankName = bank.BankName, AccountNumberMasked = bank.AccountNumberMasked };
         }
 
-        private static UserInfoDto MapToUserInfo(User user) => new()
+        private static UserInfoDto MapToUserInfo(User user, IList<string> roles) => new()
         {
-            Id = user.Id, UserName = user.UserName, Email = user.Email,
-            FullName = user.FullName, Phone = user.Phone,
-            Role = user.Role.ToString(), IsSeller = user.IsSeller,
+            Id = user.Id, UserName = user.UserName!, Email = user.Email!,
+            FullName = user.FullName, Phone = user.PhoneNumber,
+            Role = roles.FirstOrDefault() ?? user.Role.ToString(), IsSeller = user.IsSeller,
             AccountStatus = user.AccountStatus.ToString()
         };
     }

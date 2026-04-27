@@ -1,17 +1,19 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using GlocalCart.API.Models;
 
 namespace GlocalCart.API.Data
 {
     /// <summary>
-    /// AppDbContext - Cấu hình toàn bộ 18 bảng database cho GlocalCart
+    /// AppDbContext - Kế thừa IdentityDbContext để tích hợp ASP.NET Identity
+    /// Cấu hình toàn bộ 18 bảng database + bảng Identity cho GlocalCart
     /// </summary>
-    public class AppDbContext : DbContext
+    public class AppDbContext : IdentityDbContext<User, IdentityRole<int>, int>
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         // === NGƯỜI DÙNG & ĐỊA CHỈ ===
-        public DbSet<User> Users { get; set; }
         public DbSet<UserAddress> UserAddresses { get; set; }
         public DbSet<CreditCard> CreditCards { get; set; }
         public DbSet<BankAccount> BankAccounts { get; set; }
@@ -289,28 +291,19 @@ namespace GlocalCart.API.Data
             });
 
             // ========================
-            // SEED DATA
+            // SEED DATA - Roles & Categories
             // ========================
             SeedData(modelBuilder);
         }
 
         private void SeedData(ModelBuilder modelBuilder)
         {
-            // Admin mặc định (Password: Admin@123)
-            modelBuilder.Entity<User>().HasData(new User
-            {
-                Id = 1,
-                UserName = "admin",
-                Email = "admin@glocalcart.com",
-                PasswordHash = "$2a$11$VGh3RwWRQj2ODkuqErX/S.gwYv93.vxVLk86qwlswsouuDrgz5NY.",
-                FullName = "System Admin",
-                Phone = "0900000000",
-                Role = Enums.UserRole.Admin,
-                IsSeller = false,
-                AccountStatus = Enums.AccountStatus.Active,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            });
+            // Seed Identity Roles
+            modelBuilder.Entity<IdentityRole<int>>().HasData(
+                new IdentityRole<int> { Id = 1, Name = "Member", NormalizedName = "MEMBER" },
+                new IdentityRole<int> { Id = 2, Name = "Seller", NormalizedName = "SELLER" },
+                new IdentityRole<int> { Id = 3, Name = "Admin", NormalizedName = "ADMIN" }
+            );
 
             // Danh mục sản phẩm mẫu (theo yêu cầu)
             modelBuilder.Entity<Category>().HasData(
