@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl, SafeAreaView, Platform, useWindowDimensions } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl, Platform, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../services/api/apiClient';
 import { colors } from '../../theme/colors';
@@ -16,6 +17,7 @@ import { DailyDiscover } from '../../components/shop/DailyDiscover';
 const isWeb = Platform.OS === 'web';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isLargeScreen = windowWidth > 768;
 
@@ -51,15 +53,16 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { alignItems: 'stretch' }]}>
+    <View style={styles.container}>
       <View style={[styles.wrapper, { maxWidth: '100%' }]}>
         <HomeHeader />
-        
+
         {isLoading && !refreshing ? (
           <Loading message="Đang tải dữ liệu..." />
         ) : (
-          <ScrollView 
+          <ScrollView
             style={styles.container}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: 176.5 + insets.bottom }]}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
             }
@@ -68,29 +71,32 @@ export default function HomeScreen() {
             <HomeBanner />
             <HomeFeatures />
             <HomeCategories data={categories} />
-            
+
             {/* Lấy 5 sản phẩm đầu tiên cho FlashSale */}
             <FlashSale data={products.slice(0, 5)} />
-            
+
             <DailyDiscover data={products} />
           </ScrollView>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff', 
+    backgroundColor: '#fff',
   },
   wrapper: {
     flex: 1,
     width: '100%',
-    backgroundColor: '#f5f5f5', 
+    backgroundColor: '#f5f5f5',
   },
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 80,
   },
 });

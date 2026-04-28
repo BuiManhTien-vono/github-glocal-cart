@@ -1,29 +1,34 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, SafeAreaView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { Loading } from '../../components/common/Loading';
 
 // Import local components
-import { ShopeeMallBrands } from '../../components/shop/ShopeeMallBrands';
 import { SortTabs } from '../../components/shop/SortTabs';
 import { ProductCard } from '../../components/shop/ProductCard';
 
 const isWeb = Platform.OS === 'web';
 
 export default function CategoryScreen({ route, navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { categoryId, categoryName } = route.params || {};
 
   const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchProducts = async () => {
+  const fetchData = async () => {
     try {
-      // In a real app we pass categoryId=XX, currently mock API doesn't filter perfectly but we hit the search endpoint
-      const res = await apiClient.get(`/products/search?categoryId=${categoryId || 1}`) as any;
-      setProducts(res?.items || (Array.isArray(res) ? res : []));
+      const [prodRes, catRes] = await Promise.all([
+        apiClient.get(`/products/search?categoryId=${categoryId || 1}`) as any,
+        apiClient.get('/categories') as any,
+      ]);
+      setProducts(prodRes?.items || (Array.isArray(prodRes) ? prodRes : []));
+      setCategories(catRes?.items || (Array.isArray(catRes) ? catRes : []));
     } catch (error) {
       console.warn("Fetch category products error:", error);
     } finally {
@@ -33,16 +38,16 @@ export default function CategoryScreen({ route, navigation }: any) {
   };
 
   useEffect(() => {
-    fetchProducts();
+    fetchData();
   }, [categoryId]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchProducts();
+    fetchData();
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={[styles.safeArea, { paddingTop: insets.top }]}>
       <View style={styles.wrapper}>
 
         {/* Simple Header */}
@@ -69,8 +74,25 @@ export default function CategoryScreen({ route, navigation }: any) {
             style={styles.container}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
           >
-            {/* Shopee Mall Horizontal Bar */}
-            <ShopeeMallBrands />
+            {/* Horizontal Category List */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll} contentContainerStyle={styles.catContent}>
+              {categories.map((c: any) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.catItem}
+                  onPress={() => navigation.setParams({ categoryId: c.id, categoryName: c.name })}
+                >
+                  <View style={[styles.catIconWrap, categoryId === c.id && styles.catIconActive]}>
+                    {c.imageUrl ? (
+                      <Image source={{ uri: c.imageUrl }} style={styles.catImage} />
+                    ) : (
+                      <Ionicons name="grid-outline" size={24} color={categoryId === c.id ? colors.primary : colors.textSecondary} />
+                    )}
+                  </View>
+                  <Text style={[styles.catName, categoryId === c.id && styles.catNameActive]} numberOfLines={2}>{c.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             {/* Sắp xếp Filter Tabs */}
             <SortTabs />
@@ -90,7 +112,7 @@ export default function CategoryScreen({ route, navigation }: any) {
           </ScrollView>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -152,5 +174,49 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textSecondary,
     fontSize: 14,
+  },
+  catScroll: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  catContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 16,
+  },
+  catItem: {
+    alignItems: 'center',
+    width: 65,
+  },
+  catIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  catIconActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryBg,
+  },
+  catImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  catName: {
+    fontSize: 11,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  catNameActive: {
+    color: colors.primary,
+    fontWeight: '700',
   },
 });

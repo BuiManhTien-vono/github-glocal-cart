@@ -3,9 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Platform } from 'react-native';
 
-const BASE_URL = Platform.OS === 'web' 
+const BASE_URL = Platform.OS === 'web'
   ? 'http://localhost:5100/api'
-  : 'http://192.168.0.103:5100/api';
+  : 'http://192.168.1.11:5100/api';
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -21,7 +21,8 @@ apiClient.interceptors.request.use(
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
-    } catch {}
+      console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
+    } catch { }
     return config;
   },
   (error) => Promise.reject(error)
@@ -35,7 +36,7 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => {
     const apiResponse = response.data;
-    
+
     // Nếu backend trả ApiResponse chuẩn → unwrap lấy .data bên trong
     if (apiResponse && typeof apiResponse.success === 'boolean' && 'data' in apiResponse) {
       // Gắn thêm _meta để screen nào cần message/success vẫn đọc được
@@ -45,7 +46,7 @@ apiClient.interceptors.response.use(
       }
       return result;
     }
-    
+
     // Fallback: trả nguyên data (cho trường hợp response không phải ApiResponse)
     return apiResponse;
   },
@@ -67,9 +68,11 @@ apiClient.interceptors.response.use(
     }
 
     if (error.code === 'ECONNABORTED') {
+      console.log('[API Error] Timeout:', error.message);
       return Promise.reject({ message: 'Kết nối quá thời gian. Thử lại sau.' });
     }
 
+    console.log('[API Error] Network/Unknown:', error.message, error.code, error.config?.url);
     return Promise.reject({ message: 'Không thể kết nối máy chủ. Kiểm tra mạng hoặc Backend.' });
   }
 );

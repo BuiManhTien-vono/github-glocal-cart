@@ -206,7 +206,7 @@ export default function LoginScreen({ navigation }: any) {
             {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
             {/* Forgot password */}
-            <TouchableOpacity style={styles.forgotRow}>
+            <TouchableOpacity style={styles.forgotRow} onPress={() => navigation.navigate('ForgotPassword')}>
               <Text style={styles.forgotText}>Quên mật khẩu?</Text>
             </TouchableOpacity>
 

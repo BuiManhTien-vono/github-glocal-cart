@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator, Keyboard, ScrollView } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,8 +13,9 @@ const HOT_SEARCHES = ['iPhone 15', 'Giày thể thao', 'Áo thun nam', 'Tai nghe
 
 export default function SearchScreen() {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState([]);
   const [history, setHistory] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +29,7 @@ export default function SearchScreen() {
     try {
       const saved = await AsyncStorage.getItem(SEARCH_HISTORY_KEY);
       if (saved) setHistory(JSON.parse(saved));
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const saveToHistory = async (query: string) => {
@@ -37,7 +39,7 @@ export default function SearchScreen() {
     setHistory(newHistory);
     try {
       await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(newHistory));
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const clearHistory = async () => {
@@ -51,7 +53,7 @@ export default function SearchScreen() {
     setIsSearching(true);
     Keyboard.dismiss();
     saveToHistory(query);
-    
+
     try {
       // Using /products/search or fallback to /products?name=...
       const res: any = await apiClient.get(`/products/search?name=${query}`);
@@ -128,25 +130,25 @@ export default function SearchScreen() {
         <TouchableOpacity key={idx} style={styles.suggestionItem} onPress={() => { setSearchQuery(item); fetchResults(item); }}>
           <Ionicons name="search-outline" size={16} color={colors.textMuted} />
           <Text style={styles.suggestionText} numberOfLines={1}>{item}</Text>
-          <Ionicons name="arrow-up-outline" size={16} color={colors.textMuted} style={{transform: [{rotate: '-45deg'}]}} />
+          <Ionicons name="arrow-up-outline" size={16} color={colors.textMuted} style={{ transform: [{ rotate: '-45deg' }] }} />
         </TouchableOpacity>
       ))}
       {suggestions.length === 0 && searchQuery.length > 0 && (
         <TouchableOpacity style={styles.suggestionItem} onPress={() => fetchResults(searchQuery)}>
-           <Ionicons name="search-outline" size={16} color={colors.primary} />
-           <Text style={[styles.suggestionText, {color: colors.primary}]}>Tìm "{searchQuery}"</Text>
+          <Ionicons name="search-outline" size={16} color={colors.primary} />
+          <Text style={[styles.suggestionText, { color: colors.primary }]}>Tìm "{searchQuery}"</Text>
         </TouchableOpacity>
       )}
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={26} color={colors.primary} />
         </TouchableOpacity>
-        
+
         <View style={styles.searchBox}>
           <Ionicons name="search" size={20} color={colors.textSecondary} />
           <TextInput
@@ -179,11 +181,11 @@ export default function SearchScreen() {
           )}
         </ScrollView>
       ) : (
-        <View style={{flex: 1}}>
+        <View style={{ flex: 1 }}>
           {isLoading ? (
             <View style={styles.center}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={{marginTop: 12, color: colors.textSecondary}}>Đang tìm sản phẩm...</Text>
+              <Text style={{ marginTop: 12, color: colors.textSecondary }}>Đang tìm sản phẩm...</Text>
             </View>
           ) : (
             <FlatList
@@ -201,7 +203,7 @@ export default function SearchScreen() {
                   <Ionicons name="search-outline" size={80} color={colors.border} />
                   <Text style={styles.emptyText}>Không tìm thấy sản phẩm nào cho "{searchQuery}"</Text>
                   <TouchableOpacity style={styles.retryBtn} onPress={() => setIsSearching(false)}>
-                    <Text style={{color: colors.primary}}>Thử từ khóa khác</Text>
+                    <Text style={{ color: colors.primary }}>Thử từ khóa khác</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -209,7 +211,7 @@ export default function SearchScreen() {
           )}
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -224,7 +226,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-    paddingTop: 16,
   },
   backBtn: {
     marginRight: 8,
