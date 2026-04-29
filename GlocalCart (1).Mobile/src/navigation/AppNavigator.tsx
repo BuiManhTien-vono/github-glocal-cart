@@ -26,7 +26,7 @@ import FavoritesScreen from '../screens/Profile/FavouritesScreen';
 
 // Seller Screens
 import SellerDashboardScreen from '../screens/Seller/SellerDashboardScreen';
-import SellerProductsScreen from '../screens/Seller/SellerProductsScreen';
+import SellerProductScreen from '../screens/Seller/SellerProductScreen';
 import SellerOrdersScreen from '../screens/Seller/SellerOrdersScreen';
 import SellerShopInfoScreen from '../screens/Seller/SellerShopInfoScreen';
 import SellerCategoriesScreen from '../screens/Seller/SellerCategoriesScreen';
@@ -93,7 +93,7 @@ function ProfileStack() {
       <Stack.Screen name="AdminUsers" component={AdminUsersScreen} />
       <Stack.Screen name="AdminProducts" component={AdminProductsScreen} />
       <Stack.Screen name="SellerDashboard" component={SellerDashboardScreen} />
-      <Stack.Screen name="SellerProducts" component={SellerProductsScreen} />
+      <Stack.Screen name="SellerProducts" component={SellerProductScreen} />
       <Stack.Screen name="SellerOrders" component={SellerOrdersScreen} />
       <Stack.Screen name="SellerShopInfo" component={SellerShopInfoScreen} />
       <Stack.Screen name="SellerCategories" component={SellerCategoriesScreen} />
