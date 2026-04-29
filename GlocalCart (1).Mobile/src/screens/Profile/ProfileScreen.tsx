@@ -89,8 +89,8 @@ export default function ProfileScreen({ navigation }: any) {
     { icon: 'location-outline', label: 'Sổ Địa Chỉ', screen: 'Addresses', color: colors.primary, bg: colors.primaryBg },
     { icon: 'card-outline', label: 'Thanh Toán', screen: 'PaymentMethods', color: colors.secondary, bg: '#EBF5FF' },
     { icon: 'lock-closed-outline', label: 'Đổi Mật Khẩu', screen: 'ChangePassword', color: colors.warning, bg: '#FFFBEB' },
-    { icon: 'heart-outline', label: 'Yêu Thích', color: colors.danger, bg: '#FEF2F2' },
-    { icon: 'storefront-outline', label: 'Bán Hàng', action: 'seller', color: colors.success, bg: '#ECFDF5' },
+    { icon: 'heart-outline', label: 'Yêu Thích', screen: 'Favourites', color: colors.danger, bg: '#FEF2F2' },
+    { icon: 'storefront-outline', label: user?.isSeller ? 'Kênh Người Bán' : 'Bán Hàng', action: 'seller', screen: user?.isSeller ? 'SellerDashboard' : 'ActivateSeller', color: colors.success, bg: '#ECFDF5' },
     { icon: 'chatbubble-ellipses-outline', label: 'Hỗ Trợ', color: '#8B5CF6', bg: '#F5F3FF' },
   ];
 
@@ -107,7 +107,7 @@ export default function ProfileScreen({ navigation }: any) {
       <Animated.ScrollView
         style={{ opacity: fadeAnim }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
       >
         {/* ===== HEADER GRADIENT ===== */}
         <View style={styles.headerGradient}>
@@ -166,14 +166,14 @@ export default function ProfileScreen({ navigation }: any) {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Đơn Mua</Text>
-            <TouchableOpacity style={styles.viewAllBtn}>
+            <TouchableOpacity style={styles.viewAllBtn} onPress={() => navigation.navigate('MyOrders', { activeTab: 'Tất cả' })}>
               <Text style={styles.viewAllText}>Xem lịch sử mua hàng</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
           <View style={styles.orderStatusRow}>
             {orderStatusItems.map((item, i) => (
-              <TouchableOpacity key={i} style={styles.orderStatusItem}>
+              <TouchableOpacity key={i} style={styles.orderStatusItem} onPress={() => navigation.navigate('MyOrders', { activeTab: item.label })}>
                 <View style={[styles.orderStatusIcon, { backgroundColor: item.color + '12' }]}>
                   <Ionicons name={item.icon as any} size={24} color={item.color} />
                 </View>
@@ -193,7 +193,7 @@ export default function ProfileScreen({ navigation }: any) {
                 style={styles.utilityItem}
                 activeOpacity={0.6}
                 onPress={() => {
-                  if (item.action === 'seller') handleActivateSeller();
+                  if (item.action === 'seller' && !user?.isSeller) handleActivateSeller();
                   else if (item.screen) navigation.navigate(item.screen);
                 }}
               >
