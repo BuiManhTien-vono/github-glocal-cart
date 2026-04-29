@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, SafeAreaView, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Image, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import apiClient from '../../services/api/apiClient';
@@ -14,10 +15,11 @@ export default function ProductDetailScreen() {
   const route = useRoute<ProductDetailRouteProp>();
   const navigation = useNavigation<any>();
   const { productId } = route.params;
+  const insets = useSafeAreaInsets();
 
   const [product, setProduct] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const { addToCart } = useCartStore();
 
   useEffect(() => {
@@ -43,7 +45,7 @@ export default function ProductDetailScreen() {
       Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.');
       return;
     }
-    
+
     try {
       await addToCart(product, 1);
       Alert.alert('Thành công', 'Đã thêm vào giỏ hàng!', [
@@ -63,7 +65,7 @@ export default function ProductDetailScreen() {
     }
     try {
       await addToCart(product, 1);
-      navigation.navigate('Cart');
+      navigation.navigate('Checkout', { cartItems: [product.id] });
     } catch (error) {
       Alert.alert('Lỗi', 'Đã xảy ra lỗi.');
     }
@@ -81,8 +83,8 @@ export default function ProductDetailScreen() {
     return (
       <View style={styles.center}>
         <Text>Không tìm thấy sản phẩm</Text>
-        <TouchableOpacity style={{marginTop: 16}} onPress={() => navigation.goBack()}>
-          <Text style={{color: colors.primary}}>Quay lại</Text>
+        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => navigation.goBack()}>
+          <Text style={{ color: colors.primary }}>Quay lại</Text>
         </TouchableOpacity>
       </View>
     );
@@ -93,13 +95,13 @@ export default function ProductDetailScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
-      
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+
         <View style={styles.sliderContainer}>
           <ImageSlider images={product.images ? product.images.map((img: any) => img.imageUrl) : []} />
-          
-          <View style={styles.floatHeader}>
+
+          <View style={[styles.floatHeader, { top: insets.top + 8 }]}>
             <TouchableOpacity style={styles.floatIconBtn} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
@@ -126,7 +128,7 @@ export default function ProductDetailScreen() {
               <Text style={styles.discountText}>-20%</Text>
             </View>
           </View>
-          
+
           <View style={styles.titleRow}>
             <View style={styles.mallBadge}>
               <Text style={styles.mallBadgeText}>Mall</Text>
@@ -141,7 +143,7 @@ export default function ProductDetailScreen() {
             </View>
             <View style={styles.divider} />
             <Text style={styles.statsText}>Đã bán 1,1k</Text>
-            <View style={{flex: 1}} />
+            <View style={{ flex: 1 }} />
             <Ionicons name="heart-outline" size={20} color={colors.textSecondary} />
           </View>
         </View>
@@ -154,17 +156,17 @@ export default function ProductDetailScreen() {
 
         <View style={styles.shopSection}>
           <View style={styles.shopHeader}>
-            <Image 
-              source={{ uri: 'https://via.placeholder.com/100?text=Shop' }} 
-              style={styles.shopAvatar} 
+            <Image
+              source={{ uri: 'https://via.placeholder.com/100?text=Shop' }}
+              style={styles.shopAvatar}
             />
             <View style={styles.shopInfo}>
-              <Text style={styles.shopName}>Glocal Cart Official</Text>
-              <div style={styles.shopStatus}>
+              <Text style={styles.shopName} onPress={() => navigation.navigate('ShopView', { shopId: 1 })}>Glocal Cart Official</Text>
+              <View style={styles.shopStatus}>
                 <Text style={styles.shopStatusText}>Online 5 phút trước</Text>
-              </div>
+              </View>
             </View>
-            <TouchableOpacity style={styles.viewShopBtn}>
+            <TouchableOpacity style={styles.viewShopBtn} onPress={() => navigation.navigate('ShopView', { shopId: 1 })}>
               <Text style={styles.viewShopText}>Xem Shop</Text>
             </TouchableOpacity>
           </View>
@@ -219,17 +221,17 @@ export default function ProductDetailScreen() {
           <Ionicons name="chatbubbles-outline" size={24} color={colors.primary} />
           <Text style={styles.chatText}>Chat ngay</Text>
         </TouchableOpacity>
-        
+
         <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={[styles.addToCartBtn, product.stock <= 0 && styles.disabledBtn]} 
+          <TouchableOpacity
+            style={[styles.addToCartBtn, product.stock <= 0 && styles.disabledBtn]}
             onPress={handleAddToCart}
             disabled={product.stock <= 0}
           >
             <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.buyNowBtn, product.stock <= 0 && styles.disabledBtn]} 
+          <TouchableOpacity
+            style={[styles.buyNowBtn, product.stock <= 0 && styles.disabledBtn]}
             onPress={handleBuyNow}
             disabled={product.stock <= 0}
           >
@@ -259,7 +261,6 @@ const styles = StyleSheet.create({
   },
   floatHeader: {
     position: 'absolute',
-    top: 40,
     left: 0,
     right: 0,
     flexDirection: 'row',

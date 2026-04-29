@@ -74,16 +74,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const login = async (emailOrUsername: string, password: string) => {
-    const response = await apiClient.post('/auth/login', { email: emailOrUsername, password }) as any;
-    if (!response?.token) throw new Error('Lỗi đăng nhập');
+    console.log('[Auth] Attempting login for:', emailOrUsername);
+    try {
+      const response = await apiClient.post('/auth/login', { email: emailOrUsername, password }) as any;
+      console.log('[Auth] Login response received');
+      if (!response?.token) throw new Error('Lỗi đăng nhập: Token không tồn tại');
 
-    await finishLogin(response.token, response.user);
+      await finishLogin(response.token, response.user);
+    } catch (error: any) {
+      console.log('[Auth] Login error details:', error);
+      throw error;
+    }
   };
 
   const register = async (data: RegisterData) => {
     const response = await apiClient.post('/auth/register', data) as any;
     if (!response?.token) throw new Error('Lỗi đăng ký');
-    
+
     // Trả về data để màn hình Register hiện Alert trước khi tự login
     return { token: response.token, user: response.user };
   };

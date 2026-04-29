@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, SafeAreaView, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCartStore } from '../../store/useCartStore';
@@ -9,15 +10,16 @@ import { colors } from '../../theme/colors';
 
 export default function CartScreen() {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { isLoggedIn } = useAuth();
-  
-  const { 
-    items, 
-    totalAmount, 
-    isLoading, 
-    fetchCart, 
-    updateQuantity, 
-    removeFromCart, 
+
+  const {
+    items,
+    totalAmount,
+    isLoading,
+    fetchCart,
+    updateQuantity,
+    removeFromCart,
     syncCart,
     clearCart
   } = useCartStore();
@@ -36,50 +38,14 @@ export default function CartScreen() {
       return;
     }
 
-    try {
-      setIsCheckingOut(true);
-
-      // 1. Lấy địa chỉ giao hàng (hoặc tạo 1 cái mặc định nếu chưa có)
-      let addresses: any = await apiClient.get('/users/addresses');
-      let addressId = addresses?.[0]?.id;
-
-      if (!addressId) {
-        // Tạo địa chỉ mặc định để demo
-        const newAddr: any = await apiClient.post('/users/addresses', {
-          streetAddress: '123 Đường Láng',
-          city: 'Hà Nội',
-          state: 'Đống Đa',
-          country: 'Việt Nam',
-          zipcode: '100000'
-        });
-        addressId = newAddr.id;
-      }
-
-      // 2. Tạo Đơn hàng (Thanh toán chuyển khoản = 1)
-      const order: any = await apiClient.post('/orders', {
-        shippingAddressId: addressId,
-        paymentMethod: 1, // ElectronicBankTransfer
-        note: 'Thanh toán đơn hàng từ Mobile App'
-      });
-
-      // 3. Khởi tạo Thanh toán & Lấy VietQR
-      const payInfo: any = await apiClient.post(`/payments/${order.id}/initiate`);
-      
-      setQrUrl(payInfo.vietQrUrl);
-      setPaymentModalVisible(true);
-
-    } catch (error: any) {
-      Alert.alert('Lỗi', error.message || 'Không thể tạo đơn hàng');
-    } finally {
-      setIsCheckingOut(false);
-    }
+    navigation.navigate('Checkout');
   };
 
   const handlePaymentDone = () => {
     setPaymentModalVisible(false);
     clearCart();
     Alert.alert('Thành công', 'Đơn hàng của bạn đã được tiếp nhận và chờ xác nhận thanh toán.');
-    navigation.navigate('HomeMain');
+    navigation.navigate('Home');
   };
 
   const handleIncrease = (item: any) => {
@@ -106,23 +72,23 @@ export default function CartScreen() {
 
   if (!items || items.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Giỏ hàng</Text>
         </View>
         <View style={styles.emptyContainer}>
           <Ionicons name="cart-outline" size={80} color={colors.textMuted} />
           <Text style={styles.emptyText}>Giỏ hàng của bạn đang trống</Text>
-          <TouchableOpacity style={styles.shopNowBtn} onPress={() => navigation.navigate('HomeMain')}>
+          <TouchableOpacity style={styles.shopNowBtn} onPress={() => navigation.navigate('Home')}>
             <Text style={styles.shopNowText}>Tiếp tục mua sắm</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Giỏ hàng</Text>
       </View>
@@ -133,26 +99,26 @@ export default function CartScreen() {
         contentContainerStyle={styles.listContainer}
         renderItem={({ item }) => (
           <View style={styles.cartItem}>
-            <Image 
-              source={{ uri: item.productImage || 'https://via.placeholder.com/100' }} 
-              style={styles.itemImage} 
+            <Image
+              source={{ uri: item.productImage || 'https://via.placeholder.com/100' }}
+              style={styles.itemImage}
             />
             <View style={styles.itemDetails}>
               <Text style={styles.itemName} numberOfLines={2}>{item.productName}</Text>
               <Text style={styles.itemPrice}>
                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(item.priceSnapshot)}
               </Text>
-              
+
               <View style={styles.actionRow}>
                 <View style={styles.quantityControl}>
-                  <TouchableOpacity 
-                    style={styles.qtyBtn} 
+                  <TouchableOpacity
+                    style={styles.qtyBtn}
                     onPress={() => handleDecrease(item)}
                   >
                     <Ionicons name="remove" size={16} color={colors.text} />
                   </TouchableOpacity>
                   <Text style={styles.qtyText}>{item.quantity}</Text>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.qtyBtn}
                     onPress={() => handleIncrease(item)}
                   >
@@ -176,8 +142,8 @@ export default function CartScreen() {
             {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalAmount)}
           </Text>
         </View>
-        <TouchableOpacity 
-          style={[styles.checkoutBtn, isCheckingOut && { opacity: 0.7 }]} 
+        <TouchableOpacity
+          style={[styles.checkoutBtn, isCheckingOut && { opacity: 0.7 }]}
           onPress={handleCheckout}
           disabled={isCheckingOut}
         >
@@ -209,8 +175,8 @@ export default function CartScreen() {
 
             <View style={styles.qrContainer}>
               <Text style={styles.qrMessage}>Vui lòng quét mã bên dưới để thanh toán đơn hàng</Text>
-              <Image 
-                source={{ uri: qrUrl }} 
+              <Image
+                source={{ uri: qrUrl }}
                 style={styles.qrImage}
                 resizeMode="contain"
               />
@@ -224,7 +190,7 @@ export default function CartScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

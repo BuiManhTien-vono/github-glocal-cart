@@ -1,16 +1,18 @@
 import React from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { useNavigation } from '@react-navigation/native';
 
 export const HomeHeader = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.headerContainer}>
+    <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
       {/* Search Bar */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.searchContainer}
         onPress={() => {
           console.log('Navigating to Search');
@@ -22,7 +24,7 @@ export const HomeHeader = () => {
           style={styles.searchInput}
           placeholder="Glocal Cart Mall | Điện thoại & Phụ kiện"
           placeholderTextColor={colors.primary}
-          editable={false} 
+          editable={false}
         />
         <View style={styles.cameraIcon}>
           <Ionicons name="camera-outline" size={20} color={colors.textSecondary} />
@@ -30,8 +32,8 @@ export const HomeHeader = () => {
       </TouchableOpacity>
 
       {/* Cart Icon */}
-      <TouchableOpacity 
-        style={styles.iconButton} 
+      <TouchableOpacity
+        style={styles.iconButton}
         onPress={() => navigation.navigate('Cart')}
       >
         <Ionicons name="cart-outline" size={30} color={colors.white} />
@@ -48,11 +50,8 @@ export const HomeHeader = () => {
   );
 };
 
-const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 24;
-
 const styles = StyleSheet.create({
   headerContainer: {
-    paddingTop: STATUSBAR_HEIGHT + 10,
     paddingBottom: 10,
     paddingHorizontal: 12,
     backgroundColor: colors.primary,
