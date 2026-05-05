@@ -13,8 +13,10 @@ using GlocalCart.API.Services.Implementations;
 var builder = WebApplication.CreateBuilder(args);
 
 // === DATABASE ===
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseInMemoryDatabase("GlocalCartDb"));
+builder.Services.AddDbContext<AppDbContext>(options => {
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+});
 
 // === ASP.NET IDENTITY ===
 builder.Services.AddIdentity<User, IdentityRole<int>>(options =>
@@ -70,6 +72,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IUploadService, UploadService>();
 
 // === CONTROLLERS ===
 builder.Services.AddControllers(options =>
@@ -113,6 +116,8 @@ app.UseSwaggerUI(c =>
 
 app.UseCors("AllowAll");
 
+app.UseStaticFiles(); // Cho phép truy cập ảnh từ wwwroot
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -122,7 +127,7 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
     
     // Đổ dữ liệu mẫu vào DB (dùng UserManager từ Identity)
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();

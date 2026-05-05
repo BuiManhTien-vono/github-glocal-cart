@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../services/api/apiClient';
+import { getSecureItem, setSecureItem, removeSecureItem } from '../utils/secureStore';
 
 // ─── Types ───
 interface User {
@@ -54,8 +55,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const restoreSession = async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      const userJson = await AsyncStorage.getItem('auth_user');
+      const token = await getSecureItem('auth_token');
+      const userJson = await getSecureItem('auth_user');
       if (token && userJson) {
         const user = JSON.parse(userJson);
         setState({ user, token, isLoading: false, isLoggedIn: true });
@@ -68,8 +69,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const finishLogin = async (token: string, user: User) => {
-    await AsyncStorage.setItem('auth_token', token);
-    await AsyncStorage.setItem('auth_user', JSON.stringify(user));
+    await setSecureItem('auth_token', token);
+    await setSecureItem('auth_user', JSON.stringify(user));
     setState({ user, token, isLoading: false, isLoggedIn: true });
   };
 
@@ -96,14 +97,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem('auth_token');
-    await AsyncStorage.removeItem('auth_user');
+    await removeSecureItem('auth_token');
+    await removeSecureItem('auth_user');
     setState({ user: null, token: null, isLoading: false, isLoggedIn: false });
   };
 
   const updateUser = (user: User) => {
     setState((prev) => ({ ...prev, user }));
-    AsyncStorage.setItem('auth_user', JSON.stringify(user));
+    setSecureItem('auth_user', JSON.stringify(user));
   };
 
   return (

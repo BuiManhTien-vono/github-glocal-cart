@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSecureItem } from '../../utils/secureStore';
 
 import { Platform } from 'react-native';
 
@@ -17,7 +18,7 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
+      const token = await getSecureItem('auth_token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
