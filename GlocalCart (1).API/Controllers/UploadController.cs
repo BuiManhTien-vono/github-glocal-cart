@@ -20,7 +20,8 @@ namespace GlocalCart.API.Controllers
 
         [HttpPost]
         [Authorize]
-        public async Task<IActionResult> UploadImage([FromForm] IFormFile file, [FromForm] string folderName = "general")
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadImage(IFormFile file, [FromForm] string folderName = "general")
         {
             try
             {

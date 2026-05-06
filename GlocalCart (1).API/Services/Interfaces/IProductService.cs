@@ -13,9 +13,13 @@ namespace GlocalCart.API.Services.Interfaces
 
         // Seller
         Task<ProductResponseDto> CreateProductAsync(int sellerId, CreateProductDto dto);
+        Task<ProductResponseDto> CreateProductWithImagesAsync(int sellerId, CreateProductWithImagesDto dto);
         Task<ProductResponseDto> UpdateProductAsync(int sellerId, int productId, UpdateProductDto dto);
         Task<bool> ToggleVisibilityAsync(int sellerId, int productId);
         Task<bool> UpdateStockAsync(int sellerId, int productId, int newStock);
         Task<PagedResult<ProductResponseDto>> GetMyProductsAsync(int sellerId, int page, int pageSize);
+
+        // Image
+        Task<(byte[] Data, string ContentType)?> GetProductImageDataAsync(int imageId);
     }
 }
