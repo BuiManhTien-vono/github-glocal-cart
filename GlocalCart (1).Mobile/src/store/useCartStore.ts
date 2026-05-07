@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import apiClient from '../services/api/apiClient';
 import { getSecureItem } from '../utils/secureStore';
+import { resolveProductImage } from '../utils/imageUtils';
 import { 
   getGuestCartItems, 
   addOrUpdateGuestCartItem, 
@@ -73,7 +74,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           id: product.id,
           productId: product.id,
           productName: product.name,
-          productImage: product.images && product.images.length > 0 ? product.images[0].imageUrl : undefined,
+          productImage: resolveProductImage(product) || undefined,
           priceSnapshot: product.price,
           currentPrice: product.price,
           quantity: quantity,

@@ -8,6 +8,7 @@ import { useCartStore } from '../../store/useCartStore';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../services/api/apiClient';
 import { colors } from '../../theme/colors';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
 
 export default function CartScreen() {
   const navigation = useNavigation<any>();
@@ -101,7 +102,7 @@ export default function CartScreen() {
         renderItem={({ item }) => (
           <View style={styles.cartItem}>
             <Image
-              source={{ uri: item.productImage || 'https://via.placeholder.com/100' }}
+              source={{ uri: resolveProductImageUrl(item.productImage) || 'https://via.placeholder.com/100' }}
               style={styles.itemImage}
             />
             <View style={styles.itemDetails}>

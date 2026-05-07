@@ -4,6 +4,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../theme/colors';
+import { resolveProductImage } from '../../utils/imageUtils';
 
 export const FlashSale = ({ data }: { data: any[] }) => {
   const navigation = useNavigation<any>();
@@ -34,7 +35,7 @@ export const FlashSale = ({ data }: { data: any[] }) => {
           const discount = 20 + (index * 5); // 20%, 25%, 30%...
           const discountedPrice = item.price * (1 - discount / 100);
           const soldPercentage = Math.floor(Math.random() * 80) + 10;
-          const mainImage = item.images && item.images.length > 0 ? item.images[0].imageUrl : 'https://via.placeholder.com/150';
+          const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/150';
 
           return (
             <TouchableOpacity 
