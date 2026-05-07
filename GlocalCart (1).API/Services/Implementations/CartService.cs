@@ -21,7 +21,7 @@ namespace GlocalCart.API.Services.Implementations
                 {
                     Id = ci.Id, ProductId = ci.ProductId,
                     ProductName = ci.Product.Name,
-                    ProductImage = ci.Product.Images.FirstOrDefault(i => i.IsMain)!.ImageUrl,
+                    ProductImage = ci.Product.Images.FirstOrDefault(i => i.IsMain)?.ImageUrl ?? ci.Product.MediaUrl,
                     PriceSnapshot = ci.PriceSnapshot, CurrentPrice = ci.Product.Price,
                     Quantity = ci.Quantity, AvailableStock = ci.Product.AvailableItemCount
                 }).ToListAsync();

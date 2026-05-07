@@ -31,6 +31,8 @@ import SellerOrdersScreen from '../screens/Seller/SellerOrdersScreen';
 import SellerShopInfoScreen from '../screens/Seller/SellerShopInfoScreen';
 import SellerCategoriesScreen from '../screens/Seller/SellerCategoriesScreen';
 import SellerFlashSaleScreen from '../screens/Seller/SellerFlashSaleScreen';
+import SellerAddProductScreen from '../screens/Seller/SellerAddProductScreen';
+import SellerEditProductScreen from '../screens/Seller/SellerEditProductScreen';
 
 // Admin Screens
 import AdminDashboardScreen from '../screens/Admin/AdminDashboardScreen';
@@ -98,6 +100,8 @@ function ProfileStack() {
       <Stack.Screen name="SellerShopInfo" component={SellerShopInfoScreen} />
       <Stack.Screen name="SellerCategories" component={SellerCategoriesScreen} />
       <Stack.Screen name="SellerFlashSale" component={SellerFlashSaleScreen} />
+      <Stack.Screen name="SellerAddProduct" component={SellerAddProductScreen} />
+      <Stack.Screen name="SellerEditProduct" component={SellerEditProductScreen} />
       <Stack.Screen name="MyOrders" component={MyOrdersScreen} />
       <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
       <Stack.Screen name="ShipmentTracking" component={ShipmentTrackingScreen} />

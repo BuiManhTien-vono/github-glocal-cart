@@ -24,7 +24,7 @@ namespace GlocalCart.API.Services.Implementations
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search.Name))
-                query = query.Where(p => p.Name.Contains(search.Name));
+                query = query.Where(p => p.Name.ToLower().Contains(search.Name.ToLower()));
             if (search.CategoryId.HasValue)
             {
                 // Lấy ID của category hiện tại và toàn bộ category con của nó
