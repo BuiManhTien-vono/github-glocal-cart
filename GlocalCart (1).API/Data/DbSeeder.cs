@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using GlocalCart.API.Models;
 using GlocalCart.API.Enums;
+using System.IO;
 
 namespace GlocalCart.API.Data
 {
@@ -9,6 +10,29 @@ namespace GlocalCart.API.Data
     {
         public static async Task SeedAsync(AppDbContext context, UserManager<User> userManager, RoleManager<IdentityRole<int>> roleManager)
         {
+            // Tự động đồng bộ ảnh gốc từ file WebP vào Database nếu chưa có
+            var existingImages = await context.ProductImages.Where(pi => pi.ImageData == null).ToListAsync();
+            if (existingImages.Any())
+            {
+                var imageDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "products");
+                if (Directory.Exists(imageDir))
+                {
+                    var webpFiles = Directory.GetFiles(imageDir, "*.webp");
+                    if (webpFiles.Any())
+                    {
+                        var randFile = new Random();
+                        foreach (var pi in existingImages)
+                        {
+                            var randomFile = webpFiles[randFile.Next(webpFiles.Length)];
+                            pi.ImageData = await File.ReadAllBytesAsync(randomFile);
+                            pi.ContentType = "image/webp";
+                            pi.ImageUrl = $"/api/products/images/{pi.Id}/data";
+                        }
+                        await context.SaveChangesAsync();
+                    }
+                }
+            }
+
             if (await context.Products.AnyAsync()) return;
 
             // Đảm bảo roles tồn tại
