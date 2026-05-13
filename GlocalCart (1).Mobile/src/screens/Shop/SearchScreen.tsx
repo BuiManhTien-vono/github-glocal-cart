@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard, ScrollView } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard, ScrollView, Modal, TouchableWithoutFeedback, PanResponder, Animated, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -18,11 +18,71 @@ export default function SearchScreen() {
   const [suggestions, setSuggestions] = useState([]);
   const [history, setHistory] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSearching, setIsSearching] = useState(false); // Mode: showing results or showing suggestions
+  const [isSearching, setIsSearching] = useState(false); 
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    minPrice: '',
+    maxPrice: '',
+    categoryId: null as number | null,
+    brand: null as string | null,
+    rating: null as number | null
+  });
+  const [categories, setCategories] = useState<any[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [panY] = useState(new Animated.Value(0));
 
   useEffect(() => {
     loadHistory();
+    fetchCategories();
   }, []);
+
+  useEffect(() => {
+    if (filters.categoryId) {
+      fetchBrands(filters.categoryId);
+    } else {
+      setBrands([]);
+      setFilters(prev => ({ ...prev, brand: null }));
+    }
+  }, [filters.categoryId]);
+
+  const fetchCategories = async () => {
+    try {
+      const res: any = await apiClient.get('/categories');
+      setCategories(res || []);
+    } catch (e) { }
+  };
+
+  const fetchBrands = async (catId: number) => {
+    // Mock brands based on category for now
+    // In a real app, this would be an API call: /brands?categoryId=catId
+    const mockBrands: Record<number, string[]> = {
+      1: ['Apple', 'Samsung', 'Oppo', 'Xiaomi'], // Điện thoại
+      2: ['Dell', 'HP', 'Asus', 'MacBook', 'Lenovo'], // Laptop
+      3: ['Nike', 'Adidas', 'Puma', 'Biti\'s'], // Giày dép
+      4: ['Gucci', 'Chanel', 'Zara', 'H&M'], // Thời trang
+    };
+    setBrands(mockBrands[catId] || ['Khác']);
+  };
+
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onPanResponderMove: (_, gestureState) => {
+      if (gestureState.dy > 0) {
+        panY.setValue(gestureState.dy);
+      }
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      if (gestureState.dy > 100) {
+        setShowFilters(false);
+        panY.setValue(0);
+      } else {
+        Animated.spring(panY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      }
+    },
+  });
 
   const loadHistory = async () => {
     try {
@@ -54,17 +114,18 @@ export default function SearchScreen() {
     saveToHistory(query);
 
     try {
-      // Using /products/search or fallback to /products?name=...
-      const res: any = await apiClient.get(`/products/search?name=${query}`);
+      let url = `/products/search?name=${query}`;
+      if (filters.minPrice) url += `&minPrice=${filters.minPrice}`;
+      if (filters.maxPrice) url += `&maxPrice=${filters.maxPrice}`;
+      if (filters.categoryId) url += `&categoryId=${filters.categoryId}`;
+      if (filters.brand) url += `&brand=${filters.brand}`;
+      if (filters.rating) url += `&minRating=${filters.rating}`;
+
+      const res: any = await apiClient.get(url);
       setProducts(res?.items || res || []);
     } catch (error) {
       console.log('Search error:', error);
-      try {
-        const fallback: any = await apiClient.get(`/products?name=${query}`);
-        setProducts(fallback?.items || fallback || []);
-      } catch (e) {
-        setProducts([]);
-      }
+      setProducts([]);
     } finally {
       setIsLoading(false);
     }
@@ -168,6 +229,12 @@ export default function SearchScreen() {
         <TouchableOpacity style={styles.searchBtn} onPress={() => fetchResults(searchQuery)}>
           <Text style={styles.searchBtnText}>Tìm</Text>
         </TouchableOpacity>
+
+        {isSearching && (
+          <TouchableOpacity style={styles.filterToggle} onPress={() => setShowFilters(true)}>
+            <Ionicons name="options-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {!isSearching ? (
@@ -210,6 +277,111 @@ export default function SearchScreen() {
           )}
         </View>
       )}
+
+      {/* FILTER MODAL */}
+      <Modal visible={showFilters} animationType="slide" transparent onRequestClose={() => setShowFilters(false)}>
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowFilters(false)}
+        >
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ flex: 1, justifyContent: 'flex-end' }}
+            >
+              <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                <Animated.View 
+                  style={[
+                    styles.filterModal, 
+                    { 
+                      paddingBottom: insets.bottom + 20,
+                      transform: [{ translateY: panY }]
+                    }
+                  ]}
+                >
+                  <View {...panResponder.panHandlers}>
+                    <View style={styles.modalHandle} />
+                    <Text style={styles.modalTitle}>Bộ lọc tìm kiếm</Text>
+                  </View>
+                  
+                  <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <Text style={styles.filterLabel}>Khoảng giá</Text>
+                    <View style={styles.priceRow}>
+                      <TextInput 
+                        style={styles.priceInput} 
+                        placeholder="Tối thiểu" 
+                        keyboardType="numeric"
+                        value={filters.minPrice}
+                        onChangeText={v => setFilters({...filters, minPrice: v})}
+                      />
+                      <View style={styles.priceDivider} />
+                      <TextInput 
+                        style={styles.priceInput} 
+                        placeholder="Tối đa" 
+                        keyboardType="numeric"
+                        value={filters.maxPrice}
+                        onChangeText={v => setFilters({...filters, maxPrice: v})}
+                      />
+                    </View>
+
+                    <Text style={styles.filterLabel}>Danh mục</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catGrid}>
+                      {categories.map(cat => (
+                        <TouchableOpacity 
+                          key={cat.id} 
+                          style={[styles.catChip, filters.categoryId === cat.id && styles.catChipActive]}
+                          onPress={() => setFilters({...filters, categoryId: filters.categoryId === cat.id ? null : cat.id})}
+                        >
+                          <Text style={[styles.catText, filters.categoryId === cat.id && styles.catTextActive]}>{cat.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+
+                    {brands.length > 0 && (
+                      <>
+                        <Text style={styles.filterLabel}>Thương hiệu gợi ý</Text>
+                        <View style={styles.brandGrid}>
+                          {brands.map((b, idx) => (
+                            <TouchableOpacity 
+                              key={idx} 
+                              style={[styles.brandChip, filters.brand === b && styles.brandChipActive]}
+                              onPress={() => setFilters({...filters, brand: filters.brand === b ? null : b})}
+                            >
+                              <Text style={[styles.brandText, filters.brand === b && styles.brandTextActive]}>{b}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </>
+                    )}
+
+                    <Text style={styles.filterLabel}>Đánh giá</Text>
+                    <View style={styles.ratingRow}>
+                      {[5, 4, 3, 2, 1].map(r => (
+                        <TouchableOpacity 
+                          key={r} 
+                          style={[styles.ratingBtn, filters.rating === r && styles.ratingBtnActive]}
+                          onPress={() => setFilters({...filters, rating: filters.rating === r ? null : r})}
+                        >
+                          <Ionicons name="star" size={14} color={filters.rating === r ? '#FFF' : '#FFD700'} />
+                          <Text style={[styles.ratingText, filters.rating === r && styles.ratingTextActive]}>{r} sao</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View style={styles.modalFooter}>
+                      <TouchableOpacity style={styles.resetBtn} onPress={() => setFilters({ minPrice: '', maxPrice: '', categoryId: null, brand: null, rating: null })}>
+                        <Text style={styles.resetText}>Thiết lập lại</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.applyBtn} onPress={() => { setShowFilters(false); fetchResults(searchQuery); }}>
+                        <Text style={styles.applyText}>Áp dụng</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollView>
+                </Animated.View>
+              </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -328,5 +500,168 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primary,
     borderRadius: 4,
+  },
+  filterToggle: {
+    paddingLeft: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  filterModal: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 24,
+  },
+  filterLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  priceInput: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  priceDivider: {
+    width: 12,
+    height: 1,
+    backgroundColor: colors.textMuted,
+  },
+  catGrid: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  catChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  catChipActive: {
+    backgroundColor: colors.primary + '10',
+    borderColor: colors.primary,
+  },
+  catText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  catTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  brandGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 20,
+  },
+  brandChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  brandChipActive: {
+    backgroundColor: '#FFF',
+    borderColor: colors.primary,
+  },
+  brandText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  brandTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 30,
+  },
+  ratingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    backgroundColor: '#F5F5F5',
+    gap: 4,
+  },
+  ratingBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  ratingText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  ratingTextActive: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 15,
+    marginTop: 10,
+  },
+  resetBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resetText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+  applyBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyText: {
+    fontSize: 15,
+    color: '#FFF',
+    fontWeight: '700',
   }
 });

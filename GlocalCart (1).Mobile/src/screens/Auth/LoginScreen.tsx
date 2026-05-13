@@ -12,7 +12,7 @@ const { width } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { login, setGuestMode } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -256,6 +256,15 @@ export default function LoginScreen({ navigation }: any) {
                 <Text style={styles.registerLink}>Đăng Ký</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Guest Login */}
+            <TouchableOpacity 
+              style={styles.guestBtn} 
+              onPress={() => setGuestMode(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.guestBtnText}>Tiếp tục với vai trò là khách</Text>
+            </TouchableOpacity>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -501,5 +510,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
     fontWeight: '800',
+  },
+  guestBtn: {
+    marginTop: 20,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  guestBtnText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });

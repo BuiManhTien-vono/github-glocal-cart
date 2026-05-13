@@ -1,27 +1,46 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, KeyboardAvoidingView, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
+import apiClient from '../../services/api/apiClient';
 
 export default function WriteReviewScreen({ navigation, route }: any) {
     const [rating, setRating] = useState(0);
     const [review, setReview] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const insets = useSafeAreaInsets();
 
-    const productName = route?.params?.productName || 'MacBook Pro M2 2023 - Gray 512GB';
+    const productId = route?.params?.productId;
+    const orderId = route?.params?.orderId;
+    const productName = route?.params?.productName || 'Sản phẩm';
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (rating === 0) {
-            if (Platform.OS === 'web') window.alert('Vui lòng chọn số sao đánh giá!');
+            Alert.alert('Thông báo', 'Vui lòng chọn số sao đánh giá!');
             return;
         }
-        if (Platform.OS === 'web') {
-            window.alert('✅ Đã gửi đánh giá thành công. Cảm ơn phản hồi của bạn!');
+
+        setIsSubmitting(true);
+        try {
+            await apiClient.post(`/products/${productId}/reviews`, {
+                rating,
+                review: review,
+                orderId: orderId
+            });
+
+            Alert.alert('Thành công', 'Cảm ơn bạn đã đánh giá sản phẩm!', [
+                { text: 'OK', onPress: () => navigation.goBack() }
+            ]);
+        } catch (error: any) {
+            Alert.alert('Lỗi', error.message || 'Không thể gửi đánh giá. Vui lòng thử lại.');
+        } finally {
+            setIsSubmitting(false);
         }
-        navigation.goBack();
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -30,7 +49,10 @@ export default function WriteReviewScreen({ navigation, route }: any) {
                 <View style={{ width: 40 }} />
             </View>
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+                style={{ flex: 1 }}
+            >
                 <View style={styles.content}>
                     <View style={styles.productCard}>
                         <View style={styles.imgMock}><Text style={{ fontSize: 24 }}>💻</Text></View>
@@ -75,11 +97,15 @@ export default function WriteReviewScreen({ navigation, route }: any) {
             </KeyboardAvoidingView>
 
             <View style={styles.bottomBar}>
-                <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-                    <Text style={styles.submitBtnText}>Gửi Đánh Giá</Text>
+                <TouchableOpacity 
+                    style={[styles.submitBtn, isSubmitting && { opacity: 0.7 }]} 
+                    onPress={handleSubmit}
+                    disabled={isSubmitting}
+                >
+                    <Text style={styles.submitBtnText}>{isSubmitting ? 'Đang gửi...' : 'Gửi Đánh Giá'}</Text>
                 </TouchableOpacity>
             </View>
-        </SafeAreaView>
+        </View>
     );
 }
 

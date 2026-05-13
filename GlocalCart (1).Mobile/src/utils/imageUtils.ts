@@ -1,11 +1,4 @@
-import { Platform } from 'react-native';
-
-/**
- * Base URL của API server (không có /api ở cuối)
- */
-const API_BASE = Platform.OS === 'web'
-  ? 'http://localhost:5100'
-  : 'http://10.117.243.62:5100';
+import { BASE_URL } from '../services/api/config';
 
 /**
  * Resolve ảnh sản phẩm thành URL đầy đủ có thể hiển thị.
@@ -27,7 +20,7 @@ export function resolveProductImageUrl(
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
 
   // Nếu là đường dẫn tương đối (/api/..., /uploads/...) → ghép base
-  if (url.startsWith('/')) return `${API_BASE}${url}`;
+  if (url.startsWith('/')) return `${BASE_URL}${url}`;
 
   return url;
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshControl,
-  Modal, TextInput, ScrollView, Animated, Dimensions,
+  Modal, TextInput, ScrollView, Animated, Dimensions, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,8 +15,9 @@ interface Address {
   street: string; ward: string; district: string; city: string; isDefault: boolean;
 }
 
-export default function AddressScreen({ navigation }: any) {
+export default function AddressScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
+  const isSelecting = route.params?.isSelecting || false;
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +78,15 @@ export default function AddressScreen({ navigation }: any) {
           </View>
         }
         renderItem={({item})=>(
-          <View style={s.card}>
+          <TouchableOpacity 
+            style={s.card} 
+            activeOpacity={isSelecting ? 0.7 : 1}
+            onPress={() => {
+              if (isSelecting) {
+                navigation.navigate('Checkout', { selectedAddress: item });
+              }
+            }}
+          >
             {item.isDefault&&<View style={s.defBadge}><Ionicons name="checkmark-circle" size={12} color="#FFF"/><Text style={s.defText}>Mặc định</Text></View>}
             <View style={s.cardTop}><Ionicons name="location" size={20} color={colors.primary}/>
               <View style={{flex:1}}><Text style={s.name}>{item.fullName}</Text><Text style={s.phone}>{item.phone}</Text></View>
@@ -88,33 +97,38 @@ export default function AddressScreen({ navigation }: any) {
               <TouchableOpacity style={s.actBtn} onPress={()=>openEdit(item)}><Ionicons name="create-outline" size={16} color={colors.secondary}/><Text style={[s.actText,{color:colors.secondary}]}>Sửa</Text></TouchableOpacity>
               <TouchableOpacity style={s.actBtn} onPress={()=>handleDelete(item.id)}><Ionicons name="trash-outline" size={16} color={colors.danger}/><Text style={[s.actText,{color:colors.danger}]}>Xóa</Text></TouchableOpacity>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
       />
       <TouchableOpacity style={s.fab} onPress={()=>setShowModal(true)} activeOpacity={0.8}><Ionicons name="add" size={28} color="#FFF"/></TouchableOpacity>
 
       <Modal visible={showModal} animationType="slide" transparent>
         <View style={s.overlay}>
-          <View style={[s.modal,{paddingBottom:insets.bottom+20}]}>
-            <View style={s.handle}/><Text style={s.modalTitle}>{editId?'Sửa Địa Chỉ':'Thêm Địa Chỉ Mới'}</Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {([['fullName','Họ tên *','person-outline'],['phone','SĐT *','call-outline'],['street','Địa chỉ *','home-outline'],['ward','Phường/Xã','map-outline'],['district','Quận/Huyện','navigate-outline'],['city','Thành phố *','location-outline']] as const).map(([k,l,ic])=>(
-                <View key={k} style={s.field}>
-                  <Text style={s.label}>{l}</Text>
-                  <View style={s.inputWrap}><Ionicons name={ic as any} size={18} color={colors.textMuted} style={{marginRight:10}}/>
-                    <TextInput style={s.input} value={(form as any)[k]} onChangeText={v=>setForm({...form,[k]:v})} placeholderTextColor={colors.textMuted}/>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ width: '100%' }}
+          >
+            <View style={[s.modal,{paddingBottom:insets.bottom+20}]}>
+              <View style={s.handle}/><Text style={s.modalTitle}>{editId?'Sửa Địa Chỉ':'Thêm Địa Chỉ Mới'}</Text>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {([['fullName','Họ tên *','person-outline'],['phone','SĐT *','call-outline'],['street','Địa chỉ *','home-outline'],['ward','Phường/Xã','map-outline'],['district','Quận/Huyện','navigate-outline'],['city','Thành phố *','location-outline']] as const).map(([k,l,ic])=>(
+                  <View key={k} style={s.field}>
+                    <Text style={s.label}>{l}</Text>
+                    <View style={s.inputWrap}><Ionicons name={ic as any} size={18} color={colors.textMuted} style={{marginRight:10}}/>
+                      <TextInput style={s.input} value={(form as any)[k]} onChangeText={v=>setForm({...form,[k]:v})} placeholderTextColor={colors.textMuted}/>
+                    </View>
                   </View>
+                ))}
+                <TouchableOpacity style={s.defToggle} onPress={()=>setForm({...form,isDefault:!form.isDefault})}>
+                  <Ionicons name={form.isDefault?'checkbox':'square-outline'} size={24} color={colors.primary}/><Text style={s.defTogText}>Đặt làm mặc định</Text>
+                </TouchableOpacity>
+                <View style={s.modalActs}>
+                  <TouchableOpacity style={s.cancelBtn} onPress={resetForm}><Text style={s.cancelText}>Hủy</Text></TouchableOpacity>
+                  <TouchableOpacity style={[s.saveBtn,saving&&{opacity:0.7}]} onPress={handleSave} disabled={saving}><Text style={s.saveText}>{saving?'Đang lưu...':'Lưu'}</Text></TouchableOpacity>
                 </View>
-              ))}
-              <TouchableOpacity style={s.defToggle} onPress={()=>setForm({...form,isDefault:!form.isDefault})}>
-                <Ionicons name={form.isDefault?'checkbox':'square-outline'} size={24} color={colors.primary}/><Text style={s.defTogText}>Đặt làm mặc định</Text>
-              </TouchableOpacity>
-              <View style={s.modalActs}>
-                <TouchableOpacity style={s.cancelBtn} onPress={resetForm}><Text style={s.cancelText}>Hủy</Text></TouchableOpacity>
-                <TouchableOpacity style={[s.saveBtn,saving&&{opacity:0.7}]} onPress={handleSave} disabled={saving}><Text style={s.saveText}>{saving?'Đang lưu...':'Lưu'}</Text></TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>

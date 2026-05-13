@@ -1,76 +1,115 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
+import apiClient from '../../services/api/apiClient';
+import { Loading } from '../../components/common/Loading';
 
 export default function MyOrdersScreen({ route, navigation }: any) {
     const insets = useSafeAreaInsets();
     const initialTab = route.params?.activeTab || 'Tất cả';
     const tabs = ['Tất cả', 'Chờ xác nhận', 'Đang giao', 'Đã giao', 'Đánh giá', 'Đã hủy'];
     const [activeTab, setActiveTab] = useState(initialTab);
+    const [orders, setOrders] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    const mockOrders = [
-        { id: 'ORD202611', status: 'Đang giao', total: 32035000, itemsCount: 2, date: '12/10/2026', firstProductName: 'MacBook Pro M2 2023', shopName: 'Apple Official Store' },
-        { id: 'ORD202612', status: 'Đã giao', total: 150000, itemsCount: 1, date: '01/10/2026', firstProductName: 'Ốp lưng Silicone iPhone 15', shopName: 'Phụ Kiện Số 1' },
-        { id: 'ORD202613', status: 'Chờ xác nhận', total: 450000, itemsCount: 3, date: '15/10/2026', firstProductName: 'Áo sơ mi nam công sở', shopName: 'VietTien' },
-    ];
+    useEffect(() => {
+        fetchOrders();
+    }, []);
 
-    const filteredOrders = activeTab === 'Tất cả'
-        ? mockOrders
-        : activeTab === 'Đánh giá'
-            ? mockOrders.filter(o => o.status === 'Đã giao') // For mock purposes, show delivered orders that need review
-            : mockOrders.filter(o => o.status === activeTab);
+    const fetchOrders = async () => {
+        try {
+            const data: any = await apiClient.get('/orders/my');
+            setOrders(data || []);
+        } catch (error) {
+            console.log('fetchOrders error:', error);
+        } finally {
+            setIsLoading(false);
+            setRefreshing(false);
+        }
+    };
 
-    const getStatusColor = (status: string) => {
+    const getStatusText = (status: number) => {
         switch (status) {
-            case 'Chờ xác nhận': return colors.warning;
-            case 'Đang giao': return colors.secondary;
-            case 'Đã giao': return colors.success;
-            case 'Đã hủy': return colors.danger;
+            case 0: return 'Chờ xác nhận';
+            case 1: return 'Đang chuẩn bị';
+            case 2: return 'Đang giao';
+            case 3: return 'Đã giao';
+            case 4: return 'Đã hủy';
+            default: return 'Khác';
+        }
+    };
+
+    const filteredOrders = orders.filter(o => {
+        const statusText = getStatusText(o.status);
+        if (activeTab === 'Tất cả') return true;
+        if (activeTab === 'Đánh giá') return o.status === 3; // Delivered
+        return statusText === activeTab;
+    });
+
+    const getStatusColor = (status: number) => {
+        switch (status) {
+            case 0: return colors.warning;
+            case 1: return colors.info;
+            case 2: return colors.secondary;
+            case 3: return colors.success;
+            case 4: return colors.danger;
             default: return colors.text;
         }
     };
 
-    const renderItem = ({ item }: any) => (
-        <View style={styles.orderCard}>
-            <View style={styles.orderHeader}>
-                <View style={styles.shopRow}>
-                    <Ionicons name="storefront" size={16} color={colors.textSecondary} />
-                    <Text style={styles.shopName}>{item.shopName}</Text>
+    const renderItem = ({ item }: any) => {
+        const statusText = getStatusText(item.status);
+        const statusColor = getStatusColor(item.status);
+        const firstItem = item.orderItems?.[0];
+        const itemsCount = item.orderItems?.length || 0;
+
+        return (
+            <View style={styles.orderCard}>
+                <View style={styles.orderHeader}>
+                    <View style={styles.shopRow}>
+                        <Ionicons name="receipt-outline" size={16} color={colors.textSecondary} />
+                        <Text style={styles.shopName}>Đơn hàng: {item.orderNumber}</Text>
+                    </View>
+                    <Text style={[styles.orderStatus, { color: statusColor }]}>{statusText}</Text>
                 </View>
-                <Text style={[styles.orderStatus, { color: getStatusColor(item.status) }]}>{item.status}</Text>
-            </View>
 
-            <TouchableOpacity style={styles.orderBody} onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}>
-                <View style={styles.mockImg}><Ionicons name="cube-outline" size={30} color={colors.textMuted} /></View>
-                <View style={styles.orderInfo}>
-                    <Text style={styles.productName} numberOfLines={2}>{item.firstProductName}</Text>
-                    <Text style={styles.itemCount}>và {item.itemsCount - 1} sản phẩm khác...</Text>
-                </View>
-            </TouchableOpacity>
-
-            <View style={styles.orderFooter}>
-                <Text style={styles.totalText}>Thành tiền: <Text style={styles.amount}>{item.total.toLocaleString('vi-VN')}đ</Text></Text>
-            </View>
-
-            <View style={styles.orderActions}>
-                {item.status === 'Đã giao' && (
-                    <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={() => navigation.navigate('WriteReview')}>
-                        <Text style={styles.primaryBtnText}>Đánh Giá</Text>
-                    </TouchableOpacity>
-                )}
-                {item.status === 'Đang giao' && (
-                    <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={() => navigation.navigate('ShipmentTracking')}>
-                        <Text style={styles.primaryBtnText}>Theo dõi Đơn</Text>
-                    </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.actionBtn}>
-                    <Text style={styles.outlineBtnText}>Mua Lại</Text>
+                <TouchableOpacity style={styles.orderBody} onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}>
+                    <View style={styles.mockImg}><Ionicons name="cube-outline" size={30} color={colors.textMuted} /></View>
+                    <View style={styles.orderInfo}>
+                        <Text style={styles.productName} numberOfLines={2}>
+                            {firstItem?.productName || 'Sản phẩm không tên'}
+                        </Text>
+                        {itemsCount > 1 && (
+                            <Text style={styles.itemCount}>và {itemsCount - 1} sản phẩm khác...</Text>
+                        )}
+                    </View>
                 </TouchableOpacity>
+
+                <View style={styles.orderFooter}>
+                    <Text style={styles.totalText}>Thành tiền: <Text style={styles.amount}>{item.totalAmount.toLocaleString('vi-VN')}đ</Text></Text>
+                </View>
+
+                <View style={styles.orderActions}>
+                    {item.status === 3 && ( // Delivered
+                        <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={() => navigation.navigate('WriteReview', { productId: firstItem?.productId, orderId: item.id })}>
+                            <Text style={styles.primaryBtnText}>Đánh Giá</Text>
+                        </TouchableOpacity>
+                    )}
+                    {item.status === 2 && ( // Shipping
+                        <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={() => navigation.navigate('ShipmentTracking', { orderId: item.id })}>
+                            <Text style={styles.primaryBtnText}>Theo dõi Đơn</Text>
+                        </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}>
+                        <Text style={styles.outlineBtnText}>Chi tiết</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
-        </View>
-    );
+        );
+    };
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -99,18 +138,23 @@ export default function MyOrdersScreen({ route, navigation }: any) {
                 />
             </View>
 
-            <FlatList
-                data={filteredOrders}
-                renderItem={renderItem}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.listContent}
-                ListEmptyComponent={() => (
-                    <View style={styles.emptyContainer}>
-                        <Ionicons name="receipt-outline" size={60} color={colors.border} />
-                        <Text style={styles.emptyText}>Chưa có đơn hàng nào</Text>
-                    </View>
-                )}
-            />
+            {isLoading ? <Loading /> : (
+                <FlatList
+                    data={filteredOrders}
+                    renderItem={renderItem}
+                    keyExtractor={item => item.id.toString()}
+                    contentContainerStyle={styles.listContent}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchOrders(); }} colors={[colors.primary]} />
+                    }
+                    ListEmptyComponent={() => (
+                        <View style={styles.emptyContainer}>
+                            <Ionicons name="receipt-outline" size={60} color={colors.border} />
+                            <Text style={styles.emptyText}>Chưa có đơn hàng nào</Text>
+                        </View>
+                    )}
+                />
+            )}
         </View>
     );
 }

@@ -1,39 +1,90 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
+import { useCartStore } from '../../store/useCartStore';
+import apiClient from '../../services/api/apiClient';
+import { useAuth } from '../../context/AuthContext';
+import { Loading } from '../../components/common/Loading';
 
-export default function CheckoutScreen({ navigation }: any) {
+export default function CheckoutScreen({ navigation, route }: any) {
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const { items, totalAmount, clearCart } = useCartStore();
+    
     const [selectedPayment, setSelectedPayment] = useState('cod');
-    const [addressMode, setAddressMode] = useState('default'); // 'default' or 'once'
+    const [addressMode, setAddressMode] = useState('default'); 
+    const [addresses, setAddresses] = useState<any[]>([]);
+    const [selectedAddress, setSelectedAddress] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
-    // MOCK DATA
-    const mockAddress = {
-        name: 'Nguyễn Văn A',
-        phone: '0901234567',
-        address: '123 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh'
-    };
+    useEffect(() => {
+        fetchAddresses();
+    }, []);
 
-    const mockCartItems = [
-        { id: '1', name: 'MacBook Pro M2 2023', price: 32000000, quantity: 1, image: '💻' },
-        { id: '2', name: 'Chuột không dây Logitech Master 3', price: 2500000, quantity: 2, image: '🖱' }
-    ];
+    // Nhận địa chỉ mới nếu quay lại từ màn hình Addresses
+    useEffect(() => {
+        if (route.params?.selectedAddress) {
+            setSelectedAddress(route.params.selectedAddress);
+        }
+    }, [route.params?.selectedAddress]);
 
-    const subTotal = mockCartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-    const shippingFee = 35000;
-    const total = subTotal + shippingFee;
-
-    const handlePlaceOrder = () => {
-        if (Platform.OS === 'web') {
-            window.alert('✅ Đặt hàng thành công! Đơn hàng của bạn đang được xử lý.');
-            navigation.goBack();
-        } else {
-            // Dành cho Mobile
-            navigation.goBack();
+    const fetchAddresses = async () => {
+        try {
+            const data: any = await apiClient.get('/users/addresses');
+            setAddresses(data || []);
+            // Mặc định chọn địa chỉ default
+            const def = data?.find((a: any) => a.isDefault);
+            if (def) setSelectedAddress(def);
+            else if (data?.length > 0) setSelectedAddress(data[0]);
+        } catch (error) {
+            console.log('fetchAddresses error:', error);
+        } finally {
+            setIsLoading(false);
         }
     };
+
+    const shippingFee = 30000;
+    const total = totalAmount + shippingFee;
+
+    const handlePlaceOrder = async () => {
+        if (!selectedAddress) {
+            Alert.alert('Thông báo', 'Vui lòng chọn địa chỉ giao hàng');
+            return;
+        }
+
+        setIsPlacingOrder(true);
+        try {
+            const orderData = {
+                shippingAddressId: selectedAddress.id,
+                paymentMethod: selectedPayment === 'cod' ? 0 : 1, // 0: COD, 1: Card
+                note: `Giao hàng đến ${selectedAddress.fullName}`,
+                items: items.map(item => ({
+                    productId: item.productId,
+                    quantity: item.quantity
+                }))
+            };
+
+            await apiClient.post('/orders', orderData);
+            
+            Alert.alert(
+                'Thành công', 
+                'Đơn hàng của bạn đã được đặt thành công!',
+                [{ text: 'OK', onPress: () => {
+                    clearCart();
+                    navigation.navigate('Main', { screen: 'Shop' }); // Quay về trang chủ
+                }}]
+            );
+        } catch (error: any) {
+            Alert.alert('Lỗi', error.message || 'Không thể đặt hàng. Vui lòng thử lại.');
+        } finally {
+            setIsPlacingOrder(false);
+        }
+    };
+
+    if (isLoading) return <Loading />;
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -49,14 +100,23 @@ export default function CheckoutScreen({ navigation }: any) {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
                 {/* ĐỊA CHỈ NHẬN HÀNG */}
-                <TouchableOpacity style={styles.sectionCard} activeOpacity={0.7} onPress={() => navigation.navigate('Addresses')}>
+                <TouchableOpacity style={styles.sectionCard} activeOpacity={0.7} onPress={() => navigation.navigate('Addresses', { isSelecting: true })}>
                     <View style={styles.sectionHeaderLine}>
                         <Ionicons name="location" size={20} color={colors.primary} />
                         <Text style={styles.sectionTitle}>Địa chỉ nhận hàng</Text>
                     </View>
                     <View style={styles.addressBox}>
-                        <Text style={styles.addressName}>{mockAddress.name} | {mockAddress.phone}</Text>
-                        <Text style={styles.addressText}>{mockAddress.address}</Text>
+                        {selectedAddress ? (
+                            <>
+                                <Text style={styles.addressName}>{selectedAddress.fullName} | {selectedAddress.phone}</Text>
+                                <Text style={styles.addressText}>
+                                    {selectedAddress.street}, {selectedAddress.ward && `${selectedAddress.ward}, `}
+                                    {selectedAddress.district}, {selectedAddress.city}
+                                </Text>
+                            </>
+                        ) : (
+                            <Text style={styles.addressText}>Chưa chọn địa chỉ giao hàng</Text>
+                        )}
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={colors.textMuted} style={styles.chevron} />
                 </TouchableOpacity>
@@ -92,16 +152,20 @@ export default function CheckoutScreen({ navigation }: any) {
 
                 {/* THÔNG TIN SẢN PHẨM */}
                 <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>Sản phẩm ({mockCartItems.length})</Text>
-                    {mockCartItems.map((item, idx) => (
-                        <View key={item.id} style={[styles.productRow, idx < mockCartItems.length - 1 && styles.borderBottom]}>
+                    <Text style={styles.sectionTitle}>Sản phẩm ({items.length})</Text>
+                    {items.map((item, idx) => (
+                        <View key={item.id} style={[styles.productRow, idx < items.length - 1 && styles.borderBottom]}>
                             <View style={styles.productImgPlaceholder}>
-                                <Text style={{ fontSize: 24 }}>{item.image}</Text>
+                                {item.productImage ? (
+                                    <Image source={{ uri: item.productImage }} style={styles.productImg} />
+                                ) : (
+                                    <Ionicons name="cube-outline" size={24} color={colors.textMuted} />
+                                )}
                             </View>
                             <View style={styles.productInfo}>
-                                <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
+                                <Text style={styles.productName} numberOfLines={2}>{item.productName}</Text>
                                 <View style={styles.priceRow}>
-                                    <Text style={styles.productPrice}>{item.price.toLocaleString('vi-VN')}đ</Text>
+                                    <Text style={styles.productPrice}>{item.priceSnapshot.toLocaleString('vi-VN')}đ</Text>
                                     <Text style={styles.productQty}>x{item.quantity}</Text>
                                 </View>
                             </View>
@@ -135,7 +199,7 @@ export default function CheckoutScreen({ navigation }: any) {
                 <View style={styles.sectionCard}>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Tổng tiền hàng</Text>
-                        <Text style={styles.summaryValue}>{subTotal.toLocaleString('vi-VN')}đ</Text>
+                        <Text style={styles.summaryValue}>{totalAmount.toLocaleString('vi-VN')}đ</Text>
                     </View>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Phí vận chuyển</Text>
@@ -155,8 +219,12 @@ export default function CheckoutScreen({ navigation }: any) {
                     <Text style={styles.bottomBarLabel}>Tổng thanh toán</Text>
                     <Text style={styles.bottomBarPrice}>{total.toLocaleString('vi-VN')}đ</Text>
                 </View>
-                <TouchableOpacity style={styles.orderBtn} onPress={handlePlaceOrder}>
-                    <Text style={styles.orderBtnText}>Đặt Hàng</Text>
+                <TouchableOpacity 
+                    style={[styles.orderBtn, isPlacingOrder && { opacity: 0.7 }]} 
+                    onPress={handlePlaceOrder}
+                    disabled={isPlacingOrder}
+                >
+                    <Text style={styles.orderBtnText}>{isPlacingOrder ? 'Đang đặt hàng...' : 'Đặt Hàng'}</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -232,7 +300,8 @@ const styles = StyleSheet.create({
 
     productRow: { flexDirection: 'row', paddingVertical: 12 },
     borderBottom: { borderBottomWidth: 1, borderBottomColor: colors.borderLight },
-    productImgPlaceholder: { width: 60, height: 60, backgroundColor: colors.background, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    productImgPlaceholder: { width: 60, height: 60, backgroundColor: colors.background, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 12, overflow: 'hidden' },
+    productImg: { width: '100%', height: '100%' },
     productInfo: { flex: 1, justifyContent: 'space-between' },
     productName: { fontSize: 14, color: colors.text, fontWeight: '500' },
     priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

@@ -22,6 +22,8 @@ import MyOrdersScreen from '../screens/Profile/MyOrdersScreen';
 import OrderDetailScreen from '../screens/Profile/OrderDetailScreen';
 import ShipmentTrackingScreen from '../screens/Profile/ShipmentTrackingScreen';
 import FavoritesScreen from '../screens/Profile/FavouritesScreen';
+import AccountSettingsScreen from '../screens/Profile/AccountSettingsScreen';
+import EditProfileScreen from '../screens/Profile/EditProfileScreen';
 
 
 // Seller Screens
@@ -54,6 +56,9 @@ import WriteReviewScreen from '../screens/Shop/WriteReviewScreen';
 import NotificationsScreen from '../screens/Shop/NotificationsScreen';
 import ShopScreen from '../screens/Shop/ShopScreen';
 import ShopDetailScreen from '../screens/Shop/ShopDetailScreen';
+import NotificationDetailScreen from '../screens/Shop/NotificationDetailScreen';
+import ChatListScreen from '../screens/Shop/ChatListScreen';
+import ChatDetailScreen from '../screens/Shop/ChatDetailScreen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── Stacks ───
@@ -105,6 +110,8 @@ function ProfileStack() {
       <Stack.Screen name="MyOrders" component={MyOrdersScreen} />
       <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
       <Stack.Screen name="ShipmentTracking" component={ShipmentTrackingScreen} />
+      <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
     </Stack.Navigator>
   );
 }
@@ -153,13 +160,13 @@ function MainTabs() {
 
 // ─── Root Navigator ───
 export default function AppNavigator() {
-  const { isLoggedIn, isLoading } = useAuth();
+  const { isLoggedIn, isGuestMode, isLoading } = useAuth();
 
   if (isLoading) return <Loading message="Đang khởi tạo..." />;
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {isLoggedIn ? (
+      {isLoggedIn || isGuestMode ? (
         <>
           <Stack.Screen name="MainTabs" component={MainTabs} />
           {/* Shared screens — bottom tabs will be hidden when navigating here */}
@@ -171,8 +178,11 @@ export default function AppNavigator() {
           <Stack.Screen name="Addresses" component={AddressesScreen} />
           <Stack.Screen name="WriteReview" component={WriteReviewScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
           <Stack.Screen name="ShopView" component={ShopScreen} />
           <Stack.Screen name="ShopDetail" component={ShopDetailScreen} />
+          <Stack.Screen name="ChatList" component={ChatListScreen} />
+          <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
         </>
       ) : (
         <Stack.Screen name="Auth" component={AuthStack} />
