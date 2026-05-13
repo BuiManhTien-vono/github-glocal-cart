@@ -1,39 +1,452 @@
 [
   {
-    "Name": "Điện thoại iPhone 15 Pro",
-    "Description": "Siêu phẩm Apple với chip A17 Pro mạnh mẽ.",
-    "Price": 28990000,
-    "OldPrice": 32990000,
-    "AvailableItemCount": 50,
-    "ImageUrl": "C:/Users/NPThanh/Downloads/github-glocal-cart-main/github-glocal-cart-main/glocal-web-app/src/data/products/pexels-avinash-kumar-299518778-16004744.jpg",
-    "DetailImages": [
-      "Global_Cart/GlocalCart (1).API/wwwroot/images/products/iphone15pro-detail-1.jpg",
-      "Global_Cart/GlocalCart (1).API/wwwroot/images/products/iphone15pro-detail-2.jpg",
-      "Global_Cart/GlocalCart (1).API/wwwroot/images/products/iphone15pro-detail-3.jpg"
-    ],
-    "CategoryId": 6
+    "Name": "Serum dưỡng da cao cấp Whoo",
+    "Description": "Tinh chất phục hồi và trẻ hóa làn da.",
+    "Price": 1550000,
+    "OldPrice": 1800000,
+    "AvailableItemCount": 200,
+    "ImageUrl": "http://localhost:3001/images/products/Dau-tay-trang-Whoo-Gongjinhyang-Cleansing-Oil.-My-pham-whoo2.webp",
+    "DetailImages": [],
+    "CategoryId": 1
   },
   {
-    "Name": "Laptop MacBook Air M2",
-    "Description": "Thiết kế mỏng nhẹ, pin cực trâu.",
-    "Price": 26500000,
-    "OldPrice": 29990000,
-    "AvailableItemCount": 30,
-    "ImageUrl": "Global_Cart/GlocalCart (1).API/wwwroot/images/products/pexels-karola-g-6958782.jpg",
-    "DetailImages": [
-      "Global_Cart/GlocalCart (1).API/wwwroot/images/products/macbookairm2-detail-1.jpg",
-      "Global_Cart/GlocalCart (1).API/wwwroot/images/products/macbookairm2-detail-2.jpg"
-    ],
-    "CategoryId": 6
-  },
-  {
-    "Name": "Giày thể thao Sneaker",
-    "Description": "Phong cách năng động, êm ái.",
+    "Name": "Air Jordan 1",
+    "Description": "Bước chạy êm ái, phong cách thể thao.",
     "Price": 1250000,
     "OldPrice": 1500000,
-    "AvailableItemCount": 100,
-    "ImageUrl": "Global_Cart/GlocalCart (1).API/wwwroot/images/products/pexels-alexander-mass-748453803-30005365.jpg",
+    "AvailableItemCount": 150,
+    "ImageUrl": "http://localhost:3001/images/products/air-jordan-1-mid-linen-rdrop.webp",
+    "DetailImages": [],
+    "CategoryId": 2
+  },
+  {
+    "Name": "Iphone 17 ProMax",
+    "Description": "Siêu phẩm Apple với chip mạnh mẽ.",
+    "Price": 34990000,
+    "OldPrice": 38990000,
+    "AvailableItemCount": 50,
+    "ImageUrl": "http://localhost:3001/images/products/iphone-17-pro-max.jpg",
+    "DetailImages": [],
+    "CategoryId": 6
+  },
+  {
+    "Name": "Giày Sneaker phản quang",
+    "Description": "Giày thể thao cực chất, phong cách đường phố.",
+    "Price": 2500000,
+    "OldPrice": 3000000,
+    "AvailableItemCount": 43,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-aaron-gonzalez-vega-226641073-13080356.jpg",
+    "DetailImages": [],
+    "CategoryId": 2
+  },
+  {
+    "Name": "Lò vi sóng hiện đại",
+    "Description": "Thiết bị nhà bếp tiện ích, đa chức năng.",
+    "Price": 600000,
+    "OldPrice": 720000,
+    "AvailableItemCount": 92,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-aj-ahamad-767001191-29149068.jpg",
+    "DetailImages": [],
+    "CategoryId": 12
+  },
+  {
+    "Name": "Bông tai đính đá sang trọng",
+    "Description": "Trang sức cao cấp, thiết kế tinh xảo.",
+    "Price": 2500000,
+    "OldPrice": 3000000,
+    "AvailableItemCount": 11,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-alejandro-aznar-155337093-16055241.jpg",
+    "DetailImages": [],
+    "CategoryId": 10
+  },
+  {
+    "Name": "Giày thể thao cá tính",
+    "Description": "Êm ái, siêu nhẹ, phong cách thời thượng.",
+    "Price": 1300000,
+    "OldPrice": 1560000,
+    "AvailableItemCount": 64,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-alexander-mass-748453803-30005365.jpg",
+    "DetailImages": [],
+    "CategoryId": 2
+  },
+  {
+    "Name": "Giày thể thao cá tính",
+    "Description": "Êm ái, siêu nhẹ, phong cách thời thượng.",
+    "Price": 800000,
+    "OldPrice": 960000,
+    "AvailableItemCount": 93,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-alexander-mass-748453803-35865087.jpg",
+    "DetailImages": [],
+    "CategoryId": 2
+  },
+  {
+    "Name": "Serum dưỡng da chuyên sâu",
+    "Description": "Mỹ phẩm chăm sóc da mặt ban đêm.",
+    "Price": 2750000,
+    "OldPrice": 3300000,
+    "AvailableItemCount": 49,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-alexander-sergienko-3350339-25466528.jpg",
+    "DetailImages": [],
+    "CategoryId": 1
+  },
+  {
+    "Name": "Đồ decor nhà gỗ tự nhiên",
+    "Description": "Trang trí không gian sống thêm ấm cúng.",
+    "Price": 2650000,
+    "OldPrice": 3180000,
+    "AvailableItemCount": 105,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-allen-1855741474-29288786.jpg",
+    "DetailImages": [],
+    "CategoryId": 13
+  },
+  {
+    "Name": "Tinh chất phục hồi da",
+    "Description": "Mỹ phẩm cao cấp giúp trẻ hóa làn da.",
+    "Price": 1750000,
+    "OldPrice": 2100000,
+    "AvailableItemCount": 97,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-anfel-lanane-2356529-29675494.jpg",
+    "DetailImages": [],
+    "CategoryId": 1
+  },
+  {
+    "Name": "Nước hoa nam tính",
+    "Description": "Hương thơm quyến rũ, lưu hương lâu.",
+    "Price": 2650000,
+    "OldPrice": 3180000,
+    "AvailableItemCount": 24,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-artempodrez-7648385.jpg",
+    "DetailImages": [],
+    "CategoryId": 1
+  },
+  {
+    "Name": "Phụ kiện thời trang",
+    "Description": "Điểm nhấn cho bộ trang phục của bạn.",
+    "Price": 650000,
+    "OldPrice": 780000,
+    "AvailableItemCount": 90,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-automnenoble-8034081.jpg",
     "DetailImages": [],
     "CategoryId": 9
+  },
+  {
+    "Name": "Điện thoại thông minh",
+    "Description": "Thiết kế mỏng nhẹ, cấu hình mạnh mẽ.",
+    "Price": 350000,
+    "OldPrice": 420000,
+    "AvailableItemCount": 76,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-avinash-kumar-299518778-16004744.jpg",
+    "DetailImages": [],
+    "CategoryId": 6
+  },
+  {
+    "Name": "Quần áo thời trang nam",
+    "Description": "Phong cách thanh lịch và hiện đại.",
+    "Price": 1900000,
+    "OldPrice": 2280000,
+    "AvailableItemCount": 67,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-caleboquendo-7772548.jpg",
+    "DetailImages": [],
+    "CategoryId": 9
+  },
+  {
+    "Name": "Vòng cổ tinh tế",
+    "Description": "Phụ kiện trang sức lấp lánh.",
+    "Price": 650000,
+    "OldPrice": 780000,
+    "AvailableItemCount": 80,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-carmel-nsenga-735492-15606118.jpg",
+    "DetailImages": [],
+    "CategoryId": 10
+  },
+  {
+    "Name": "Áo khoác mùa đông",
+    "Description": "Giữ ấm cơ thể, chất liệu cao cấp.",
+    "Price": 650000,
+    "OldPrice": 780000,
+    "AvailableItemCount": 31,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-cottonbro-4107302.jpg",
+    "DetailImages": [],
+    "CategoryId": 9
+  },
+  {
+    "Name": "Áo khoác mùa đông",
+    "Description": "Giữ ấm cơ thể, chất liệu cao cấp.",
+    "Price": 650000,
+    "OldPrice": 780000,
+    "AvailableItemCount": 50,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-cottonbro-7201555.jpg",
+    "DetailImages": [],
+    "CategoryId": 9
+  },
+  {
+    "Name": "Áo khoác mùa đông",
+    "Description": "Giữ ấm cơ thể, chất liệu cao cấp.",
+    "Price": 1450000,
+    "OldPrice": 1740000,
+    "AvailableItemCount": 88,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-cottonbro-7408620.jpg",
+    "DetailImages": [],
+    "CategoryId": 9
+  },
+  {
+    "Name": "Bộ trang điểm chuyên nghiệp",
+    "Description": "Sản phẩm không thể thiếu cho phái đẹp.",
+    "Price": 2650000,
+    "OldPrice": 3180000,
+    "AvailableItemCount": 104,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-dagmara-dombrovska-22732579-10778101.jpg",
+    "DetailImages": [],
+    "CategoryId": 1
+  },
+  {
+    "Name": "Dụng cụ nhà bếp tiện lợi",
+    "Description": "Trợ thủ đắc lực cho người nội trợ.",
+    "Price": 500000,
+    "OldPrice": 600000,
+    "AvailableItemCount": 78,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-dee-doo-91072-6486987.jpg",
+    "DetailImages": [],
+    "CategoryId": 12
+  },
+  {
+    "Name": "Tai nghe không dây",
+    "Description": "Âm thanh sống động, chống ồn tốt.",
+    "Price": 1800000,
+    "OldPrice": 2160000,
+    "AvailableItemCount": 40,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-dmitriy-steinke-559643503-20458071.jpg",
+    "DetailImages": [],
+    "CategoryId": 8
+  },
+  {
+    "Name": "Túi xách thời trang nữ",
+    "Description": "Thiết kế sang trọng, da thật 100%.",
+    "Price": 700000,
+    "OldPrice": 840000,
+    "AvailableItemCount": 85,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-elina-nova-325930528-14458078.jpg",
+    "DetailImages": [],
+    "CategoryId": 9
+  },
+  {
+    "Name": "Đèn decor hiện đại",
+    "Description": "Nội thất giúp thắp sáng không gian.",
+    "Price": 1000000,
+    "OldPrice": 1200000,
+    "AvailableItemCount": 29,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-harper-sunday-3321416.jpg",
+    "DetailImages": [],
+    "CategoryId": 13
+  },
+  {
+    "Name": "Nội thất bếp đẳng cấp",
+    "Description": "Thiết bị nhà bếp sang trọng.",
+    "Price": 650000,
+    "OldPrice": 780000,
+    "AvailableItemCount": 104,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-hson-27854765.jpg",
+    "DetailImages": [],
+    "CategoryId": 13
+  },
+  {
+    "Name": "Nội thất bếp đẳng cấp",
+    "Description": "Thiết bị nhà bếp sang trọng.",
+    "Price": 1450000,
+    "OldPrice": 1740000,
+    "AvailableItemCount": 38,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-hson-34558051.jpg",
+    "DetailImages": [],
+    "CategoryId": 13
+  },
+  {
+    "Name": "Nhẫn kim cương nhân tạo",
+    "Description": "Trang sức lấp lánh, quý phái.",
+    "Price": 2500000,
+    "OldPrice": 3000000,
+    "AvailableItemCount": 61,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-igchandankumar-16442035.jpg",
+    "DetailImages": [],
+    "CategoryId": 10
+  },
+  {
+    "Name": "Đồng hồ thông minh Smartwatch",
+    "Description": "Theo dõi sức khỏe, thông báo cuộc gọi.",
+    "Price": 2650000,
+    "OldPrice": 3180000,
+    "AvailableItemCount": 84,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-japy-34624327.jpg",
+    "DetailImages": [],
+    "CategoryId": 6
+  },
+  {
+    "Name": "Loa Bluetooth mini",
+    "Description": "Âm bass mạnh mẽ, thiết kế nhỏ gọn.",
+    "Price": 950000,
+    "OldPrice": 1140000,
+    "AvailableItemCount": 55,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-jose-franco-2157655172-35029669.jpg",
+    "DetailImages": [],
+    "CategoryId": 8
+  },
+  {
+    "Name": "Laptop doanh nhân",
+    "Description": "Cấu hình mạnh mẽ, thiết kế siêu mỏng.",
+    "Price": 2600000,
+    "OldPrice": 3120000,
+    "AvailableItemCount": 46,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-karola-g-4735904.jpg",
+    "DetailImages": [],
+    "CategoryId": 6
+  },
+  {
+    "Name": "Laptop doanh nhân",
+    "Description": "Cấu hình mạnh mẽ, thiết kế siêu mỏng.",
+    "Price": 1350000,
+    "OldPrice": 1620000,
+    "AvailableItemCount": 62,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-karola-g-4735932.jpg",
+    "DetailImages": [],
+    "CategoryId": 6
+  },
+  {
+    "Name": "Laptop doanh nhân",
+    "Description": "Cấu hình mạnh mẽ, thiết kế siêu mỏng.",
+    "Price": 2200000,
+    "OldPrice": 2640000,
+    "AvailableItemCount": 85,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-karola-g-6958782.jpg",
+    "DetailImages": [],
+    "CategoryId": 6
+  },
+  {
+    "Name": "Bộ dầu gội phục hồi",
+    "Description": "Mỹ phẩm chăm sóc tóc hư tổn.",
+    "Price": 1450000,
+    "OldPrice": 1740000,
+    "AvailableItemCount": 94,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-luchik-14920158.jpg",
+    "DetailImages": [],
+    "CategoryId": 1
+  },
+  {
+    "Name": "Máy xay sinh tố đa năng",
+    "Description": "Thiết bị gia dụng không thể thiếu.",
+    "Price": 2350000,
+    "OldPrice": 2820000,
+    "AvailableItemCount": 52,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-mart-production-9558265.jpg",
+    "DetailImages": [],
+    "CategoryId": 12
+  },
+  {
+    "Name": "Áo sơ mi công sở",
+    "Description": "Thanh lịch, chất liệu thoáng mát.",
+    "Price": 500000,
+    "OldPrice": 600000,
+    "AvailableItemCount": 81,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-mikhail-nilov-7814990.jpg",
+    "DetailImages": [],
+    "CategoryId": 9
+  },
+  {
+    "Name": "Phụ kiện máy tính",
+    "Description": "Bàn phím cơ chống ồn, độ nhạy cao.",
+    "Price": 2050000,
+    "OldPrice": 2460000,
+    "AvailableItemCount": 65,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-mohammadabbasi-30946798.jpg",
+    "DetailImages": [],
+    "CategoryId": 6
+  },
+  {
+    "Name": "Nồi chiên không dầu",
+    "Description": "Bảo vệ sức khỏe gia đình bạn.",
+    "Price": 900000,
+    "OldPrice": 1080000,
+    "AvailableItemCount": 50,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-pavel-danilyuk-6996330.jpg",
+    "DetailImages": [],
+    "CategoryId": 12
+  },
+  {
+    "Name": "Áo thun phong cách",
+    "Description": "Trẻ trung, năng động, thấm hút mồ hôi.",
+    "Price": 1250000,
+    "OldPrice": 1500000,
+    "AvailableItemCount": 62,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-perez-osibajo-159590324-14698940.jpg",
+    "DetailImages": [],
+    "CategoryId": 9
+  },
+  {
+    "Name": "Giày chạy bộ chuyên dụng",
+    "Description": "Đế đệm khí, êm ái khi vận động.",
+    "Price": 700000,
+    "OldPrice": 840000,
+    "AvailableItemCount": 23,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-phat-vo-h-t-n-2151757041-32414338.jpg",
+    "DetailImages": [],
+    "CategoryId": 2
+  },
+  {
+    "Name": "Kem dưỡng da ban ngày",
+    "Description": "Cấp ẩm sâu, chống nắng hiệu quả.",
+    "Price": 550000,
+    "OldPrice": 660000,
+    "AvailableItemCount": 78,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-polina-tankilevitch-5385762.jpg",
+    "DetailImages": [],
+    "CategoryId": 1
+  },
+  {
+    "Name": "Decor nhà hiện đại",
+    "Description": "Vật dụng trang trí phòng khách.",
+    "Price": 1350000,
+    "OldPrice": 1620000,
+    "AvailableItemCount": 64,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-regeci-10506575.jpg",
+    "DetailImages": [],
+    "CategoryId": 13
+  },
+  {
+    "Name": "Máy ảnh kỹ thuật số",
+    "Description": "Bắt trọn mọi khoảnh khắc.",
+    "Price": 1550000,
+    "OldPrice": 1860000,
+    "AvailableItemCount": 66,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-reynaldoyodia-15776498.jpg",
+    "DetailImages": [],
+    "CategoryId": 8
+  },
+  {
+    "Name": "Tai nghe chụp tai",
+    "Description": "Âm thanh Hi-Fi, đệm tai siêu êm.",
+    "Price": 2150000,
+    "OldPrice": 2580000,
+    "AvailableItemCount": 14,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-sound-on-3394650.jpg",
+    "DetailImages": [],
+    "CategoryId": 8
+  },
+  {
+    "Name": "Váy nữ dự tiệc",
+    "Description": "Sang trọng, quyến rũ, tôn dáng.",
+    "Price": 1400000,
+    "OldPrice": 1680000,
+    "AvailableItemCount": 39,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-tanya-varshney-3176654-5997006.jpg",
+    "DetailImages": [],
+    "CategoryId": 9
+  },
+  {
+    "Name": "Bình hoa nghệ thuật",
+    "Description": "Đồ decor nhà hiện đại.",
+    "Price": 1750000,
+    "OldPrice": 2100000,
+    "AvailableItemCount": 60,
+    "ImageUrl": "http://localhost:3001/images/products/pexels-vuong-tran-499453382-17714764.jpg",
+    "DetailImages": [],
+    "CategoryId": 13
   }
 ]
