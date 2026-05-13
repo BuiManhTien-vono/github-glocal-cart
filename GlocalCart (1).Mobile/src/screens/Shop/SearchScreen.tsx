@@ -3,12 +3,11 @@ import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Activity
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSearchHistory, addSearchHistory, clearSearchHistory } from '../../services/db/database';
 import apiClient from '../../services/api/apiClient';
 import { ProductCard } from '../../components/shop/ProductCard';
 import { colors } from '../../theme/colors';
 
-const SEARCH_HISTORY_KEY = '@search_history';
 const HOT_SEARCHES = ['iPhone 15', 'Giày thể thao', 'Áo thun nam', 'Tai nghe bluetooth', 'Váy nữ', 'Sạc dự phòng'];
 
 export default function SearchScreen() {
@@ -27,8 +26,8 @@ export default function SearchScreen() {
 
   const loadHistory = async () => {
     try {
-      const saved = await AsyncStorage.getItem(SEARCH_HISTORY_KEY);
-      if (saved) setHistory(JSON.parse(saved));
+      const saved = await getSearchHistory();
+      setHistory(saved);
     } catch (e) { }
   };
 
@@ -38,13 +37,13 @@ export default function SearchScreen() {
     const newHistory = [cleanQuery, ...history.filter(h => h !== cleanQuery)].slice(0, 10);
     setHistory(newHistory);
     try {
-      await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(newHistory));
+      await addSearchHistory(cleanQuery);
     } catch (e) { }
   };
 
   const clearHistory = async () => {
     setHistory([]);
-    await AsyncStorage.removeItem(SEARCH_HISTORY_KEY);
+    await clearSearchHistory();
   };
 
   const fetchResults = async (query: string) => {

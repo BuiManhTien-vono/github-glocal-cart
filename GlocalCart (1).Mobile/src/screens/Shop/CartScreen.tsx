@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +8,7 @@ import { useCartStore } from '../../store/useCartStore';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../services/api/apiClient';
 import { colors } from '../../theme/colors';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
 
 export default function CartScreen() {
   const navigation = useNavigation<any>();
@@ -100,7 +102,7 @@ export default function CartScreen() {
         renderItem={({ item }) => (
           <View style={styles.cartItem}>
             <Image
-              source={{ uri: item.productImage || 'https://via.placeholder.com/100' }}
+              source={{ uri: resolveProductImageUrl(item.productImage) || 'https://via.placeholder.com/100' }}
               style={styles.itemImage}
             />
             <View style={styles.itemDetails}>

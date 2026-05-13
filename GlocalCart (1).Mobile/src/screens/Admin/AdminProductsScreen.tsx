@@ -1,10 +1,12 @@
+import { Image } from 'expo-image';
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../../components/common/Header';
 import { Loading } from '../../components/common/Loading';
 import apiClient from '../../services/api/apiClient';
 import { colors, spacing, fontSize, borderRadius, shadow } from '../../theme/colors';
+import { resolveProductImage } from '../../utils/imageUtils';
 
 export default function AdminProductsScreen({ navigation }: any) {
   const [products, setProducts] = useState<any[]>([]);
@@ -80,7 +82,7 @@ export default function AdminProductsScreen({ navigation }: any) {
             {/* Product image placeholder */}
             <View style={s.productImg}>
               {item.images && item.images.length > 0 ? (
-                <Image source={{uri:item.images[0].imageUrl}} style={s.productImgInner} resizeMode="cover"/>
+                <Image source={{uri: resolveProductImage(item) || 'https://via.placeholder.com/100'}} style={s.productImgInner} resizeMode="cover"/>
               ) : (
                 <Ionicons name="image-outline" size={28} color={colors.textMuted}/>
               )}

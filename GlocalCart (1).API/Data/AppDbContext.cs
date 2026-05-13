@@ -127,6 +127,10 @@ namespace GlocalCart.API.Data
                     .WithMany(p => p.Images)
                     .HasForeignKey(pi => pi.ProductId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                // Cấu hình cột ImageData lưu binary lớn
+                entity.Property(pi => pi.ImageData)
+                    .HasColumnType("varbinary(max)");
             });
 
             // ========================

@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';

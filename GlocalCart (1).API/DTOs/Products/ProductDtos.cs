@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 
 namespace GlocalCart.API.DTOs.Products
 {
@@ -25,6 +26,7 @@ namespace GlocalCart.API.DTOs.Products
     {
         public int Id { get; set; }
         public string ImageUrl { get; set; } = string.Empty;
+        public bool HasImageData { get; set; }
         public int DisplayOrder { get; set; }
         public bool IsMain { get; set; }
     }
@@ -50,6 +52,33 @@ namespace GlocalCart.API.DTOs.Products
         public string? MediaUrl { get; set; }
 
         public List<string>? ImageUrls { get; set; }
+    }
+
+    /// <summary>
+    /// DTO nhận multipart form: thông tin sản phẩm + file ảnh upload
+    /// Seller gửi form-data gồm text fields + file ảnh, server sẽ nén sang WebP rồi lưu vào DB
+    /// </summary>
+    public class CreateProductWithImagesDto
+    {
+        [Required, MaxLength(300)]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(2000)]
+        public string? Description { get; set; }
+
+        [Required, Range(0.01, double.MaxValue)]
+        public decimal Price { get; set; }
+
+        [Required, Range(0, int.MaxValue)]
+        public int AvailableItemCount { get; set; }
+
+        [Required]
+        public int CategoryId { get; set; }
+
+        /// <summary>
+        /// Danh sách file ảnh upload (JPEG, PNG, WebP) – sẽ nén sang WebP trước khi lưu
+        /// </summary>
+        public List<IFormFile>? Images { get; set; }
     }
 
     public class UpdateProductDto
@@ -109,3 +138,4 @@ namespace GlocalCart.API.DTOs.Products
         public int? ParentCategoryId { get; set; }
     }
 }
+

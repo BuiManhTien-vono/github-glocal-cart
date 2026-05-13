@@ -1,11 +1,13 @@
+import { Image } from 'expo-image';
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../theme/colors';
+import { resolveProductImage } from '../../utils/imageUtils';
 
 export const ProductCard = ({ item, customWidth }: { item: any, customWidth?: any }) => {
   const navigation = useNavigation<any>();
-  const mainImage = item.images && item.images.length > 0 ? item.images[0].imageUrl : 'https://via.placeholder.com/200';
+  const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/200';
   const soldCount = Math.floor(Math.random() * 2000) + 10; // mock sold
 
   return (

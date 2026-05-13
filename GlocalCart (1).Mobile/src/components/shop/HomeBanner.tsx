@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import React, { useState } from 'react';
-import { View, ScrollView, Image, StyleSheet, Dimensions } from 'react-native';
+import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
 
 const dummyBanners = [
   'https://cf.shopee.vn/file/vn-11134258-7r98o-lstywnjrybhk03', // Mock Shopee links

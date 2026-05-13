@@ -4,6 +4,9 @@ using GlocalCart.API.DTOs.Products;
 using GlocalCart.API.Helpers;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Webp;
+using SixLabors.ImageSharp.Processing;
 
 namespace GlocalCart.API.Services.Implementations
 {
@@ -21,7 +24,7 @@ namespace GlocalCart.API.Services.Implementations
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search.Name))
-                query = query.Where(p => p.Name.Contains(search.Name));
+                query = query.Where(p => p.Name.ToLower().Contains(search.Name.ToLower()));
             if (search.CategoryId.HasValue)
             {
                 // Lấy ID của category hiện tại và toàn bộ category con của nó
@@ -96,6 +99,87 @@ namespace GlocalCart.API.Services.Implementations
             return await GetProductByIdAsync(product.Id);
         }
 
+        /// <summary>
+        /// Tạo sản phẩm mới từ multipart form (thông tin + file ảnh).
+        /// Nén ảnh sang WebP rồi lưu binary vào DB.
+        /// </summary>
+        public async Task<ProductResponseDto> CreateProductWithImagesAsync(int sellerId, CreateProductWithImagesDto dto)
+        {
+            var category = await _db.Categories.FindAsync(dto.CategoryId)
+                ?? throw new KeyNotFoundException("Danh mục không tồn tại.");
+
+            var product = new Product
+            {
+                SellerId = sellerId,
+                CategoryId = dto.CategoryId,
+                Name = dto.Name,
+                Description = dto.Description,
+                Price = dto.Price,
+                AvailableItemCount = dto.AvailableItemCount,
+                IsActive = true
+            };
+
+            _db.Products.Add(product);
+            await _db.SaveChangesAsync();
+
+            // Nén và lưu từng ảnh vào DB
+            if (dto.Images?.Any() == true)
+            {
+                for (int i = 0; i < dto.Images.Count; i++)
+                {
+                    var file = dto.Images[i];
+                    if (file.Length == 0) continue;
+
+                    var webpData = await CompressToWebpAsync(file);
+
+                    var productImage = new ProductImage
+                    {
+                        ProductId = product.Id,
+                        ImageData = webpData,
+                        ContentType = "image/webp",
+                        ImageUrl = string.Empty, // Sẽ cập nhật sau khi có Id
+                        DisplayOrder = i,
+                        IsMain = i == 0
+                    };
+
+                    _db.ProductImages.Add(productImage);
+                    await _db.SaveChangesAsync();
+
+                    // Cập nhật ImageUrl trỏ đến endpoint serve ảnh từ DB
+                    productImage.ImageUrl = $"/api/products/images/{productImage.Id}/data";
+                    await _db.SaveChangesAsync();
+                }
+
+                // Cập nhật MediaUrl = ảnh chính (ảnh đầu tiên)
+                var mainImage = await _db.ProductImages
+                    .Where(pi => pi.ProductId == product.Id && pi.IsMain)
+                    .FirstOrDefaultAsync();
+                if (mainImage != null)
+                {
+                    product.MediaUrl = mainImage.ImageUrl;
+                    await _db.SaveChangesAsync();
+                }
+            }
+
+            return await GetProductByIdAsync(product.Id);
+        }
+
+        /// <summary>
+        /// Lấy binary ảnh từ DB theo imageId
+        /// </summary>
+        public async Task<(byte[] Data, string ContentType)?> GetProductImageDataAsync(int imageId)
+        {
+            var image = await _db.ProductImages
+                .Where(pi => pi.Id == imageId && pi.ImageData != null)
+                .Select(pi => new { pi.ImageData, pi.ContentType })
+                .FirstOrDefaultAsync();
+
+            if (image?.ImageData == null)
+                return null;
+
+            return (image.ImageData, image.ContentType ?? "image/webp");
+        }
+
         public async Task<ProductResponseDto> UpdateProductAsync(int sellerId, int productId, UpdateProductDto dto)
         {
             var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId && p.SellerId == sellerId)
@@ -144,6 +228,35 @@ namespace GlocalCart.API.Services.Implementations
             return await query.ToPagedResultAsync(page, pageSize);
         }
 
+        // ============================================================
+        // Private Helpers
+        // ============================================================
+
+        /// <summary>
+        /// Nén ảnh sang WebP, resize nếu quá lớn (max 1200px width)
+        /// </summary>
+        private static async Task<byte[]> CompressToWebpAsync(IFormFile file)
+        {
+            using var inputStream = file.OpenReadStream();
+            using var image = await Image.LoadAsync(inputStream);
+
+            // Resize nếu ảnh quá rộng
+            if (image.Width > 1200)
+            {
+                var newHeight = (int)((double)1200 / image.Width * image.Height);
+                image.Mutate(x => x.Resize(1200, newHeight));
+            }
+
+            var encoder = new WebpEncoder
+            {
+                Quality = 80 // Chất lượng nén 0-100
+            };
+
+            using var outputStream = new MemoryStream();
+            await image.SaveAsWebpAsync(outputStream, encoder);
+            return outputStream.ToArray();
+        }
+
         private static ProductResponseDto MapToDto(Product p) => new()
         {
             Id = p.Id, SellerId = p.SellerId, SellerName = p.Seller.FullName,
@@ -153,7 +266,8 @@ namespace GlocalCart.API.Services.Implementations
             MediaUrl = p.MediaUrl, CreatedAt = p.CreatedAt,
             Images = p.Images.OrderBy(i => i.DisplayOrder).Select(i => new ProductImageDto
             {
-                Id = i.Id, ImageUrl = i.ImageUrl, DisplayOrder = i.DisplayOrder, IsMain = i.IsMain
+                Id = i.Id, ImageUrl = i.ImageUrl, DisplayOrder = i.DisplayOrder,
+                IsMain = i.IsMain, HasImageData = i.ImageData != null
             }).ToList(),
             AverageRating = p.Reviews.Any() ? p.Reviews.Average(r => r.Rating) : 0,
             ReviewCount = p.Reviews.Count
@@ -192,3 +306,4 @@ namespace GlocalCart.API.Services.Implementations
         };
     }
 }
+

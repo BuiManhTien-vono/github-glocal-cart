@@ -1,16 +1,26 @@
 import React from 'react';
-import { View, Text, ScrollView, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../theme/colors';
+import { FontAwesome5 } from '@expo/vector-icons';
 
 export const HomeCategories = ({ data }: { data: any[] }) => {
   const navigation = useNavigation<any>();
 
   if (!data || data.length === 0) return null;
 
-  // A generic fallback icon if category has no image. In real app, category might have an iconUrl.
-  const getCategoryIcon = (id: number) => {
-    return 'https://via.placeholder.com/100x100.png?text=CAT';
+  const getCategoryIcon = (name: string): string => {
+    const n = name.toLowerCase();
+    if (n.includes('điện tử') || n.includes('máy tính') || n.includes('công nghệ') || n.includes('desktop')) return 'desktop'; // fa-display equivalent
+    if (n.includes('điện thoại') || n.includes('phụ kiện')) return 'mobile-alt';
+    if (n.includes('thời trang') || n.includes('quần áo')) return 'tshirt';
+    if (n.includes('gia dụng') || n.includes('nhà cửa')) return 'blender';
+    if (n.includes('sách') || n.includes('văn phòng')) return 'book';
+    if (n.includes('mỹ phẩm') || n.includes('làm đẹp')) return 'spa';
+    if (n.includes('mẹ & bé') || n.includes('đồ chơi')) return 'baby-carriage';
+    if (n.includes('thể thao') || n.includes('dã ngoại')) return 'basketball-ball';
+    if (n.includes('thực phẩm') || n.includes('đồ uống')) return 'hamburger';
+    return 'box'; // fallback icon
   };
 
   return (
@@ -27,7 +37,7 @@ export const HomeCategories = ({ data }: { data: any[] }) => {
             onPress={() => navigation.navigate('Category', { categoryId: item.id, categoryName: item.name })}
           >
             <View style={styles.imageBox}>
-              <Image source={{ uri: getCategoryIcon(item.id) }} style={styles.image} />
+              <FontAwesome5 name={getCategoryIcon(item.name)} size={28} color={colors.primary} />
             </View>
             <Text style={styles.itemText} numberOfLines={2}>
               {item.name}
@@ -79,11 +89,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
-  },
-  image: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
   },
   itemText: {
     fontSize: 12,

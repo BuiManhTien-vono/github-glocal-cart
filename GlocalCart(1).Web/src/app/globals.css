@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-border: var(--border);
+  --color-bg-main: var(--bg-main);
+  
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --muted-foreground: #64748b;
+  --card: #ffffff;
+  
+  --primary: #FF5722;
+  --primary-soft: #FFF3F0;
+  --success: #10b981;
+  --danger: #ef4444;
+  --border: #e2e8f0;
+  --bg-main: #F8FAFC;
+  
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #F8FAFC;
+  --muted-foreground: #94a3b8;
+  --card: rgba(255, 255, 255, 0.05);
+  
+  --primary: #FF5722;
+  --primary-soft: rgba(255, 87, 34, 0.1);
+  --success: #10b981;
+  --danger: #ef4444;
+  --border: rgba(255, 255, 255, 0.1);
+  --bg-main: #020617;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/70 dark:bg-black/40 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-2xl;
+  }
+  
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  @keyframes bounce-short {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+
+  .animate-bounce-short {
+    animation: bounce-short 1s ease-in-out infinite;
+  }
+}

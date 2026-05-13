@@ -1,7 +1,8 @@
+import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { Loading } from '../../components/common/Loading';
@@ -20,6 +21,21 @@ export default function CategoryScreen({ route, navigation }: any) {
   const [categories, setCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const getCategoryIcon = (name: string): string => {
+    if (!name) return 'box';
+    const n = name.toLowerCase();
+    if (n.includes('điện tử') || n.includes('máy tính') || n.includes('công nghệ') || n.includes('desktop')) return 'desktop';
+    if (n.includes('điện thoại') || n.includes('phụ kiện')) return 'mobile-alt';
+    if (n.includes('thời trang') || n.includes('quần áo')) return 'tshirt';
+    if (n.includes('gia dụng') || n.includes('nhà cửa')) return 'blender';
+    if (n.includes('sách') || n.includes('văn phòng')) return 'book';
+    if (n.includes('mỹ phẩm') || n.includes('làm đẹp')) return 'spa';
+    if (n.includes('mẹ & bé') || n.includes('đồ chơi')) return 'baby-carriage';
+    if (n.includes('thể thao') || n.includes('dã ngoại')) return 'basketball-ball';
+    if (n.includes('thực phẩm') || n.includes('đồ uống')) return 'hamburger';
+    return 'box';
+  };
 
   const fetchData = async () => {
     try {
@@ -83,11 +99,7 @@ export default function CategoryScreen({ route, navigation }: any) {
                   onPress={() => navigation.setParams({ categoryId: c.id, categoryName: c.name })}
                 >
                   <View style={[styles.catIconWrap, categoryId === c.id && styles.catIconActive]}>
-                    {c.imageUrl ? (
-                      <Image source={{ uri: c.imageUrl }} style={styles.catImage} />
-                    ) : (
-                      <Ionicons name="grid-outline" size={24} color={categoryId === c.id ? colors.primary : colors.textSecondary} />
-                    )}
+                    <FontAwesome5 name={getCategoryIcon(c.name)} size={20} color={categoryId === c.id ? colors.primary : colors.textSecondary} />
                   </View>
                   <Text style={[styles.catName, categoryId === c.id && styles.catNameActive]} numberOfLines={2}>{c.name}</Text>
                 </TouchableOpacity>

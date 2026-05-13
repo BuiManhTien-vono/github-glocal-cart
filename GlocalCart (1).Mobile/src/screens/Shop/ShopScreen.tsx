@@ -1,14 +1,13 @@
+import { Image } from 'expo-image';
 import React, { useEffect, useState, useRef } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-  FlatList, Animated, Dimensions, RefreshControl, TextInput, Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Animated, Dimensions, RefreshControl, TextInput, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { Loading } from '../../components/common/Loading';
 import { ProductCard } from '../../components/shop/ProductCard';
+import { resolveProductImage } from '../../utils/imageUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_HEIGHT = 180;
@@ -120,7 +119,7 @@ export default function ShopScreen({ route, navigation }: any) {
             {flashSaleProducts.map((item, idx) => {
               const discount = 15 + idx * 5;
               const salePrice = item.price * (1 - discount / 100);
-              const mainImage = item.images?.[0]?.imageUrl || 'https://via.placeholder.com/120';
+              const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/120';
               const soldPct = 30 + idx * 12;
               return (
                 <TouchableOpacity key={item.id} style={styles.flashCard} onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}>
@@ -154,7 +153,7 @@ export default function ShopScreen({ route, navigation }: any) {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8, gap: 8 }}>
             {bestSellers.map((item, idx) => {
-              const mainImage = item.images?.[0]?.imageUrl || 'https://via.placeholder.com/150';
+              const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/150';
               return (
                 <TouchableOpacity key={item.id} style={styles.bestCard} onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}>
                   <View style={styles.bestRank}>

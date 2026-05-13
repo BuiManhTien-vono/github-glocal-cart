@@ -40,12 +40,58 @@ namespace GlocalCart.API.Controllers
             Ok(ApiResponse.Ok(await _productService.SearchProductsAsync(name, categoryId, page, pageSize)));
 
         /// <summary>
-        /// Seller đăng sản phẩm mới
+        /// Seller đăng sản phẩm mới (JSON body - endpoint cũ)
         /// </summary>
         [HttpPost]
         [Authorize(Roles = "Seller,Admin")]
         public async Task<IActionResult> CreateProduct([FromBody] CreateProductDto dto) =>
             Ok(ApiResponse.Created(await _productService.CreateProductAsync(UserId, dto), "Đăng sản phẩm thành công."));
+
+        /// <summary>
+        /// Seller đăng sản phẩm mới + upload ảnh (multipart form-data).
+        /// Ảnh sẽ được nén sang WebP và lưu trực tiếp vào DB.
+        /// </summary>
+        [HttpPost("with-images")]
+        [Authorize(Roles = "Seller,Admin")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> CreateProductWithImages([FromForm] CreateProductWithImagesDto dto)
+        {
+            // Validate file ảnh
+            if (dto.Images?.Any() == true)
+            {
+                var allowedMimeTypes = new[] { "image/jpeg", "image/png", "image/jpg", "image/webp" };
+                foreach (var file in dto.Images)
+                {
+                    if (file.Length == 0)
+                        return BadRequest(ApiResponse.Fail("File ảnh không hợp lệ (rỗng)."));
+
+                    if (Array.IndexOf(allowedMimeTypes, file.ContentType.ToLower()) < 0)
+                        return BadRequest(ApiResponse.Fail("Chỉ chấp nhận ảnh JPG, PNG, WEBP."));
+
+                    // Giới hạn kích thước 10MB mỗi ảnh
+                    if (file.Length > 10 * 1024 * 1024)
+                        return BadRequest(ApiResponse.Fail("Kích thước ảnh tối đa 10MB."));
+                }
+            }
+
+            var result = await _productService.CreateProductWithImagesAsync(UserId, dto);
+            return Ok(ApiResponse.Created(result, "Đăng sản phẩm với ảnh thành công."));
+        }
+
+        /// <summary>
+        /// Lấy ảnh sản phẩm từ DB (trả binary WebP). Public endpoint.
+        /// Client dùng URL: /api/products/images/{imageId}/data
+        /// </summary>
+        [HttpGet("images/{imageId}/data")]
+        [ResponseCache(Duration = 86400)] // Cache 24h vì ảnh ít thay đổi
+        public async Task<IActionResult> GetProductImageData(int imageId)
+        {
+            var result = await _productService.GetProductImageDataAsync(imageId);
+            if (result == null)
+                return NotFound(ApiResponse.NotFound("Không tìm thấy ảnh."));
+
+            return File(result.Value.Data, result.Value.ContentType);
+        }
 
         /// <summary>
         /// Seller cập nhật sản phẩm
@@ -86,3 +132,4 @@ namespace GlocalCart.API.Controllers
             Ok(ApiResponse.Ok(await _productService.GetMyProductsAsync(UserId, page, pageSize)));
     }
 }
+

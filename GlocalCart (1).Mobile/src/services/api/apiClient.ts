@@ -1,11 +1,12 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSecureItem } from '../../utils/secureStore';
 
 import { Platform } from 'react-native';
 
 const BASE_URL = Platform.OS === 'web'
   ? 'http://localhost:5100/api'
-  : 'http://192.168.1.11:5100/api';
+  : 'http://10.117.243.62:5100/api';
 
 const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -17,9 +18,14 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
+      const token = await getSecureItem('auth_token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+      // Khi gửi FormData (upload ảnh), set Content-Type = multipart/form-data
+      // React Native networking layer sẽ tự thêm boundary
+      if (config.data instanceof FormData) {
+        config.headers['Content-Type'] = 'multipart/form-data';
       }
       console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
     } catch { }

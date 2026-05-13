@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import React from 'react';
-import { View, ScrollView, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, ScrollView, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors } from '../../theme/colors';
 
 const features = [

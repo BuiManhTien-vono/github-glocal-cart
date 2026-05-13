@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import apiClient from '../../services/api/apiClient';
 import { colors } from '../../theme/colors';

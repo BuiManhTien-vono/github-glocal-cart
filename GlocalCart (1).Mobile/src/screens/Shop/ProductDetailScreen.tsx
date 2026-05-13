@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +9,7 @@ import { useCartStore } from '../../store/useCartStore';
 import { ImageSlider } from '../../components/shop/ImageSlider';
 import { ReviewSection } from '../../components/shop/ReviewSection';
 import { colors } from '../../theme/colors';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
 
 type ProductDetailRouteProp = RouteProp<{ params: { productId: number } }, 'params'>;
 
@@ -99,7 +101,18 @@ export default function ProductDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
         <View style={styles.sliderContainer}>
-          <ImageSlider images={product.images ? product.images.map((img: any) => img.imageUrl) : []} />
+          <ImageSlider images={(() => {
+            // Lấy ảnh từ ProductImages
+            const imgUrls = (product.images || [])
+              .map((img: any) => resolveProductImageUrl(img.imageUrl))
+              .filter(Boolean) as string[];
+            // Nếu mediaUrl khác ảnh trong images (đã sửa), thêm vào đầu
+            const mediaResolved = resolveProductImageUrl(product.mediaUrl);
+            if (mediaResolved && !imgUrls.includes(mediaResolved)) {
+              imgUrls.unshift(mediaResolved);
+            }
+            return imgUrls;
+          })()} />
 
           <View style={[styles.floatHeader, { top: insets.top + 8 }]}>
             <TouchableOpacity style={styles.floatIconBtn} onPress={() => navigation.goBack()}>
