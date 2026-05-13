@@ -1,12 +1,52 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
+import apiClient from '../../services/api/apiClient';
+import { Loading } from '../../components/common/Loading';
 
 export default function OrderDetailScreen({ navigation, route }: any) {
-    const orderId = route?.params?.orderId || 'ORD202611';
+    const orderId = route?.params?.orderId;
     const insets = useSafeAreaInsets();
+    const [order, setOrder] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        if (orderId) fetchOrderDetail();
+    }, [orderId]);
+
+    const fetchOrderDetail = async () => {
+        try {
+            const data: any = await apiClient.get(`/orders/${orderId}`);
+            setOrder(data);
+        } catch (error) {
+            console.log('fetchOrderDetail error:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const getStatusText = (status: number) => {
+        switch (status) {
+            case 0: return 'Chờ xác nhận';
+            case 1: return 'Đang chuẩn bị';
+            case 2: return 'Đang giao';
+            case 3: return 'Đã giao';
+            case 4: return 'Đã hủy';
+            default: return 'Khác';
+        }
+    };
+
+    if (isLoading) return <Loading />;
+    if (!order) return (
+        <View style={styles.center}>
+            <Text>Không tìm thấy thông tin đơn hàng</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+                <Text style={{ color: colors.primary, marginTop: 10 }}>Quay lại</Text>
+            </TouchableOpacity>
+        </View>
+    );
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -21,22 +61,24 @@ export default function OrderDetailScreen({ navigation, route }: any) {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {/* Banner trạng thái */}
                 <View style={styles.statusBanner}>
-                    <Text style={styles.statusBig}>Người bán đang chuẩn bị hàng</Text>
-                    <Text style={styles.statusSub}>Dự kiến giao hàng vào 20/10/2026</Text>
+                    <Text style={styles.statusBig}>{getStatusText(order.status)}</Text>
+                    <Text style={styles.statusSub}>Mã đơn hàng: {order.orderNumber}</Text>
+                    <Text style={styles.statusSub}>Ngày đặt: {new Date(order.orderDate).toLocaleDateString('vi-VN')}</Text>
                 </View>
 
                 {/* Khối Tracking */}
-                <TouchableOpacity style={styles.sectionCard} onPress={() => navigation.navigate('ShipmentTracking')}>
-                    <View style={styles.rowCenter}>
-                        <Ionicons name="car-outline" size={24} color={colors.secondary} style={{ marginRight: 12 }} />
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.blueText}>Thông tin vận chuyển</Text>
-                            <Text style={styles.trackDesc}>Đơn hàng đã tới kho phân loại HCM.</Text>
-                            <Text style={styles.trackTime}>12:30 18-10-2026</Text>
+                {order.status === 2 && (
+                    <TouchableOpacity style={styles.sectionCard} onPress={() => navigation.navigate('ShipmentTracking', { orderId: order.id })}>
+                        <View style={styles.rowCenter}>
+                            <Ionicons name="car-outline" size={24} color={colors.secondary} style={{ marginRight: 12 }} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.blueText}>Thông tin vận chuyển</Text>
+                                <Text style={styles.trackDesc}>Đơn hàng đang được giao.</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
                         </View>
-                        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-                    </View>
-                </TouchableOpacity>
+                    </TouchableOpacity>
+                )}
 
                 {/* Khối Địa chỉ */}
                 <View style={styles.sectionCard}>
@@ -44,61 +86,68 @@ export default function OrderDetailScreen({ navigation, route }: any) {
                         <Ionicons name="location-outline" size={24} color={colors.primary} style={{ marginRight: 12 }} />
                         <View style={{ flex: 1 }}>
                             <Text style={styles.label}>Địa chỉ nhận hàng</Text>
-                            <Text style={styles.valName}>Nguyễn Văn A | 0901234567</Text>
-                            <Text style={styles.valDesc}>123 Đường Lê Lợi, P. Bến Nghé, Quận 1, HCM</Text>
+                            {order.shippingAddress ? (
+                                <>
+                                    <Text style={styles.valName}>{order.shippingAddress.fullName} | {order.shippingAddress.phone}</Text>
+                                    <Text style={styles.valDesc}>
+                                        {order.shippingAddress.street}, {order.shippingAddress.ward && `${order.shippingAddress.ward}, `}
+                                        {order.shippingAddress.district}, {order.shippingAddress.city}
+                                    </Text>
+                                </>
+                            ) : (
+                                <Text style={styles.valDesc}>Thông tin địa chỉ không khả dụng</Text>
+                            )}
                         </View>
                     </View>
                 </View>
 
                 {/* Danh sách SP */}
                 <View style={styles.sectionCard}>
-                    <View style={styles.shopRow}>
-                        <Ionicons name="storefront-outline" size={18} color={colors.textSecondary} />
-                        <Text style={styles.shopName}>Apple Official Store</Text>
-                    </View>
-
-                    <View style={styles.productRow}>
-                        <View style={styles.prodImg}><Ionicons name="laptop-outline" size={30} color={colors.textMuted} /></View>
-                        <View style={styles.prodInfo}>
-                            <Text style={styles.prodTitle}>MacBook Pro M2 2023</Text>
-                            <View style={styles.priceRow}>
-                                <Text style={styles.prodPrice}>32.000.000đ</Text>
-                                <Text style={styles.prodQty}>x1</Text>
+                    {order.orderItems?.map((item: any, idx: number) => (
+                        <View key={idx} style={[styles.productRow, idx === order.orderItems.length - 1 && { borderBottomWidth: 0 }]}>
+                            <View style={styles.prodImg}>
+                                {item.productImage ? (
+                                    <Image source={{ uri: item.productImage }} style={styles.fullImg} />
+                                ) : (
+                                    <Ionicons name="cube-outline" size={30} color={colors.textMuted} />
+                                )}
+                            </View>
+                            <View style={styles.prodInfo}>
+                                <Text style={styles.prodTitle}>{item.productName}</Text>
+                                <View style={styles.priceRow}>
+                                    <Text style={styles.prodPrice}>{item.unitPrice.toLocaleString('vi-VN')}đ</Text>
+                                    <Text style={styles.prodQty}>x{item.quantity}</Text>
+                                </View>
                             </View>
                         </View>
-                    </View>
-
-                    <View style={[styles.productRow, { borderBottomWidth: 0 }]}>
-                        <View style={styles.prodImg}><Ionicons name="desktop-outline" size={30} color={colors.textMuted} /></View>
-                        <View style={styles.prodInfo}>
-                            <Text style={styles.prodTitle}>Chuột không dây Logitech</Text>
-                            <View style={styles.priceRow}>
-                                <Text style={styles.prodPrice}>2.500.000đ</Text>
-                                <Text style={styles.prodQty}>x1</Text>
-                            </View>
-                        </View>
-                    </View>
+                    ))}
 
                     <View style={styles.orderSummary}>
                         <View style={styles.summaryItem}>
-                            <Text style={styles.sumLabel}>Mã đơn hàng</Text>
-                            <Text style={styles.sumVal}>{orderId}</Text>
+                            <Text style={styles.sumLabel}>Tổng tiền hàng</Text>
+                            <Text style={styles.sumVal}>{(order.totalAmount - 30000).toLocaleString('vi-VN')}đ</Text>
                         </View>
                         <View style={styles.summaryItem}>
-                            <Text style={styles.sumLabel}>Thành tiền</Text>
-                            <Text style={styles.sumValPrice}>34.500.000đ</Text>
+                            <Text style={styles.sumLabel}>Phí vận chuyển</Text>
+                            <Text style={styles.sumVal}>30.000đ</Text>
+                        </View>
+                        <View style={styles.summaryItem}>
+                            <Text style={styles.sumLabel}>Tổng thanh toán</Text>
+                            <Text style={styles.sumValPrice}>{order.totalAmount.toLocaleString('vi-VN')}đ</Text>
                         </View>
                     </View>
                 </View>
             </ScrollView>
 
             <View style={styles.bottomBar}>
-                <TouchableOpacity style={styles.outlineBtn}>
-                    <Text style={styles.outlineBtnText}>Liên hệ người bán</Text>
+                <TouchableOpacity style={styles.outlineBtn} onPress={() => navigation.goBack()}>
+                    <Text style={styles.outlineBtnText}>Quay lại</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('WriteReview')}>
-                    <Text style={styles.primaryBtnText}>Cho Đánh Giá</Text>
-                </TouchableOpacity>
+                {order.status === 3 && (
+                    <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('WriteReview', { productId: order.orderItems?.[0]?.productId, orderId: order.id })}>
+                        <Text style={styles.primaryBtnText}>Cho Đánh Giá</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </View>
     );
@@ -106,6 +155,7 @@ export default function OrderDetailScreen({ navigation, route }: any) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: 12, backgroundColor: colors.primary, zIndex: 10 },
     backBtn: { padding: 8, marginLeft: -8 },
     headerTitle: { fontSize: 18, fontWeight: '700', color: colors.white },
@@ -129,7 +179,8 @@ const styles = StyleSheet.create({
     shopName: { fontSize: 15, fontWeight: '700', color: colors.text },
 
     productRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.borderLight, paddingBottom: 12, marginBottom: 12 },
-    prodImg: { width: 60, height: 60, backgroundColor: colors.background, borderRadius: 6, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    prodImg: { width: 60, height: 60, backgroundColor: colors.background, borderRadius: 6, alignItems: 'center', justifyContent: 'center', marginRight: 12, overflow: 'hidden' },
+    fullImg: { width: '100%', height: '100%' },
     prodInfo: { flex: 1, justifyContent: 'space-between' },
     prodTitle: { fontSize: 14, fontWeight: '500', color: colors.text },
     priceRow: { flexDirection: 'row', justifyContent: 'space-between' },

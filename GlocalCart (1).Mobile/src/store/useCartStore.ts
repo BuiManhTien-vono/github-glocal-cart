@@ -75,6 +75,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           productId: product.id,
           productName: product.name,
           productImage: resolveProductImage(product) || undefined,
+          sellerName: product.shopName || product.sellerName || undefined,
           priceSnapshot: product.price,
           currentPrice: product.price,
           quantity: quantity,

@@ -11,6 +11,7 @@ export const colors = {
   success: '#10B981',
   danger: '#EF4444',
   warning: '#F59E0B',
+  info: '#3B82F6',
 
   // Neutral
   background: '#F5F5F5',

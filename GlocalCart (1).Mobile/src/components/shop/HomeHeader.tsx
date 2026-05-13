@@ -4,10 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { useNavigation } from '@react-navigation/native';
+import { useCartStore } from '../../store/useCartStore';
+import { useChatStore } from '../../store/useChatStore';
+import { ChatBadge } from '../common/ChatBadge';
 
 export const HomeHeader = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const { totalItems } = useCartStore();
+  const { totalUnreadCount } = useChatStore();
 
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
@@ -37,14 +42,18 @@ export const HomeHeader = () => {
         onPress={() => navigation.navigate('Cart')}
       >
         <Ionicons name="cart-outline" size={30} color={colors.white} />
-        <View style={styles.badge}>
-          {/* Mock badge */}
-        </View>
+        {totalItems > 0 && (
+          <View style={styles.badge} />
+        )}
       </TouchableOpacity>
 
       {/* Chat Icon */}
-      <TouchableOpacity style={styles.iconButton}>
+      <TouchableOpacity 
+        style={styles.iconButton}
+        onPress={() => navigation.navigate('ChatList')}
+      >
         <Ionicons name="chatbubble-ellipses-outline" size={28} color={colors.white} />
+        <ChatBadge />
       </TouchableOpacity>
     </View>
   );

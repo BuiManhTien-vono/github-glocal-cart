@@ -8,35 +8,34 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../services/api/apiClient';
 import { colors, spacing, fontSize, borderRadius, shadow } from '../../theme/colors';
+import { DailyDiscover } from '../../components/shop/DailyDiscover';
 
 const { width } = Dimensions.get('window');
 
 export default function ProfileScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser, logout, isLoggedIn, setGuestMode } = useAuth();
 
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [fullName, setFullName] = useState(user?.fullName || '');
-  const [phone, setPhone] = useState(user?.phone || '');
   const [saving, setSaving] = useState(false);
+  const [products, setProducts] = useState([]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+    fetchProducts();
   }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const fetchProducts = async () => {
     try {
-      await apiClient.put('/users/profile', { fullName, phone });
-      updateUser({ ...user!, fullName, phone });
-      setShowEditModal(false);
-      Alert.alert('✅ Thành công', 'Đã cập nhật hồ sơ.');
-    } catch (err: any) {
-      Alert.alert('Lỗi', err.message);
-    } finally {
-      setSaving(false);
+      const res = await apiClient.get('/products') as any;
+      setProducts(res?.items || res || []);
+    } catch (err) {
+      console.warn("Profile fetch products error:", err);
     }
+  };
+
+  const handleEditProfile = () => {
+    navigation.navigate('EditProfile');
   };
 
   const handleActivateSeller = async () => {
@@ -115,51 +114,74 @@ export default function ProfileScreen({ navigation }: any) {
           <View style={styles.headerBg2} />
 
           {/* Settings icon */}
-          <TouchableOpacity style={styles.settingsBtn}>
-            <Ionicons name="settings-outline" size={22} color="#FFF" />
+          <TouchableOpacity 
+            style={styles.settingsBtn}
+            onPress={() => isLoggedIn ? navigation.navigate('AccountSettings') : setGuestMode(false)}
+          >
+            <Ionicons name="settings-outline" size={24} color="#FFF" />
           </TouchableOpacity>
 
-          {/* Profile info */}
-          <View style={styles.profileRow}>
-            <TouchableOpacity
-              style={styles.avatarCircle}
-              onPress={() => setShowEditModal(true)}
-            >
-              <Text style={styles.avatarText}>{initial}</Text>
-              <View style={styles.editBadge}>
-                <Ionicons name="camera" size={10} color="#FFF" />
-              </View>
-            </TouchableOpacity>
+          {isLoggedIn ? (
+            /* Profile info (Logged In) */
+            <View style={styles.profileRow}>
+              <TouchableOpacity
+                style={styles.avatarCircle}
+                onPress={handleEditProfile}
+              >
+                <Text style={styles.avatarText}>{initial}</Text>
+                <View style={styles.editBadge}>
+                  <Ionicons name="camera" size={10} color="#FFF" />
+                </View>
+              </TouchableOpacity>
 
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{user?.fullName || user?.userName}</Text>
-              <Text style={styles.profileEmail}>{user?.email}</Text>
-              <View style={styles.roleBadgeRow}>
-                <View style={styles.roleBadge}>
-                  <Text style={styles.roleText}>
-                    {user?.role === 'Admin' ? '👑 Admin' : user?.isSeller ? '🏪 Seller' : '🛒 Member'}
-                  </Text>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{user?.fullName || user?.userName}</Text>
+                <Text style={styles.profileEmail}>{user?.email}</Text>
+                <View style={styles.roleBadgeRow}>
+                  <View style={styles.roleBadge}>
+                    <Text style={styles.roleText}>
+                      {user?.role === 'Admin' ? '👑 Admin' : user?.isSeller ? '🏪 Seller' : '🛒 Member'}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <TouchableOpacity
-              style={styles.editProfileBtn}
-              onPress={() => setShowEditModal(true)}
-            >
-              <Ionicons name="create-outline" size={16} color="#FFF" />
-              <Text style={styles.editProfileText}>Sửa</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Member card strip */}
-          <View style={styles.memberCard}>
-            <View style={styles.memberLeft}>
-              <Ionicons name="diamond-outline" size={16} color={colors.warning} />
-              <Text style={styles.memberLabel}>Thành viên GlocalCart</Text>
+              <TouchableOpacity
+                style={styles.editProfileBtn}
+                onPress={handleEditProfile}
+              >
+                <Ionicons name="create-outline" size={16} color="#FFF" />
+                <Text style={styles.editProfileText}>Sửa</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.memberPoints}>0 xu</Text>
-          </View>
+          ) : (
+            /* Guest Welcome Header */
+            <View style={styles.guestHeaderRow}>
+              <View style={styles.guestAvatar}>
+                <Ionicons name="person-circle-outline" size={60} color="rgba(255,255,255,0.8)" />
+              </View>
+              <View style={styles.guestInfo}>
+                <Text style={styles.guestWelcomeText}>Chào mừng bạn đến với GlocalCart!</Text>
+                <TouchableOpacity 
+                  style={styles.guestLoginBtn}
+                  onPress={() => setGuestMode(false)}
+                >
+                  <Text style={styles.guestLoginText}>Đăng nhập/tạo tài khoản</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {isLoggedIn && (
+            /* Member card strip */
+            <View style={styles.memberCard}>
+              <View style={styles.memberLeft}>
+                <Ionicons name="diamond-outline" size={16} color={colors.warning} />
+                <Text style={styles.memberLabel}>Thành viên GlocalCart</Text>
+              </View>
+              <Text style={styles.memberPoints}>0 xu</Text>
+            </View>
+          )}
         </View>
 
         {/* ===== ORDER STATUS BAR ===== */}
@@ -228,113 +250,41 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* ===== MENU LIST ===== */}
+        {/* ===== SUPPORT MENU ===== */}
         <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Hỗ trợ</Text>
           {[
-            { icon: 'notifications-outline', label: 'Thông Báo', screen: 'Notifications', color: '#8B5CF6' },
-            { icon: 'help-circle-outline', label: 'Trung tâm Trợ giúp', color: colors.secondary },
-            { icon: 'star-outline', label: 'Đánh giá ứng dụng', color: colors.warning },
-            { icon: 'information-circle-outline', label: 'Về GlocalCart', color: colors.textSecondary },
+            { icon: 'help-circle-outline', label: 'Trung tâm trợ giúp', color: '#555' },
+            { icon: 'headset-outline', label: 'Chăm sóc khách hàng', color: '#555' },
+            { icon: 'newspaper-outline', label: 'GlocalCart Blog', color: '#555' },
           ].map((item, i) => (
             <TouchableOpacity
               key={i}
               style={[styles.menuItem, i === 0 && { borderTopWidth: 0 }]}
               activeOpacity={0.6}
-              onPress={() => item.screen && navigation.navigate(item.screen)}
             >
-              <View style={[styles.menuIconWrap, { backgroundColor: (item.color || colors.primary) + '12' }]}>
-                <Ionicons name={item.icon as any} size={20} color={item.color} />
-              </View>
+              <Ionicons name={item.icon as any} size={22} color={item.color} />
               <Text style={styles.menuLabel}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              <Ionicons name="chevron-forward" size={16} color="#ccc" />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* ===== LOGOUT ===== */}
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={() => {
-            if (Platform.OS === 'web') {
-              if (window.confirm('Bạn có chắc muốn đăng xuất?')) {
-                logout();
-              }
-              return;
-            }
-            Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
-              { text: 'Hủy', style: 'cancel' },
-              { text: 'Đăng xuất', style: 'destructive', onPress: logout },
-            ]);
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-          <Text style={styles.logoutText}>Đăng Xuất</Text>
-        </TouchableOpacity>
+        {/* ===== RECOMMENDATION HEADER ===== */}
+        <View style={styles.recommendHeader}>
+          <View style={styles.recommendLine} />
+          <Text style={styles.recommendTitle}>CÓ THỂ BẠN CŨNG THÍCH</Text>
+          <View style={styles.recommendLine} />
+        </View>
 
-        <Text style={styles.versionText}>GlocalCart v1.0.0</Text>
+        {/* ===== PRODUCT GRID ===== */}
+        <DailyDiscover data={products} />
+
+
+
+        
       </Animated.ScrollView>
 
-      {/* ===== EDIT PROFILE MODAL ===== */}
-      <Modal visible={showEditModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Sửa Hồ Sơ</Text>
-
-            <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Tên đăng nhập</Text>
-              <Text style={styles.modalReadonly}>{user?.userName}</Text>
-            </View>
-
-            <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Email</Text>
-              <Text style={styles.modalReadonly}>{user?.email}</Text>
-            </View>
-
-            <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Họ và tên</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="Họ và tên"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-
-            <View style={styles.modalField}>
-              <Text style={styles.modalLabel}>Số điện thoại</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Số điện thoại"
-                keyboardType="phone-pad"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setShowEditModal(false)}
-              >
-                <Text style={styles.modalCancelText}>Hủy</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalSaveBtn, saving && { opacity: 0.7 }]}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                <Text style={styles.modalSaveText}>
-                  {saving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -467,6 +417,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  // Guest Header
+  guestHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+  },
+  guestAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guestInfo: {
+    flex: 1,
+  },
+  guestWelcomeText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  guestLoginBtn: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  guestLoginText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   // ── Section Cards ──
   sectionCard: {
     backgroundColor: '#FFF',
@@ -586,23 +572,25 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   // ── Logout ──
-  logoutBtn: {
+
+  // ── Recommendations ──
+  recommendHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginHorizontal: spacing.sm,
-    marginTop: spacing.md,
-    backgroundColor: '#FFF',
-    borderRadius: borderRadius.lg,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: colors.danger + '30',
+    paddingVertical: 20,
+    gap: 12,
   },
-  logoutText: {
-    fontSize: 15,
-    color: colors.danger,
-    fontWeight: '700',
+  recommendLine: {
+    height: 1,
+    width: 60,
+    backgroundColor: '#ddd',
+  },
+  recommendTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EE4D2D',
+    letterSpacing: 0.5,
   },
   versionText: {
     textAlign: 'center',

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../services/api/apiClient';
 import { getSecureItem, setSecureItem, removeSecureItem } from '../utils/secureStore';
+import { useCartStore } from '../store/useCartStore';
 
 // ─── Types ───
 interface User {
@@ -19,6 +20,7 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   isLoggedIn: boolean;
+  isGuestMode: boolean; // Add this
 }
 
 interface AuthContextType extends AuthState {
@@ -27,6 +29,7 @@ interface AuthContextType extends AuthState {
   logout: () => Promise<void>;
   updateUser: (user: User) => void;
   finishLogin: (token: string, user: User) => Promise<void>;
+  setGuestMode: (value: boolean) => void; // Add this
 }
 
 interface RegisterData {
@@ -46,6 +49,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     token: null,
     isLoading: true,
     isLoggedIn: false,
+    isGuestMode: false,
   });
 
   // Khôi phục phiên đăng nhập khi mở app
@@ -59,7 +63,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userJson = await getSecureItem('auth_user');
       if (token && userJson) {
         const user = JSON.parse(userJson);
-        setState({ user, token, isLoading: false, isLoggedIn: true });
+        setState({ user, token, isLoading: false, isLoggedIn: true, isGuestMode: false });
       } else {
         setState((prev) => ({ ...prev, isLoading: false }));
       }
@@ -71,7 +75,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const finishLogin = async (token: string, user: User) => {
     await setSecureItem('auth_token', token);
     await setSecureItem('auth_user', JSON.stringify(user));
-    setState({ user, token, isLoading: false, isLoggedIn: true });
+    setState({ user, token, isLoading: false, isLoggedIn: true, isGuestMode: false });
+    
+    // Đồng bộ giỏ hàng ngay sau khi đăng nhập
+    try {
+      await useCartStore.getState().syncCart();
+    } catch (error) {
+      console.log('[Auth] Sync cart error:', error);
+    }
   };
 
   const login = async (emailOrUsername: string, password: string) => {
@@ -99,7 +110,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = async () => {
     await removeSecureItem('auth_token');
     await removeSecureItem('auth_user');
-    setState({ user: null, token: null, isLoading: false, isLoggedIn: false });
+    setState({ user: null, token: null, isLoading: false, isLoggedIn: false, isGuestMode: false });
   };
 
   const updateUser = (user: User) => {
@@ -107,8 +118,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSecureItem('auth_user', JSON.stringify(user));
   };
 
+  const setGuestMode = (value: boolean) => {
+    setState((prev) => ({ ...prev, isGuestMode: value }));
+  };
+
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, updateUser, finishLogin }}>
+    <AuthContext.Provider value={{ ...state, login, register, logout, updateUser, finishLogin, setGuestMode }}>
       {children}
     </AuthContext.Provider>
   );

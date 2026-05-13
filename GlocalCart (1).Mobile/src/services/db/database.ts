@@ -8,6 +8,7 @@ export interface DbCartItem {
   productId: number;
   productName: string;
   productImage?: string;
+  sellerName?: string;
   priceSnapshot: number;
   currentPrice: number;
   quantity: number;
@@ -30,6 +31,7 @@ if (!isWeb) {
         productId INTEGER UNIQUE,
         productName TEXT,
         productImage TEXT,
+        sellerName TEXT,
         priceSnapshot REAL,
         currentPrice REAL,
         quantity INTEGER,
@@ -41,7 +43,16 @@ if (!isWeb) {
         query TEXT UNIQUE,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
       );
+      -- Ensure sellerName column exists for older installations
+      PRAGMA table_info(GuestCart);
     `);
+    
+    // Check if sellerName exists and add it if not
+    const tableInfo = db.getAllSync<{ name: string }>('PRAGMA table_info(GuestCart)');
+    const columnExists = tableInfo.some(col => col.name === 'sellerName');
+    if (!columnExists) {
+      db.execSync('ALTER TABLE GuestCart ADD COLUMN sellerName TEXT');
+    }
   } catch (error) {
     console.error('SQLite Init Error:', error);
   }
@@ -83,8 +94,8 @@ export const addOrUpdateGuestCartItem = async (item: DbCartItem): Promise<void> 
     db.runSync('UPDATE GuestCart SET quantity = ?, subtotal = ? WHERE productId = ?', [newQuantity, newSubtotal, item.productId]);
   } else {
     db.runSync(
-      'INSERT INTO GuestCart (id, productId, productName, productImage, priceSnapshot, currentPrice, quantity, availableStock, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [item.id, item.productId, item.productName, item.productImage || '', item.priceSnapshot, item.currentPrice, item.quantity, item.availableStock, item.subtotal]
+      'INSERT INTO GuestCart (id, productId, productName, productImage, sellerName, priceSnapshot, currentPrice, quantity, availableStock, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [item.id, item.productId, item.productName, item.productImage || '', item.sellerName || '', item.priceSnapshot, item.currentPrice, item.quantity, item.availableStock, item.subtotal]
     );
   }
 };

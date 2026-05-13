@@ -230,7 +230,10 @@ export default function ProductDetailScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.chatBtn}>
+        <TouchableOpacity 
+          style={styles.chatBtn}
+          onPress={() => navigation.navigate('ChatDetail', { shopName: 'Glocal Cart Official', conversationId: '1' })}
+        >
           <Ionicons name="chatbubbles-outline" size={24} color={colors.primary} />
           <Text style={styles.chatText}>Chat ngay</Text>
         </TouchableOpacity>
