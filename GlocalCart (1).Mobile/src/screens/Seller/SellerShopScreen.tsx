@@ -34,7 +34,7 @@ const SELLER_CATEGORIES = [
 
 export default function SellerShopScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
-    
+
     // States
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [activeTab, setActiveTab] = useState('shop');
@@ -62,7 +62,7 @@ export default function SellerShopScreen({ navigation }: any) {
             setSellerCategories([]);
         }
     };
-    
+
     // Animation
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -144,7 +144,7 @@ export default function SellerShopScreen({ navigation }: any) {
                         <Text style={styles.flashTitle}>FLASH SALE</Text>
                     </View>
                     {!isPreviewMode && (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.manageSmallBtn}
                             onPress={() => navigation.navigate('SellerFlashSale')}
                         >
@@ -231,7 +231,7 @@ export default function SellerShopScreen({ navigation }: any) {
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Tất cả sản phẩm ({products.length})</Text>
                 {!isPreviewMode && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.manageSmallBtn}
                         onPress={() => navigation.navigate('SellerProducts')}
                     >
@@ -254,7 +254,7 @@ export default function SellerShopScreen({ navigation }: any) {
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Danh mục của Shop</Text>
                 {!isPreviewMode && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.manageSmallBtn}
                         onPress={() => navigation.navigate('SellerCategories')}
                     >
@@ -305,14 +305,14 @@ export default function SellerShopScreen({ navigation }: any) {
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>DANH MỤC</Text>
                     <View style={styles.headerActions}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.manageSmallBtn}
                             onPress={() => navigation.navigate('SellerAddCategory')}
                         >
                             <Ionicons name="add" size={14} color={colors.primary} />
                             <Text style={styles.manageSmallBtnText}>Thêm mới</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.manageSmallBtn, { marginLeft: 8 }]}
                             onPress={() => navigation.navigate('SellerCategories')}
                         >
@@ -323,8 +323,8 @@ export default function SellerShopScreen({ navigation }: any) {
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
                     {sellerCategories.map((cat) => (
-                        <TouchableOpacity 
-                            key={cat.id} 
+                        <TouchableOpacity
+                            key={cat.id}
                             style={styles.sellerCatItem}
                             onPress={() => navigation.navigate('SellerEditCategory', { category: cat })}
                         >
@@ -344,7 +344,7 @@ export default function SellerShopScreen({ navigation }: any) {
                         <Ionicons name="flash" size={20} color="#ee4d2d" />
                         <Text style={styles.flashTitle}>FLASH SALE</Text>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.manageSmallBtn}
                         onPress={() => navigation.navigate('SellerFlashSale')}
                     >
@@ -367,14 +367,14 @@ export default function SellerShopScreen({ navigation }: any) {
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>SẢN PHẨM</Text>
                     <View style={styles.headerActions}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.manageSmallBtn}
                             onPress={() => navigation.navigate('SellerAddProduct')}
                         >
                             <Ionicons name="add" size={14} color={colors.primary} />
                             <Text style={styles.manageSmallBtnText}>Thêm mới</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.manageSmallBtn, { marginLeft: 8 }]}
                             onPress={() => navigation.navigate('SellerProducts')}
                         >
@@ -441,7 +441,7 @@ export default function SellerShopScreen({ navigation }: any) {
                             <TouchableOpacity style={styles.circleBtn}>
                                 <Ionicons name="search" size={22} color="#fff" />
                             </TouchableOpacity>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={[styles.circleBtn, { marginLeft: 10 }]}
                                 onPress={() => setIsPreviewMode(!isPreviewMode)}
                             >
@@ -456,7 +456,7 @@ export default function SellerShopScreen({ navigation }: any) {
                             <View style={styles.logoWrap}>
                                 <Image source={{ uri: shopData.logo }} style={styles.shopLogo} />
                                 {!isPreviewMode && (
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.editShopBadge}
                                         onPress={() => navigation.navigate('SellerShopInfo')}
                                     >
@@ -490,7 +490,7 @@ export default function SellerShopScreen({ navigation }: any) {
                                     </TouchableOpacity>
                                 </>
                             ) : (
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.decorateBtn}
                                     onPress={() => navigation.navigate('SellerShopInfo')}
                                 >
@@ -505,8 +505,8 @@ export default function SellerShopScreen({ navigation }: any) {
                 {/* ═══ Sticky Tab Bar (Only in Preview Mode) ═══ */}
                 {isPreviewMode && (
                     <View style={styles.tabBarContainer}>
-                        <ScrollView 
-                            horizontal 
+                        <ScrollView
+                            horizontal
                             showsHorizontalScrollIndicator={false}
                             contentContainerStyle={styles.tabBarScrollContent}
                         >
@@ -541,7 +541,7 @@ export default function SellerShopScreen({ navigation }: any) {
 
                 {/* Exit Preview Toggle (Floating at bottom when in preview) */}
                 {isPreviewMode && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.exitPreviewBtn, { bottom: insets.bottom + 20 }]}
                         onPress={() => setIsPreviewMode(false)}
                     >
@@ -549,7 +549,7 @@ export default function SellerShopScreen({ navigation }: any) {
                         <Text style={styles.exitPreviewText}>Thoát xem trước</Text>
                     </TouchableOpacity>
                 )}
-                
+
                 <View style={{ height: 100 }} />
             </ScrollView>
         </Animated.View>
@@ -558,7 +558,7 @@ export default function SellerShopScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    
+
     // Header
     bannerArea: { position: 'relative', overflow: 'hidden', minHeight: 220 },
     bannerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
@@ -577,9 +577,9 @@ const styles = StyleSheet.create({
     editShopBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: colors.primary, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#fff' },
     shopMeta: { marginLeft: 12 },
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-    shopName: { fontSize: 16, fontWeight: '700', color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 3 },
+    shopName: { fontSize: 16, fontWeight: '700', color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
     statLine: { flexDirection: 'row', alignItems: 'center' },
-    statText: { fontSize: 12, color: '#f0f0f0', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 3 },
+    statText: { fontSize: 12, color: '#f0f0f0', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
 
     shopActions: { alignItems: 'flex-end', gap: 8 },
     followBtn: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, gap: 4 },
