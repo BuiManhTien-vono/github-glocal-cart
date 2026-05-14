@@ -55,10 +55,58 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
     }))
     : [];
 
+  const HERO_PRODUCTS: Product[] = [
+    {
+      id: 9991,
+      name: "Iphone 17 ProMax",
+      description: "Siêu phẩm công nghệ đỉnh cao.",
+      price: 34990000,
+      oldPrice: 38990000,
+      availableItemCount: 100,
+      categoryId: 6,
+      categoryName: "Công Nghệ",
+      sellerId: 1,
+      sellerName: "Glocal Store",
+      images: [{ id: 1, imageUrl: "/images/products/iphone-17-pro-max.jpg" }],
+      rating: 5.0,
+      soldCount: "10k+"
+    },
+    {
+      id: 9992,
+      name: "Serum dưỡng da cao cấp Whoo",
+      description: "Tinh chất phục hồi và trẻ hóa làn da.",
+      price: 1550000,
+      oldPrice: 1800000,
+      availableItemCount: 200,
+      categoryId: 1,
+      categoryName: "Làm Đẹp",
+      sellerId: 1,
+      sellerName: "Glocal Store",
+      images: [{ id: 1, imageUrl: "/images/products/Dau-tay-trang-Whoo-Gongjinhyang-Cleansing-Oil.-My-pham-whoo2.webp" }],
+      rating: 4.9,
+      soldCount: "5k+"
+    },
+    {
+      id: 9993,
+      name: "Air Jordan 1",
+      description: "Bước chạy êm ái, phong cách thể thao.",
+      price: 1250000,
+      oldPrice: 1500000,
+      availableItemCount: 150,
+      categoryId: 2,
+      categoryName: "Thể Thao",
+      sellerId: 1,
+      sellerName: "Glocal Store",
+      images: [{ id: 1, imageUrl: "/images/products/air-jordan-1-mid-linen-rdrop.webp" }],
+      rating: 4.8,
+      soldCount: "8k+"
+    }
+  ];
+
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground transition-colors duration-300">
       {/* Dynamic Hero Carousel */}
-      <HeroCarousel products={products.slice(0, 5)} />
+      <HeroCarousel products={HERO_PRODUCTS} />
 
       {/* Trust Badges - Responsive Glassmorphism */}
       <div className="container mx-auto px-4 mt-12 relative z-20">

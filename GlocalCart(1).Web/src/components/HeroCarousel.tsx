@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, ChevronLeft, ChevronRight, ShoppingCart, ChevronDown } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, ShoppingCart, ChevronsDown } from 'lucide-react';
 import { Product, getFileUrl } from '@/lib/api';
 
 interface HeroCarouselProps {
@@ -37,9 +37,16 @@ export default function HeroCarousel({ products }: HeroCarouselProps) {
   if (!products || products.length === 0) return null;
 
   const currentProduct = products[currentIndex];
-  const mainImage = currentProduct.images && currentProduct.images.length > 0 
-    ? getFileUrl(currentProduct.images[0].imageUrl) 
-    : `https://via.placeholder.com/800?text=${encodeURIComponent(currentProduct.name)}`;
+  
+  let mainImage = `https://via.placeholder.com/800?text=${encodeURIComponent(currentProduct.name)}`;
+  if (currentProduct.images && currentProduct.images.length > 0) {
+    const rawUrl = currentProduct.images[0].imageUrl;
+    if (rawUrl.startsWith('/images/')) {
+      mainImage = rawUrl; // Local public image
+    } else {
+      mainImage = getFileUrl(rawUrl); // API or external image
+    }
+  }
 
   return (
     <section 
@@ -125,19 +132,19 @@ export default function HeroCarousel({ products }: HeroCarouselProps) {
               </div>
 
               {/* Image Side */}
-              <div className="w-full md:w-1/2 relative h-[250px] md:h-full min-h-[300px] md:min-h-[480px] order-1 md:order-2 flex items-center justify-center p-8">
+              <div className="w-full md:w-1/2 relative h-[300px] md:h-full min-h-[300px] md:min-h-[480px] order-1 md:order-2 overflow-hidden rounded-r-[40px]">
                 <motion.div
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.2, duration: 0.8, ease: "easeOut" }}
-                  className="relative w-full h-full max-w-[400px] max-h-[400px] aspect-square"
+                  className="absolute inset-0 scale-[1.05]"
                 >
-                  <div className="absolute inset-0 bg-primary/20 blur-[100px] rounded-full"></div>
+                  <div className="absolute inset-0 bg-primary/10 blur-[80px] rounded-full"></div>
                   <Image 
                     src={mainImage} 
                     alt={currentProduct.name}
                     fill
-                    className="object-contain drop-shadow-2xl z-10"
+                    className="object-cover z-10"
                     priority
                   />
                 </motion.div>
@@ -181,18 +188,9 @@ export default function HeroCarousel({ products }: HeroCarouselProps) {
             <motion.div
               animate={{ y: [0, 8, 0] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-              className="flex flex-col items-center gap-1"
+              className="flex flex-col items-center text-primary drop-shadow-md"
             >
-              <span className="text-[14px] font-black uppercase tracking-[0.3em] text-foreground group-hover:text-primary transition-colors drop-shadow-sm">
-                CUỘN XUỐNG
-              </span>
-              <div className="w-8 h-12 border-2 border-primary/50 rounded-full flex justify-center p-1">
-                <motion.div 
-                  animate={{ y: [0, 16, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                  className="w-1.5 h-1.5 bg-primary rounded-full"
-                />
-              </div>
+              <ChevronsDown size={32} />
             </motion.div>
           </div>
 

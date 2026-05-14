@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface Notification {
   id: string;
@@ -72,3 +73,34 @@ export const useBellStore = create<BellState>((set) => ({
     notifications: state.notifications.map(n => ({ ...n, isRead: true }))
   }))
 }));
+
+export interface RecentlyViewedProduct {
+  id: number;
+  name: string;
+  price: number;
+  imageUrl: string;
+}
+
+interface RecentlyViewedState {
+  products: RecentlyViewedProduct[];
+  addProduct: (product: RecentlyViewedProduct) => void;
+  clearHistory: () => void;
+}
+
+export const useRecentlyViewedStore = create<RecentlyViewedState>()(
+  persist(
+    (set) => ({
+      products: [],
+      addProduct: (product) => set((state) => {
+        // Remove if exists to move it to the front
+        const filtered = state.products.filter(p => p.id !== product.id);
+        const newProducts = [product, ...filtered].slice(0, 10); // Keep last 10
+        return { products: newProducts };
+      }),
+      clearHistory: () => set({ products: [] })
+    }),
+    {
+      name: 'recently-viewed-storage',
+    }
+  )
+);

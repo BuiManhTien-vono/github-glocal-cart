@@ -1,15 +1,20 @@
 import { api } from '@/lib/api';
 import ProductCard from '@/components/ProductCard';
 import ShopFilters from '@/components/ShopFilters';
+import ShopSearch from '@/components/ShopSearch';
+import RecentlyViewedProducts from '@/components/RecentlyViewedProducts';
 import { PackageSearch } from 'lucide-react';
 
-export default async function ShopPage({ searchParams }: { searchParams: Promise<{ categoryId?: string, name?: string }> }) {
+export default async function ShopPage({ searchParams }: { searchParams: Promise<{ categoryId?: string, categoryIds?: string, name?: string, minPrice?: string, maxPrice?: string }> }) {
   const resolvedParams = await searchParams;
   const categoryId = resolvedParams.categoryId ? parseInt(resolvedParams.categoryId) : undefined;
+  const categoryIds = resolvedParams.categoryIds ? resolvedParams.categoryIds.split(',').map(id => parseInt(id)).filter(id => !isNaN(id)) : undefined;
   const searchName = resolvedParams.name || '';
+  const minPrice = resolvedParams.minPrice ? parseInt(resolvedParams.minPrice) : undefined;
+  const maxPrice = resolvedParams.maxPrice ? parseInt(resolvedParams.maxPrice) : undefined;
 
   // Fetch products
-  const products = await api.products.getAll(searchName, categoryId);
+  const products = await api.products.getAll(searchName, categoryId, undefined, categoryIds, minPrice, maxPrice);
   
   // Fetch categories for filtering
   const categories = await api.categories.getAll();
@@ -35,11 +40,13 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
           <ShopFilters categories={categories} />
         </div>
 
-        {/* Product Grid */}
+        {/* Product Grid & Search */}
         <div className="flex-1">
+          <ShopSearch />
+
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl font-black text-foreground">
-              {categoryId ? `Sản phẩm theo danh mục` : 'Tất cả sản phẩm'}
+              {categoryId || (categoryIds && categoryIds.length > 0) ? `Sản phẩm theo danh mục` : 'Tất cả sản phẩm'}
               <span className="ml-3 text-sm px-3 py-1 bg-primary-soft text-primary rounded-full">{products.length} kết quả</span>
             </h2>
           </div>
@@ -60,6 +67,8 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
               ))}
             </div>
           )}
+          
+          <RecentlyViewedProducts />
         </div>
       </div>
     </div>

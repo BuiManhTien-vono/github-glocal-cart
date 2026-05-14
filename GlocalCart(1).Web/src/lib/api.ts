@@ -65,7 +65,7 @@ const handleResponse = async (res: Response) => {
 
 export const api = {
   products: {
-    getAll: async (search: string = '', categoryId?: number, sellerId?: number): Promise<Product[]> => {
+    getAll: async (search: string = '', categoryId?: number, sellerId?: number, categoryIds?: number[], minPrice?: number, maxPrice?: number): Promise<Product[]> => {
       let products = getLocalProducts();
 
       if (search) {
@@ -78,6 +78,18 @@ export const api = {
 
       if (categoryId) {
         products = products.filter(p => p.categoryId === categoryId);
+      }
+
+      if (categoryIds && categoryIds.length > 0) {
+        products = products.filter(p => categoryIds.includes(p.categoryId));
+      }
+
+      if (minPrice !== undefined) {
+        products = products.filter(p => p.price >= minPrice);
+      }
+
+      if (maxPrice !== undefined) {
+        products = products.filter(p => p.price <= maxPrice);
       }
 
       // If you still want to try fetching from API and only use local as fallback:

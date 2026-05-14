@@ -7,6 +7,7 @@ import AddToCartButton from '@/components/AddToCartButton';
 import ProductTabs from '@/components/ProductTabs';
 import FollowShopButton from '@/components/FollowShopButton';
 import ProductImageCarousel from '@/components/ProductImageCarousel';
+import RecentlyViewedTracker from '@/components/RecentlyViewedTracker';
 import { notFound } from 'next/navigation';
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,6 +28,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="bg-bg-main min-h-screen pb-20">
+      <RecentlyViewedTracker product={{
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        imageUrl: product.images?.[0]?.imageUrl ? getFileUrl(product.images[0].imageUrl) : ''
+      }} />
       <div className="container-fluid px-[5%] py-6">
         <BackButton />
       </div>
