@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
     Alert, TextInput,
@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
+import apiClient from '../../services/api/apiClient';
 
 const ICONS: (keyof typeof Ionicons.glyphMap)[] = [
     'phone-portrait-outline', 'laptop-outline', 'shirt-outline', 'woman-outline',
@@ -13,46 +14,40 @@ const ICONS: (keyof typeof Ionicons.glyphMap)[] = [
     'football-outline', 'musical-notes-outline', 'pizza-outline', 'paw-outline',
 ];
 
-const INITIAL_CATEGORIES = [
-    { id: 'sc1', name: 'Điện thoại & Phụ kiện', productCount: 45, icon: 'phone-portrait-outline' },
-    { id: 'sc2', name: 'Laptop & Máy tính', productCount: 32, icon: 'laptop-outline' },
-    { id: 'sc3', name: 'Thời trang Nam', productCount: 68, icon: 'shirt-outline' },
-    { id: 'sc4', name: 'Thời trang Nữ', productCount: 54, icon: 'woman-outline' },
-    { id: 'sc5', name: 'Đồ gia dụng', productCount: 27, icon: 'home-outline' },
-    { id: 'sc6', name: 'Sách & Văn phòng phẩm', productCount: 19, icon: 'book-outline' },
-    { id: 'sc7', name: 'Mỹ phẩm', productCount: 11, icon: 'color-palette-outline' },
-];
+// Categories will be loaded from API
 
 export default function SellerCategoriesScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
-    const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+    const [categories, setCategories] = useState<any[]>([]);
 
     const handleAdd = () => {
-        Alert.prompt(
-            'Thêm danh mục',
-            'Nhập tên danh mục mới:',
-            [
-                { text: 'Hủy', style: 'cancel' },
-                {
-                    text: 'Thêm',
-                    onPress: (name?: string) => {
-                        if (name && name.trim()) {
-                            const randomIcon = ICONS[Math.floor(Math.random() * ICONS.length)];
-                            setCategories(prev => [...prev, {
-                                id: `sc${Date.now()}`,
-                                name: name.trim(),
-                                productCount: 0,
-                                icon: randomIcon,
-                            }]);
-                        }
-                    },
-                },
-            ],
-            'plain-text'
-        );
-    };
+  // Placeholder for adding a new category.
+  // In production, this could navigate to a dedicated add screen or open a modal.
+};
 
-    // Fallback for Android (Alert.prompt is iOS only)
+
+    // Load categories from API
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const res = await apiClient.get('/categories');
+        const cats = Array.isArray(res) ? res : (res as any)?.data ?? [];
+        const flat: any[] = [];
+        const flatten = (list: any[], prefix = '') => {
+          list.forEach(c => {
+            flat.push({ ...c, name: prefix + c.name, icon: c.icon || 'list-outline' });
+            if (c.subCategories?.length) flatten(c.subCategories, prefix + '  ');
+          });
+        };
+        flatten(cats);
+        setCategories(flat);
+      } catch (e) {
+        console.warn('Failed to load categories', e);
+      }
+    };
+    loadCategories();
+  }, []);
+
     const handleAddAndroid = () => {
         Alert.alert(
             'Thêm danh mục mới',
@@ -78,22 +73,7 @@ export default function SellerCategoriesScreen({ navigation }: any) {
     const handleEdit = (id: string) => {
         const cat = categories.find(c => c.id === id);
         if (!cat) return;
-        Alert.alert(
-            'Sửa danh mục',
-            `Tên hiện tại: "${cat.name}"`,
-            [
-                { text: 'Hủy', style: 'cancel' },
-                {
-                    text: 'Đổi tên',
-                    onPress: () => {
-                        // On a real app this would open a modal with TextInput
-                        setCategories(prev => prev.map(c =>
-                            c.id === id ? { ...c, name: `${c.name} (đã sửa)` } : c
-                        ));
-                    },
-                },
-            ]
-        );
+        navigation.navigate('SellerEditCategory', { category: cat });
     };
 
     const handleDelete = (id: string) => {
@@ -121,7 +101,7 @@ export default function SellerCategoriesScreen({ navigation }: any) {
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Danh mục Shop</Text>
-                <TouchableOpacity onPress={handleAddAndroid}>
+                <TouchableOpacity onPress={() => navigation.navigate('SellerAddCategory')}>
                     <Ionicons name="add-circle" size={28} color={colors.primary} />
                 </TouchableOpacity>
             </View>

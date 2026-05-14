@@ -92,7 +92,7 @@ export default function SellerProductsScreen({ navigation }: any) {
                     </View>
                 </View>
                 <View style={styles.actionRow}>
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('SellerEditProduct', { product: item })}>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('SellerEditProduct', { productId: item.id, product: item })}>
                         <Text style={styles.actionBtnText}>Sửa</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.actionBtn}>

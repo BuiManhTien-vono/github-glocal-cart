@@ -89,7 +89,7 @@ export default function ProfileScreen({ navigation }: any) {
     { icon: 'card-outline', label: 'Thanh Toán', screen: 'PaymentMethods', color: colors.secondary, bg: '#EBF5FF' },
     { icon: 'lock-closed-outline', label: 'Đổi Mật Khẩu', screen: 'ChangePassword', color: colors.warning, bg: '#FFFBEB' },
     { icon: 'heart-outline', label: 'Yêu Thích', screen: 'Favourites', color: colors.danger, bg: '#FEF2F2' },
-    { icon: 'storefront-outline', label: user?.isSeller ? 'Kênh Người Bán' : 'Bán Hàng', action: 'seller', screen: user?.isSeller ? 'SellerDashboard' : 'ActivateSeller', color: colors.success, bg: '#ECFDF5' },
+    { icon: 'storefront-outline', label: user?.isSeller ? 'Kênh Người Bán' : 'Bán Hàng', action: 'seller', screen: user?.isSeller ? 'SellerShop' : 'ActivateSeller', color: colors.success, bg: '#ECFDF5' },
     { icon: 'chatbubble-ellipses-outline', label: 'Hỗ Trợ', color: '#8B5CF6', bg: '#F5F3FF' },
   ];
 
@@ -114,7 +114,7 @@ export default function ProfileScreen({ navigation }: any) {
           <View style={styles.headerBg2} />
 
           {/* Settings icon */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.settingsBtn}
             onPress={() => isLoggedIn ? navigation.navigate('AccountSettings') : setGuestMode(false)}
           >
@@ -162,7 +162,7 @@ export default function ProfileScreen({ navigation }: any) {
               </View>
               <View style={styles.guestInfo}>
                 <Text style={styles.guestWelcomeText}>Chào mừng bạn đến với GlocalCart!</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.guestLoginBtn}
                   onPress={() => setGuestMode(false)}
                 >
@@ -282,7 +282,7 @@ export default function ProfileScreen({ navigation }: any) {
 
 
 
-        
+
       </Animated.ScrollView>
 
     </View>
