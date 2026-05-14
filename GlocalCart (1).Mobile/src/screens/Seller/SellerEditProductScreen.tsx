@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
 
 const MAX_IMAGES = 5;
 
@@ -19,26 +20,27 @@ interface CategoryItem {
 }
 
 interface PickedImage {
-  uri: string;
+  uri: string; // URL dùng để hiển thị (absolute)
+  originalUrl?: string; // URL gốc từ server (thường là relative)
   fileName: string;
   mimeType: string;
-  isExisting?: boolean; // true nếu ảnh đã có trên server
+  isExisting?: boolean;
 }
 
 export default function SellerEditProductScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { product } = route.params || {};
+  const { productId, product: initialProduct } = route.params || {};
 
-  // Form state - pre-filled from product
-  const [name, setName] = useState(product?.name || '');
-  const [description, setDescription] = useState(product?.description || '');
-  const [price, setPrice] = useState(product?.price ? String(product.price) : '');
+  // Form state
+  const [name, setName] = useState(initialProduct?.name || '');
+  const [description, setDescription] = useState(initialProduct?.description || '');
+  const [price, setPrice] = useState(initialProduct?.price ? String(initialProduct.price) : '');
   const [stock, setStock] = useState(
-    product?.availableItemCount != null ? String(product.availableItemCount)
-    : product?.stock != null ? String(product.stock) : ''
+    initialProduct?.availableItemCount != null ? String(initialProduct.availableItemCount)
+      : initialProduct?.stock != null ? String(initialProduct.stock) : ''
   );
-  const [categoryId, setCategoryId] = useState<number | null>(product?.categoryId || null);
-  const [categoryName, setCategoryName] = useState(product?.categoryName || '');
+  const [categoryId, setCategoryId] = useState<number | null>(initialProduct?.categoryId || null);
+  const [categoryName, setCategoryName] = useState(initialProduct?.categoryName || '');
   const [images, setImages] = useState<PickedImage[]>([]);
 
   // UI state
@@ -50,31 +52,82 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
 
   useEffect(() => {
     loadCategories();
-    loadProductImages();
+    if (productId || initialProduct?.id) {
+        fetchProductData(productId || initialProduct.id);
+    }
   }, []);
 
-  const loadProductImages = () => {
-    if (!product) return;
-    // Load existing images from product data
-    const existingImages: PickedImage[] = [];
-    if (product.images && Array.isArray(product.images)) {
-      product.images.forEach((img: any) => {
-        existingImages.push({
-          uri: img.imageUrl || img.url || '',
-          fileName: `existing_${img.id || Date.now()}.webp`,
-          mimeType: 'image/webp',
-          isExisting: true,
-        });
-      });
-    } else if (product.mediaUrl) {
-      existingImages.push({
-        uri: product.mediaUrl,
-        fileName: 'existing_main.webp',
-        mimeType: 'image/webp',
-        isExisting: true,
-      });
+  const fetchProductData = async (id: number) => {
+    setLoadingProduct(true);
+    try {
+        const res = await apiClient.get(`/products/${id}`) as any;
+        if (res) {
+            setName(res.name || '');
+            setDescription(res.description || '');
+            setPrice(res.price != null ? String(res.price) : '');
+            setStock(res.availableItemCount != null ? String(res.availableItemCount) : '');
+            setCategoryId(res.categoryId || null);
+            setCategoryName(res.categoryName || '');
+            
+            // Sync images - Check all possible image fields from API
+            const existingImages: PickedImage[] = [];
+            
+            // 1. Check imageUrls (string array)
+            if (res.imageUrls && Array.isArray(res.imageUrls)) {
+                res.imageUrls.forEach((url: string, i: number) => {
+                    if (url && !url.includes('placeholder')) {
+                        const resolved = resolveProductImageUrl(url);
+                        if (resolved) {
+                            existingImages.push({
+                                uri: resolved,
+                                originalUrl: url,
+                                fileName: `existing_url_${i}.webp`,
+                                mimeType: 'image/webp',
+                                isExisting: true,
+                            });
+                        }
+                    }
+                });
+            }
+            
+            if (res.images && Array.isArray(res.images)) {
+                res.images.forEach((img: any, i: number) => {
+                    const url = img.imageUrl || img.url;
+                    if (url && !url.includes('placeholder')) {
+                        const resolved = resolveProductImageUrl(url);
+                        if (resolved && !existingImages.find(ei => ei.originalUrl === url)) {
+                            existingImages.push({
+                                uri: resolved,
+                                originalUrl: url,
+                                fileName: `existing_img_${img.id || i}.webp`,
+                                mimeType: 'image/webp',
+                                isExisting: true,
+                            });
+                        }
+                    }
+                });
+            }
+
+            if (existingImages.length === 0 && res.mediaUrl && !res.mediaUrl.includes('placeholder')) {
+                const resolved = resolveProductImageUrl(res.mediaUrl);
+                if (resolved) {
+                    existingImages.push({
+                        uri: resolved,
+                        originalUrl: res.mediaUrl,
+                        fileName: 'existing_main.webp',
+                        mimeType: 'image/webp',
+                        isExisting: true,
+                    });
+                }
+            }
+            setImages(existingImages);
+        }
+    } catch (err) {
+        console.warn('Fetch product error:', err);
+        Alert.alert('Lỗi', 'Không thể tải thông tin sản phẩm từ máy chủ.');
+    } finally {
+        setLoadingProduct(false);
     }
-    setImages(existingImages);
   };
 
   const loadCategories = async () => {
@@ -90,25 +143,9 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
       };
       flatten(cats);
       setCategories(flat);
-
-      // Set category name if we have categoryId but no categoryName
-      if (categoryId && !categoryName) {
-        const found = flat.find(c => c.id === categoryId);
-        if (found) setCategoryName(found.name.trim());
-      }
     } catch {
-      setCategories([
-        { id: 1, name: 'Điện tử' },
-        { id: 6, name: '  Điện thoại' },
-        { id: 7, name: '  Laptop' },
-        { id: 8, name: '  Phụ kiện điện tử' },
-        { id: 2, name: 'Thời trang' },
-        { id: 9, name: '  Áo' },
-        { id: 10, name: '  Quần' },
-        { id: 3, name: 'Gia dụng' },
-        { id: 4, name: 'Sách & Văn phòng phẩm' },
-        { id: 5, name: 'Sức khỏe & Làm đẹp' },
-      ]);
+      // Fallback categories if API fails
+      setCategories([{ id: 1, name: 'Điện tử' }, { id: 2, name: 'Thời trang' }]);
     }
   };
 
@@ -117,20 +154,17 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
       Alert.alert('Giới hạn', `Tối đa ${MAX_IMAGES} ảnh cho mỗi sản phẩm.`);
       return;
     }
-
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Quyền truy cập', 'Cần cấp quyền truy cập thư viện ảnh.');
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: MAX_IMAGES - images.length,
-      quality: 0.8,
+      quality: 0.7,
     });
-
     if (!result.canceled && result.assets) {
       const newImages: PickedImage[] = result.assets.map(a => ({
         uri: a.uri,
@@ -148,92 +182,93 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
 
   const uploadSingleImage = async (img: PickedImage): Promise<string> => {
     const formData = new FormData();
-    const fileObj: any = {
-      uri: img.uri,
-      name: img.fileName,
-      type: img.mimeType,
-    };
+    // React Native fetch FormData cần uri chuẩn trên iOS và Android
+    const formattedUri = Platform.OS === 'ios' ? img.uri.replace('file://', '') : img.uri;
+    const fileObj: any = { uri: formattedUri, name: img.fileName || 'upload.webp', type: img.mimeType || 'image/jpeg' };
+    
     formData.append('file', fileObj);
     formData.append('folderName', 'products');
-
-    const res = await apiClient.post('/upload', formData, {
-      timeout: 30000,
+    
+    const token = await require('../../utils/secureStore').getSecureItem('auth_token');
+    const response = await fetch(`${apiClient.defaults.baseURL}/upload`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
     });
-
-    const url = (res as any)?.url || (res as any)?.relativeUrl || (res as any)?.data?.url || '';
-    return url;
+    
+    if (!response.ok) {
+        const errText = await response.text();
+        console.error('[Upload Error]', response.status, errText);
+        throw new Error(`Upload failed (${response.status}): ${errText}`);
+    }
+    
+    const res = await response.json();
+    return res?.data?.relativeUrl || res?.data?.url || res?.relativeUrl || res?.url || '';
   };
 
   const validate = (): string | null => {
     if (!name.trim()) return 'Vui lòng nhập tên sản phẩm.';
-    if (!price.trim() || isNaN(Number(price)) || Number(price) <= 0)
-      return 'Vui lòng nhập giá hợp lệ.';
-    if (!stock.trim() || isNaN(Number(stock)) || Number(stock) < 0)
-      return 'Vui lòng nhập số lượng tồn kho.';
+    if (!price.trim() || isNaN(Number(price))) return 'Vui lòng nhập giá hợp lệ.';
+    if (!stock.trim() || isNaN(Number(stock))) return 'Vui lòng nhập số lượng tồn kho.';
     if (!categoryId) return 'Vui lòng chọn danh mục.';
     return null;
   };
 
   const handleSave = async () => {
     const error = validate();
-    if (error) {
-      Alert.alert('Thiếu thông tin', error);
-      return;
-    }
+    if (error) { Alert.alert('Thiếu thông tin', error); return; }
 
     setLoading(true);
     try {
-      // Upload ảnh mới qua /upload (ảnh cũ giữ nguyên URL)
       const newImages = images.filter(img => !img.isExisting);
-      const existingUrls = images.filter(img => img.isExisting).map(img => img.uri);
+      const existingPaths = images.filter(img => img.isExisting).map(img => img.originalUrl || img.uri);
       const uploadedUrls: string[] = [];
 
-      if (newImages.length > 0) {
-        for (let i = 0; i < newImages.length; i++) {
-          setUploadProgress(`Đang tải ảnh mới ${i + 1}/${newImages.length}...`);
-          const url = await uploadSingleImage(newImages[i]);
-          if (url) uploadedUrls.push(url);
-        }
+      for (let i = 0; i < newImages.length; i++) {
+        setUploadProgress(`Đang tải ảnh ${i + 1}/${newImages.length}...`);
+        const url = await uploadSingleImage(newImages[i]);
+        if (url) uploadedUrls.push(url);
       }
 
-      const allImageUrls = [...existingUrls, ...uploadedUrls];
+      const allImageUrls = [...existingPaths, ...uploadedUrls];
+      setUploadProgress('Đang lưu vào hệ thống...');
 
-      // Cập nhật thông tin sản phẩm qua PUT /api/products/{id}
-      setUploadProgress('Đang lưu thay đổi...');
       const dto: any = {
-        name: name.trim(),
-        description: description.trim() || null,
-        price: Number(price),
-        availableItemCount: Number(stock),
-        categoryId: categoryId,
-        mediaUrl: allImageUrls[0] || null,
-        imageUrls: allImageUrls,
+        Name: name.trim(),
+        Description: description.trim() || "",
+        Price: Number(price),
+        AvailableItemCount: Number(stock),
+        CategoryId: categoryId,
+        MediaUrl: allImageUrls.length > 0 ? allImageUrls[0] : "",
+        ImageUrls: allImageUrls.length > 0 ? allImageUrls : [],
       };
 
-      await apiClient.put(`/products/${product.id}`, dto, {
-        timeout: 30000,
-      });
-
-      Alert.alert('Thành công! ✅', 'Sản phẩm đã được cập nhật.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      const id = productId || initialProduct?.id;
+      await apiClient.put(`/products/${id}`, dto);
+      
+      Alert.alert('Thành công', 'Sản phẩm đã được lưu vào database.', [
+        { text: 'Xong', onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
-      console.log('[UpdateProduct Error]', err);
-      Alert.alert('Lỗi', err?.message || 'Không thể cập nhật sản phẩm. Thử lại sau.');
+      console.error('[UpdateProduct Error]', err);
+      Alert.alert('Lỗi', 'Không thể lưu thay đổi. Vui lòng kiểm tra kết nối.');
     } finally {
       setLoading(false);
       setUploadProgress('');
     }
   };
 
-  const formatPrice = (val: string) => {
-    const num = val.replace(/[^0-9]/g, '');
-    setPrice(num);
-  };
-
-  const displayPrice = price
-    ? Number(price).toLocaleString('vi-VN') + 'đ'
-    : '';
+  if (loadingProduct) {
+    return (
+        <View style={styles.loadingCenter}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={{ marginTop: 10, color: colors.textSecondary }}>Đang tải dữ liệu sản phẩm...</Text>
+        </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -245,345 +280,150 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
         <View style={{ width: 40 }} />
       </View>
 
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-        {/* ── Image Section ── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="images-outline" size={20} color={colors.primary} />
-            <Text style={styles.sectionTitle}>Ảnh sản phẩm</Text>
-            <Text style={styles.sectionBadge}>{images.length}/{MAX_IMAGES}</Text>
-          </View>
-          <Text style={styles.sectionHint}>Ảnh đầu tiên sẽ là ảnh bìa. Tối đa {MAX_IMAGES} ảnh.</Text>
-
-          <View style={styles.imageGrid}>
-            {images.map((img, index) => (
-              <View key={index} style={styles.imageItem}>
-                <Image source={{ uri: img.uri }} style={styles.imageThumb} />
-                {index === 0 && (
-                  <View style={styles.mainBadge}>
-                    <Text style={styles.mainBadgeText}>Bìa</Text>
-                  </View>
-                )}
-                {img.isExisting && (
-                  <View style={styles.existingBadge}>
-                    <Ionicons name="cloud-done" size={12} color={colors.white} />
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.removeBtn}
-                  onPress={() => removeImage(index)}
-                >
-                  <Ionicons name="close-circle" size={22} color={colors.danger} />
+          {/* Image Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="images-outline" size={20} color={colors.primary} />
+              <Text style={styles.sectionTitle}>Ảnh sản phẩm</Text>
+              <Text style={styles.sectionBadge}>{images.length}/{MAX_IMAGES}</Text>
+            </View>
+            <View style={styles.imageGrid}>
+              {images.map((img, index) => (
+                <View key={index} style={styles.imageItem}>
+                  <Image source={{ uri: img.uri }} style={styles.imageThumb} />
+                  <TouchableOpacity style={styles.removeBtn} onPress={() => removeImage(index)}>
+                    <Ionicons name="close-circle" size={22} color={colors.danger} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {images.length < MAX_IMAGES && (
+                <TouchableOpacity style={styles.addImageBtn} onPress={pickImages}>
+                  <Ionicons name="camera-outline" size={28} color={colors.primary} />
+                  <Text style={styles.addImageText}>Thêm ảnh</Text>
                 </TouchableOpacity>
-              </View>
-            ))}
-
-            {images.length < MAX_IMAGES && (
-              <TouchableOpacity style={styles.addImageBtn} onPress={pickImages}>
-                <Ionicons name="camera-outline" size={28} color={colors.primary} />
-                <Text style={styles.addImageText}>Thêm ảnh</Text>
-              </TouchableOpacity>
+              )}
+            </View>
+            {images.length === 0 && (
+                <View style={styles.emptyInfo}>
+                    <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                    <Text style={styles.emptyText}>Sản phẩm sẽ hiển thị với ảnh mặc định (placeholder).</Text>
+                </View>
             )}
           </View>
-        </View>
 
-        {/* ── Product Info ── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="cube-outline" size={20} color={colors.primary} />
-            <Text style={styles.sectionTitle}>Thông tin sản phẩm</Text>
+          {/* Product Info */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Tên sản phẩm *</Text>
+            <TextInput style={styles.input} placeholder="Tên sản phẩm..." value={name} onChangeText={setName} />
+            
+            <Text style={styles.label}>Mô tả</Text>
+            <TextInput 
+                style={[styles.input, styles.textArea]} 
+                placeholder="Nhập mô tả hoặc để trống để xóa..." 
+                value={description} 
+                onChangeText={setDescription} 
+                multiline
+            />
           </View>
 
-          <Text style={styles.label}>Tên sản phẩm <Text style={styles.required}>*</Text></Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Nhập tên sản phẩm (VD: MacBook Pro M2 2023)"
-            placeholderTextColor={colors.textMuted}
-            value={name}
-            onChangeText={setName}
-            maxLength={300}
-          />
-          <Text style={styles.charCount}>{name.length}/300</Text>
-
-          <Text style={styles.label}>Mô tả sản phẩm</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Mô tả chi tiết về sản phẩm, thông số kỹ thuật..."
-            placeholderTextColor={colors.textMuted}
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={4}
-            maxLength={2000}
-            textAlignVertical="top"
-          />
-          <Text style={styles.charCount}>{description.length}/2000</Text>
-        </View>
-
-        {/* ── Price & Stock ── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="pricetag-outline" size={20} color={colors.primary} />
-            <Text style={styles.sectionTitle}>Giá & Kho hàng</Text>
-          </View>
-
-          <View style={styles.row}>
-            <View style={styles.halfCol}>
-              <Text style={styles.label}>Giá bán <Text style={styles.required}>*</Text></Text>
-              <View style={styles.priceInputWrap}>
-                <TextInput
-                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  value={price}
-                  onChangeText={formatPrice}
-                  keyboardType="numeric"
-                />
-                <Text style={styles.currencyLabel}>VNĐ</Text>
+          {/* Price & Stock */}
+          <View style={styles.section}>
+            <View style={styles.row}>
+              <View style={styles.halfCol}>
+                <Text style={styles.label}>Giá bán *</Text>
+                <TextInput style={styles.input} placeholder="0" value={price} onChangeText={setPrice} keyboardType="numeric" />
               </View>
-              {displayPrice ? (
-                <Text style={styles.pricePreview}>{displayPrice}</Text>
-              ) : null}
-            </View>
-
-            <View style={styles.halfCol}>
-              <Text style={styles.label}>Tồn kho <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
-                placeholder="0"
-                placeholderTextColor={colors.textMuted}
-                value={stock}
-                onChangeText={t => setStock(t.replace(/[^0-9]/g, ''))}
-                keyboardType="numeric"
-              />
+              <View style={styles.halfCol}>
+                <Text style={styles.label}>Tồn kho *</Text>
+                <TextInput style={styles.input} placeholder="0" value={stock} onChangeText={setStock} keyboardType="numeric" />
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* ── Category ── */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="folder-outline" size={20} color={colors.primary} />
-            <Text style={styles.sectionTitle}>Danh mục</Text>
+          {/* Category */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Danh mục *</Text>
+            <TouchableOpacity style={styles.categoryPicker} onPress={() => setShowCategoryModal(true)}>
+              <Text style={[styles.categoryPickerText, !categoryId && { color: colors.textMuted }]}>
+                {categoryName || 'Chọn danh mục...'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
           </View>
 
-          <Text style={styles.label}>Danh mục sản phẩm <Text style={styles.required}>*</Text></Text>
-          <TouchableOpacity
-            style={styles.categoryPicker}
-            onPress={() => setShowCategoryModal(true)}
-          >
-            <Text style={[
-              styles.categoryPickerText,
-              !categoryId && { color: colors.textMuted },
-            ]}>
-              {categoryName || 'Chọn danh mục...'}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        <View style={styles.submitContainer}>
+          <TouchableOpacity style={[styles.submitBtn, loading && styles.submitBtnDisabled]} onPress={handleSave} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Lưu Database</Text>}
           </TouchableOpacity>
         </View>
+      </KeyboardAvoidingView>
 
-        {/* Spacer for submit button */}
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {/* ── Save Button ── */}
-      <View style={[styles.submitContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <TouchableOpacity
-          style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
-          onPress={handleSave}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          {loading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={colors.white} size="small" />
-              <Text style={styles.submitText}>{uploadProgress || 'Đang xử lý...'}</Text>
-            </View>
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle-outline" size={22} color={colors.white} />
-              <Text style={styles.submitText}>Lưu Thay Đổi</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* ── Category Modal ── */}
+      {/* Category Modal */}
       <Modal visible={showCategoryModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Chọn danh mục</Text>
-              <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowCategoryModal(false)}><Ionicons name="close" size={24} /></TouchableOpacity>
             </View>
             <FlatList
               data={categories}
               keyExtractor={item => String(item.id)}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[
-                    styles.catItem,
-                    categoryId === item.id && styles.catItemActive,
-                  ]}
-                  onPress={() => {
-                    setCategoryId(item.id);
-                    setCategoryName(item.name.trim());
-                    setShowCategoryModal(false);
-                  }}
+                  style={styles.catItem}
+                  onPress={() => { setCategoryId(item.id); setCategoryName(item.name.trim()); setShowCategoryModal(false); }}
                 >
-                  <Text style={[
-                    styles.catItemText,
-                    categoryId === item.id && styles.catItemTextActive,
-                  ]}>
-                    {item.name}
-                  </Text>
-                  {categoryId === item.id && (
-                    <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                  )}
+                  <Text>{item.name}</Text>
                 </TouchableOpacity>
               )}
             />
           </View>
         </View>
       </Modal>
-      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md, paddingVertical: 12,
-    backgroundColor: colors.white, ...shadow.sm,
-  },
-  backBtn: { padding: 8, marginLeft: -8 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: 12, backgroundColor: colors.white, ...shadow.sm },
+  backBtn: { padding: 8 },
+  headerTitle: { fontSize: 18, fontWeight: '700' },
   scrollContent: { padding: 16 },
-
-  // Edit banner
-  editBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: colors.primaryBg, paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: colors.primary + '20',
-  },
-  editBannerText: { fontSize: 13, color: colors.primary, flex: 1 },
-
-  // Sections
-  section: {
-    backgroundColor: colors.white, borderRadius: borderRadius.md,
-    padding: 16, marginBottom: 12, ...shadow.sm,
-  },
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'center', marginBottom: 12,
-    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderLight,
-  },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginLeft: 8, flex: 1 },
-  sectionBadge: {
-    backgroundColor: colors.primary + '15', paddingHorizontal: 10, paddingVertical: 3,
-    borderRadius: 12, fontSize: 12, fontWeight: '600', color: colors.primary,
-    overflow: 'hidden',
-  },
-  sectionHint: { fontSize: 12, color: colors.textMuted, marginBottom: 12 },
-
-  // Images
+  section: { backgroundColor: colors.white, borderRadius: borderRadius.md, padding: 16, marginBottom: 12, ...shadow.sm },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 8, flex: 1 },
+  sectionBadge: { backgroundColor: colors.primaryBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, fontSize: 11, color: colors.primary },
   imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  imageItem: { width: 90, height: 90, borderRadius: 10, overflow: 'hidden', position: 'relative' },
-  imageThumb: { width: '100%', height: '100%', borderRadius: 10 },
-  mainBadge: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: colors.primary, paddingVertical: 2, alignItems: 'center',
-  },
-  mainBadgeText: { color: colors.white, fontSize: 10, fontWeight: '700' },
-  existingBadge: {
-    position: 'absolute', top: 4, left: 4, backgroundColor: colors.success,
-    borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center',
-  },
-  removeBtn: {
-    position: 'absolute', top: -2, right: -2, backgroundColor: colors.white,
-    borderRadius: 11, width: 22, height: 22, alignItems: 'center', justifyContent: 'center',
-  },
-  addImageBtn: {
-    width: 90, height: 90, borderRadius: 10, borderWidth: 1.5,
-    borderColor: colors.primary + '40', borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryBg,
-  },
-  addImageText: { fontSize: 11, color: colors.primary, fontWeight: '600', marginTop: 4 },
-
-  // Form
-  label: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 6 },
-  required: { color: colors.danger },
-  input: {
-    backgroundColor: colors.background, borderRadius: borderRadius.sm,
-    paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
-    color: colors.text, marginBottom: 8, borderWidth: 1, borderColor: colors.borderLight,
-  },
+  imageItem: { width: 80, height: 80, borderRadius: 8, overflow: 'hidden', position: 'relative' },
+  imageThumb: { width: '100%', height: '100%' },
+  removeBtn: { position: 'absolute', top: -2, right: -2 },
+  addImageBtn: { width: 80, height: 80, borderRadius: 8, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  addImageText: { fontSize: 10, color: colors.primary, marginTop: 4 },
+  emptyInfo: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 6 },
+  emptyText: { fontSize: 12, color: colors.warning, fontStyle: 'italic' },
+  label: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  input: { backgroundColor: colors.background, borderRadius: borderRadius.sm, padding: 12, fontSize: 15, marginBottom: 12, borderWidth: 1, borderColor: colors.borderLight },
   textArea: { height: 100, textAlignVertical: 'top' },
-  charCount: { fontSize: 11, color: colors.textMuted, textAlign: 'right', marginTop: -4, marginBottom: 8 },
-
-  // Price
   row: { flexDirection: 'row', gap: 12 },
   halfCol: { flex: 1 },
-  priceInputWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  currencyLabel: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
-  pricePreview: { fontSize: 12, color: colors.primary, fontWeight: '600', marginTop: 4 },
-
-  // Category picker
-  categoryPicker: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.background, borderRadius: borderRadius.sm,
-    paddingHorizontal: 14, paddingVertical: 14, borderWidth: 1, borderColor: colors.borderLight,
-  },
-  categoryPickerText: { fontSize: 15, color: colors.text, flex: 1 },
-
-  // Submit
-  submitContainer: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: colors.white, paddingHorizontal: 16, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: colors.borderLight, ...shadow.md,
-  },
-  submitBtn: {
-    backgroundColor: colors.success, borderRadius: borderRadius.md,
-    paddingVertical: 16, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 8,
-  },
-  submitBtnDisabled: { backgroundColor: colors.disabled },
-  submitText: { color: colors.white, fontSize: 16, fontWeight: '700' },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-
-  // Modal
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    maxHeight: '60%', paddingTop: 8,
-  },
-  modalHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: colors.borderLight,
-  },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
-  catItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: colors.borderLight,
-  },
-  catItemActive: { backgroundColor: colors.primaryBg },
-  catItemText: { fontSize: 15, color: colors.text },
-  catItemTextActive: { color: colors.primary, fontWeight: '600' },
+  categoryPicker: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.background, borderRadius: borderRadius.sm, padding: 14, borderWidth: 1, borderColor: colors.borderLight },
+  categoryPickerText: { fontSize: 15 },
+  submitContainer: { padding: 16, backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: colors.borderLight },
+  submitBtn: { backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: 14, alignItems: 'center' },
+  submitBtnDisabled: { opacity: 0.6 },
+  submitText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  loadingCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '60%' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+  modalTitle: { fontSize: 17, fontWeight: '700' },
+  catItem: { padding: 16, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
 });

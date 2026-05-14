@@ -99,6 +99,8 @@ namespace GlocalCart.API.DTOs.Products
 
         [MaxLength(500)]
         public string? MediaUrl { get; set; }
+
+        public List<string>? ImageUrls { get; set; }
     }
 
     public class UpdateStockDto

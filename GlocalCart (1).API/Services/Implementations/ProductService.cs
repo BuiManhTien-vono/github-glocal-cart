@@ -182,7 +182,9 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<ProductResponseDto> UpdateProductAsync(int sellerId, int productId, UpdateProductDto dto)
         {
-            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId && p.SellerId == sellerId)
+            var product = await _db.Products
+                .Include(p => p.Images)
+                .FirstOrDefaultAsync(p => p.Id == productId && p.SellerId == sellerId)
                 ?? throw new KeyNotFoundException("Không tìm thấy sản phẩm hoặc bạn không có quyền.");
 
             if (dto.Name != null) product.Name = dto.Name;
@@ -192,6 +194,53 @@ namespace GlocalCart.API.Services.Implementations
             if (dto.CategoryId.HasValue) product.CategoryId = dto.CategoryId.Value;
             if (dto.MediaUrl != null) product.MediaUrl = dto.MediaUrl;
             product.UpdatedAt = DateTime.UtcNow;
+
+            // Đồng bộ danh sách ảnh
+            if (dto.ImageUrls != null)
+            {
+                // 1. Xóa những ảnh cũ không còn nằm trong danh sách mới
+                var imagesToRemove = product.Images
+                    .Where(img => !dto.ImageUrls.Contains(img.ImageUrl))
+                    .ToList();
+                
+                foreach (var img in imagesToRemove)
+                {
+                    _db.ProductImages.Remove(img);
+                }
+
+                // 2. Thêm những ảnh mới hoặc cập nhật thứ tự hiển thị
+                for (int i = 0; i < dto.ImageUrls.Count; i++)
+                {
+                    var url = dto.ImageUrls[i];
+                    var existingImg = product.Images.FirstOrDefault(img => img.ImageUrl == url);
+
+                    if (existingImg != null)
+                    {
+                        existingImg.DisplayOrder = i;
+                        existingImg.IsMain = i == 0;
+                    }
+                    else
+                    {
+                        _db.ProductImages.Add(new ProductImage
+                        {
+                            ProductId = product.Id,
+                            ImageUrl = url,
+                            DisplayOrder = i,
+                            IsMain = i == 0
+                        });
+                    }
+                }
+
+                // Tự động cập nhật MediaUrl là ảnh đầu tiên nếu có thay đổi
+                if (dto.ImageUrls.Any())
+                {
+                    product.MediaUrl = dto.ImageUrls[0];
+                }
+                else
+                {
+                    product.MediaUrl = null;
+                }
+            }
 
             await _db.SaveChangesAsync();
             return await GetProductByIdAsync(product.Id);
