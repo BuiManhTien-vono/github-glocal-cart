@@ -63,6 +63,14 @@ import ChatDetailScreen from '../screens/Shop/ChatDetailScreen';
 import ReportProductScreen from '../screens/Shop/ReportProductScreen';
 import OrderTrackingScreen from '../screens/Shop/OrderTrackingScreen';
 
+// Shipper Screens
+import ShipperAvailableScreen from '../screens/Shipper/ShipperAvailableScreen';
+import ShipperDeliveringScreen from '../screens/Shipper/ShipperDeliveringScreen';
+import ShipperShipmentDetailScreen from '../screens/Shipper/ShipperShipmentDetailScreen';
+import ShipperProfileScreen from '../screens/Shipper/ShipperProfileScreen';
+import ShipperCompletedScreen from '../screens/Shipper/ShipperCompletedScreen';
+import ShipperChangePasswordScreen from '../screens/Shipper/ShipperChangePasswordScreen';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── Stacks ───
@@ -167,6 +175,59 @@ function MainTabs() {
   );
 }
 
+// ─── Shipper Tabs ───
+function ShipperTabs() {
+  const insets = useSafeAreaInsets();
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: {
+          height: 70 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 5 : 12,
+          paddingTop: 10,
+          borderTopWidth: 1,
+          borderTopColor: colors.borderLight,
+          backgroundColor: '#FFF',
+          elevation: 25,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.2,
+          shadowRadius: 6,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarIcon: ({ focused, color }) => {
+          let iconName: keyof typeof Ionicons.glyphMap = 'cube';
+          if (route.name === 'Available') iconName = focused ? 'cube' : 'cube-outline';
+          else if (route.name === 'Delivering') iconName = focused ? 'bicycle' : 'bicycle-outline';
+          else if (route.name === 'Completed') iconName = focused ? 'checkmark-done-circle' : 'checkmark-done-circle-outline';
+          else if (route.name === 'ShipperProfile') iconName = focused ? 'person' : 'person-outline';
+          return <Ionicons name={iconName} size={22} color={color} />;
+        },
+        tabBarHideOnKeyboard: true,
+      })}
+    >
+      <Tab.Screen name="Available" component={ShipperAvailableScreen} options={{ tabBarLabel: 'Chờ nhận' }} />
+      <Tab.Screen name="Delivering" component={ShipperDeliveringScreen} options={{ tabBarLabel: 'Đang giao' }} />
+      <Tab.Screen name="Completed" component={ShipperCompletedScreen} options={{ tabBarLabel: 'Đã giao' }} />
+      <Tab.Screen name="ShipperProfile" component={ShipperProfileScreen} options={{ tabBarLabel: 'Tài khoản' }} />
+    </Tab.Navigator>
+  );
+}
+
+// ─── Shipper Stack ───
+function ShipperStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ShipperTabs" component={ShipperTabs} />
+      <Stack.Screen name="ShipperShipmentDetail" component={ShipperShipmentDetailScreen} />
+      <Stack.Screen name="ShipperChangePassword" component={ShipperChangePasswordScreen} />
+    </Stack.Navigator>
+  );
+}
+
 // ─── Shared Screens Stack (dùng chung cho logged-in và guest) ───
 function AppStack() {
   return (
@@ -193,12 +254,15 @@ function AppStack() {
 
 // ─── Root Navigator ───
 export default function AppNavigator() {
-  const { isLoggedIn, isGuestMode, isLoading } = useAuth();
+  const { isLoggedIn, isGuestMode, isLoading, user } = useAuth();
 
   if (isLoading) return <Loading message="Đang khởi tạo..." />;
 
   // Cả logged-in và guest đều dùng AppStack (kiểm tra quyền trong từng màn hình)
   if (isLoggedIn || isGuestMode) {
+    if (user?.role === 'Shipper') {
+      return <ShipperStack />;
+    }
     return <AppStack />;
   }
 

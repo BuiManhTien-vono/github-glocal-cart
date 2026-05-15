@@ -6,23 +6,7 @@ import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { resolveProductImageUrl } from '../../utils/imageUtils';
 
-// Mock data fallback
-const MOCK_ORDERS = [
-  {
-    id: 'mock1', orderNumber: 'GLC240516001', status: 0,
-    totalAmount: 320000, createdAt: '2026-05-16T09:00:00Z',
-    orderItems: [
-      { productId: 1, productName: 'Áo thun nam basic', productImage: null, quantity: 2, price: 159000 },
-    ],
-  },
-  {
-    id: 'mock2', orderNumber: 'GLC240514002', status: 2,
-    totalAmount: 85000, createdAt: '2026-05-14T14:00:00Z',
-    orderItems: [
-      { productId: 2, productName: 'Cốc sứ in hình', productImage: null, quantity: 1, price: 85000 },
-    ],
-  },
-];
+// Xóa mock data cứng, nếu rỗng thì mảng rỗng
 
 export default function MyOrdersScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -51,43 +35,44 @@ export default function MyOrdersScreen({ route, navigation }: any) {
 
   const fetchOrders = async () => {
     try {
-      const data: any = await apiClient.get('/orders/my');
-      const apiOrders = data || [];
-      // Nếu API trả về empty, dùng mock
-      setOrders(apiOrders.length > 0 ? apiOrders : MOCK_ORDERS);
-    } catch {
-      setOrders(MOCK_ORDERS);
+      const response: any = await apiClient.get('/orders');
+      // Dữ liệu trả về có thể nằm trong response.items (PagedResult)
+      const apiOrders = response?.items || response || [];
+      setOrders(apiOrders);
+    } catch (e) {
+      console.log('Lấy đơn hàng thất bại', e);
+      setOrders([]);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
     }
   };
 
-  const getStatusText = (status: number) => {
+  const getStatusText = (status: string) => {
     switch (status) {
-      case 0: return 'Chờ xác nhận';
-      case 1: return 'Đang chuẩn bị';
-      case 2: return 'Đang giao';
-      case 3: return 'Đã giao';
-      case 4: return 'Đã hủy';
+      case 'Pending': return 'Chờ xác nhận';
+      case 'Unshipped': return 'Đang chuẩn bị';
+      case 'Shipped': return 'Đang giao';
+      case 'Complete': return 'Đã giao';
+      case 'Canceled': return 'Đã hủy';
       default: return 'Khác';
     }
   };
 
-  const getStatusColor = (status: number) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case 0: return colors.warning;
-      case 1: return colors.info;
-      case 2: return colors.secondary;
-      case 3: return colors.success;
-      case 4: return colors.danger;
+      case 'Pending': return colors.warning;
+      case 'Unshipped': return colors.info;
+      case 'Shipped': return colors.secondary;
+      case 'Complete': return colors.success;
+      case 'Canceled': return colors.danger;
       default: return colors.text;
     }
   };
 
   const filteredOrders = orders.filter(o => {
     if (activeTab === 'Tất cả') return true;
-    if (activeTab === 'Đánh giá') return o.status === 3;
+    if (activeTab === 'Đánh giá') return o.status === 'Complete';
     return getStatusText(o.status) === activeTab;
   });
 
@@ -141,13 +126,13 @@ export default function MyOrdersScreen({ route, navigation }: any) {
         </View>
 
         <View style={st.orderActions}>
-          {item.status === 3 && (
+          {item.status === 'Complete' && (
             <TouchableOpacity style={[st.actionBtn, st.primaryBtn]}
               onPress={() => navigation.navigate('WriteReview', { productId: firstItem?.productId, orderId: item.id })}>
               <Text style={st.primaryBtnText}>Đánh Giá</Text>
             </TouchableOpacity>
           )}
-          {item.status === 2 && (
+          {item.status === 'Shipped' && (
             <TouchableOpacity style={[st.actionBtn, st.primaryBtn]}
               onPress={() => navigation.navigate('OrderTracking', { notification: { title: 'Đang giao hàng', orderId: item.orderNumber } })}>
               <Text style={st.primaryBtnText}>Theo dõi Đơn</Text>
