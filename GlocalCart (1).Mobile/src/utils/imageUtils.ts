@@ -1,11 +1,12 @@
 import { Platform } from 'react-native';
+import { BASE_URL } from '../services/api/config';
 
 /**
  * Base URL của API server (không có /api ở cuối)
  */
-const API_BASE = Platform.OS === 'web'
-  ? 'http://localhost:5100'
-  : 'http://10.117.243.62:5100';
+const API_BASE = BASE_URL.endsWith('/api') 
+  ? BASE_URL.replace('/api', '') 
+  : BASE_URL;
 
 /**
  * Resolve ảnh sản phẩm thành URL đầy đủ có thể hiển thị.

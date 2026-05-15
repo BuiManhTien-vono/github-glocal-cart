@@ -21,9 +21,10 @@ import PaymentMethodsScreen from '../screens/Profile/PaymentMethodsScreen';
 import MyOrdersScreen from '../screens/Profile/MyOrdersScreen';
 import OrderDetailScreen from '../screens/Profile/OrderDetailScreen';
 import ShipmentTrackingScreen from '../screens/Profile/ShipmentTrackingScreen';
-import FavoritesScreen from '../screens/Profile/FavouritesScreen';
+import FavoritesScreen from '../screens/Profile/FavoritesScreen';
 import AccountSettingsScreen from '../screens/Profile/AccountSettingsScreen';
-
+import EditProfileScreen from '../screens/Profile/EditProfileScreen';
+import { FollowedShopsScreen } from '../screens/Profile/FollowShops';
 
 // Seller Screens
 import SellerProductScreen from '../screens/Seller/SellerProductScreen';
@@ -44,10 +45,7 @@ import AdminCategoriesScreen from '../screens/Admin/AdminCategoriesScreen';
 import AdminUsersScreen from '../screens/Admin/AdminUsersScreen';
 import AdminProductsScreen from '../screens/Admin/AdminProductsScreen';
 
-// ─── Placeholder screens (sẽ do FE2 & FE3 hoàn thiện) ───
-import { View, Text, StyleSheet } from 'react-native';
-
-// ─── Shop Screens ───
+// Shop Screens
 import HomeScreen from '../screens/Shop/HomeScreen';
 import CategoryScreen from '../screens/Shop/CategoryScreen';
 import ProductDetailScreen from '../screens/Shop/ProductDetailScreen';
@@ -58,13 +56,20 @@ import WriteReviewScreen from '../screens/Shop/WriteReviewScreen';
 import NotificationsScreen from '../screens/Shop/NotificationsScreen';
 import ShopScreen from '../screens/Shop/ShopScreen';
 import ShopDetailScreen from '../screens/Shop/ShopDetailScreen';
+import NotificationDetailScreen from '../screens/Shop/NotificationDetailScreen';
+import { NotificationContentScreen } from '../screens/Shop/NotifContent';
+import ChatListScreen from '../screens/Shop/ChatListScreen';
+import ChatDetailScreen from '../screens/Shop/ChatDetailScreen';
+import ReportProductScreen from '../screens/Shop/ReportProductScreen';
+import OrderTrackingScreen from '../screens/Shop/OrderTrackingScreen';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── Stacks ───
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Shop Stack (Home -> Category -> ProductDetail)
+// Home Stack
 function HomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -73,7 +78,7 @@ function HomeStack() {
   );
 }
 
-// Auth Stack (khi chưa đăng nhập) — bao gồm Splash + Onboarding
+// Auth Stack
 function AuthStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -86,15 +91,18 @@ function AuthStack() {
   );
 }
 
-// Profile Stack — bao gồm Admin sub-screens
+// Profile Stack
 function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
       <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Favorites" component={FavoritesScreen} />
+      <Stack.Screen name="FollowedShops" component={FollowedShopsScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
+      <Stack.Screen name="Addresses" component={AddressesScreen} />
       <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
       <Stack.Screen name="AdminCategories" component={AdminCategoriesScreen} />
       <Stack.Screen name="AdminUsers" component={AdminUsersScreen} />
@@ -117,7 +125,7 @@ function ProfileStack() {
   );
 }
 
-// Main Bottom Tabs (khi đã đăng nhập)
+// ─── Main Bottom Tabs (dùng cho cả logged-in và guest) ───
 function MainTabs() {
   const insets = useSafeAreaInsets();
   return (
@@ -140,7 +148,7 @@ function MainTabs() {
           shadowRadius: 6,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
           if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
           else if (route.name === 'Cart') iconName = focused ? 'cart' : 'cart-outline';
@@ -159,32 +167,45 @@ function MainTabs() {
   );
 }
 
+// ─── Shared Screens Stack (dùng chung cho logged-in và guest) ───
+function AppStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+      <Stack.Screen name="Category" component={CategoryScreen} />
+      <Stack.Screen name="Search" component={SearchScreen} />
+      <Stack.Screen name="Cart" component={CartScreen} />
+      <Stack.Screen name="Checkout" component={CheckoutScreen} />
+      <Stack.Screen name="Addresses" component={AddressesScreen} />
+      <Stack.Screen name="WriteReview" component={WriteReviewScreen} />
+      <Stack.Screen name="ShopView" component={ShopScreen} />
+      <Stack.Screen name="ShopDetail" component={ShopDetailScreen} />
+      <Stack.Screen name="ChatList" component={ChatListScreen} />
+      <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+      <Stack.Screen name="ReportProduct" component={ReportProductScreen} />
+      <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
+      <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
+      <Stack.Screen name="NotificationContent" component={NotificationContentScreen} />
+    </Stack.Navigator>
+  );
+}
+
 // ─── Root Navigator ───
 export default function AppNavigator() {
-  const { isLoggedIn, isLoading } = useAuth();
+  const { isLoggedIn, isGuestMode, isLoading } = useAuth();
 
   if (isLoading) return <Loading message="Đang khởi tạo..." />;
 
+  // Cả logged-in và guest đều dùng AppStack (kiểm tra quyền trong từng màn hình)
+  if (isLoggedIn || isGuestMode) {
+    return <AppStack />;
+  }
+
+  // Chưa đăng nhập và chưa chọn guest → AuthStack
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {isLoggedIn ? (
-        <>
-          <Stack.Screen name="MainTabs" component={MainTabs} />
-          {/* Shared screens — bottom tabs will be hidden when navigating here */}
-          <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
-          <Stack.Screen name="Category" component={CategoryScreen} />
-          <Stack.Screen name="Search" component={SearchScreen} />
-          <Stack.Screen name="Cart" component={CartScreen} />
-          <Stack.Screen name="Checkout" component={CheckoutScreen} />
-          <Stack.Screen name="Addresses" component={AddressesScreen} />
-          <Stack.Screen name="WriteReview" component={WriteReviewScreen} />
-          <Stack.Screen name="Notifications" component={NotificationsScreen} />
-          <Stack.Screen name="ShopView" component={ShopScreen} />
-          <Stack.Screen name="ShopDetail" component={ShopDetailScreen} />
-        </>
-      ) : (
-        <Stack.Screen name="Auth" component={AuthStack} />
-      )}
+      <Stack.Screen name="Auth" component={AuthStack} />
     </Stack.Navigator>
   );
 }

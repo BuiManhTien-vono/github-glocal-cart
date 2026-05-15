@@ -83,14 +83,12 @@ export default function ProfileScreen({ navigation }: any) {
     { icon: 'star-outline', label: 'Đánh giá', color: colors.warning },
   ];
 
-  // Utilities grid
+  // Utilities grid – chỉ giữ 4 mục cốt lõi
   const utilityItems = [
-    { icon: 'location-outline', label: 'Sổ Địa Chỉ', screen: 'Addresses', color: colors.primary, bg: colors.primaryBg },
-    { icon: 'card-outline', label: 'Thanh Toán', screen: 'PaymentMethods', color: colors.secondary, bg: '#EBF5FF' },
-    { icon: 'lock-closed-outline', label: 'Đổi Mật Khẩu', screen: 'ChangePassword', color: colors.warning, bg: '#FFFBEB' },
-    { icon: 'heart-outline', label: 'Yêu Thích', screen: 'Favourites', color: colors.danger, bg: '#FEF2F2' },
-    { icon: 'storefront-outline', label: user?.isSeller ? 'Kênh Người Bán' : 'Bán Hàng', action: 'seller', screen: user?.isSeller ? 'SellerShop' : 'ActivateSeller', color: colors.success, bg: '#ECFDF5' },
-    { icon: 'chatbubble-ellipses-outline', label: 'Hỗ Trợ', color: '#8B5CF6', bg: '#F5F3FF' },
+    { icon: 'heart-outline', label: 'Yêu Thích', screen: 'Favorites', color: colors.danger, bg: '#FEF2F2', requireAuth: true },
+    { icon: 'storefront-outline', label: 'Theo Dõi Shop', screen: 'FollowedShops', color: colors.warning, bg: '#FFFBEB', requireAuth: true },
+    { icon: 'briefcase-outline', label: user?.isSeller ? 'Kênh Người Bán' : 'Bán Hàng', action: 'seller', screen: user?.isSeller ? 'SellerShop' : 'ActivateSeller', color: colors.success, bg: '#ECFDF5', requireAuth: true },
+    { icon: 'chatbubble-ellipses-outline', label: 'Hỗ Trợ', screen: 'ChatList', color: '#8B5CF6', bg: '#F5F3FF', requireAuth: true },
   ];
 
   // Admin menu
@@ -116,7 +114,17 @@ export default function ProfileScreen({ navigation }: any) {
           {/* Settings icon */}
           <TouchableOpacity
             style={styles.settingsBtn}
-            onPress={() => isLoggedIn ? navigation.navigate('AccountSettings') : setGuestMode(false)}
+            onPress={() => {
+              if (isLoggedIn) {
+                navigation.navigate('AccountSettings');
+              } else {
+                // Khi là khách: hiện phiên bản app
+                Alert.alert('GlocalCart v1.0.0', 'Phiên bản ứng dụng: 1.0.0\n\nĐăng nhập để truy cập đầy đủ tính năng.', [
+                  { text: 'Để sau', style: 'cancel' },
+                  { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+                ]);
+              }
+            }}
           >
             <Ionicons name="settings-outline" size={24} color="#FFF" />
           </TouchableOpacity>
@@ -188,14 +196,39 @@ export default function ProfileScreen({ navigation }: any) {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Đơn Mua</Text>
-            <TouchableOpacity style={styles.viewAllBtn} onPress={() => navigation.navigate('MyOrders', { activeTab: 'Tất cả' })}>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => {
+                if (!isLoggedIn) {
+                  Alert.alert(
+                    'Yêu cầu đăng nhập',
+                    'Vui lòng đăng nhập để xem lịch sử mua hàng.',
+                    [
+                      { text: 'Để sau', style: 'cancel' },
+                      { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+                    ]
+                  );
+                  return;
+                }
+                navigation.navigate('MyOrders', { activeTab: 'Tất cả' });
+              }}
+            >
               <Text style={styles.viewAllText}>Xem lịch sử mua hàng</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
           <View style={styles.orderStatusRow}>
             {orderStatusItems.map((item, i) => (
-              <TouchableOpacity key={i} style={styles.orderStatusItem} onPress={() => navigation.navigate('MyOrders', { activeTab: item.label })}>
+              <TouchableOpacity key={i} style={styles.orderStatusItem} onPress={() => {
+                if (!isLoggedIn) {
+                  Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để xem đơn hàng.', [
+                    { text: 'Để sau', style: 'cancel' },
+                    { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+                  ]);
+                  return;
+                }
+                navigation.navigate('MyOrders', { activeTab: item.label });
+              }}>
                 <View style={[styles.orderStatusIcon, { backgroundColor: item.color + '12' }]}>
                   <Ionicons name={item.icon as any} size={24} color={item.color} />
                 </View>
@@ -215,6 +248,18 @@ export default function ProfileScreen({ navigation }: any) {
                 style={styles.utilityItem}
                 activeOpacity={0.6}
                 onPress={() => {
+                  // Kiểm tra nếu cần đăng nhập và đang ở guest mode
+                  if (item.requireAuth && !isLoggedIn) {
+                    Alert.alert(
+                      'Yêu cầu đăng nhập',
+                      'Bạn cần đăng nhập để sử dụng tính năng này.',
+                      [
+                        { text: 'Để sau', style: 'cancel' },
+                        { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+                      ]
+                    );
+                    return;
+                  }
                   if (item.action === 'seller' && !user?.isSeller) handleActivateSeller();
                   else if (item.screen) navigation.navigate(item.screen);
                 }}
@@ -227,6 +272,7 @@ export default function ProfileScreen({ navigation }: any) {
             ))}
           </View>
         </View>
+
 
         {/* ===== ADMIN SECTION ===== */}
         {adminItems.length > 0 && (

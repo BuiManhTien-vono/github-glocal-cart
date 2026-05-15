@@ -1,303 +1,323 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ScrollView, Image, Platform, Alert } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ScrollView,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, shadow } from '../../theme/colors';
+import { colors } from '../../theme/colors';
 import { useCartStore } from '../../store/useCartStore';
 import { useChatStore } from '../../store/useChatStore';
-
 import { useAuth } from '../../context/AuthContext';
+import { CartBadge } from '../../components/common/CartBadge';
+import { ChatBadge } from '../../components/common/ChatBadge';
+
+// ─── Mock Data ───
+const ORDER_UPDATES = [
+  {
+    id: 'ord1',
+    title: 'Giao kiện hàng thành công',
+    body: 'Kiện hàng SPXVN060869737914 của đơn hàng #26041618Q1RX22 đã giao thành công đến bạn.',
+    time: '15:31 14-05-26',
+    productImage: null, // có thể truyền URL ảnh sản phẩm
+    isRead: false,
+    isOrder: true,
+    orderId: '26041618Q1RX22',
+    history: [
+      { title: 'Giao kiện hàng thành công', body: 'Đã xác nhận nhận hàng.', time: '15:31 14-05-26' },
+      { title: 'Đang giao hàng', body: 'Đơn hàng đang trong quá trình vận chuyển.', time: '08:15 14-05-26' },
+      { title: 'Đang vận chuyển', body: 'Đơn hàng đã rời kho phân loại.', time: '08:28 13-05-26' },
+    ],
+  },
+  {
+    id: 'ord2',
+    title: 'Đơn hàng đang được giao',
+    body: 'Đơn hàng #26041618ABCD đang trên đường giao đến bạn. Dự kiến giao ngày mai.',
+    time: '08:00 14-05-26',
+    productImage: null,
+    isRead: true,
+    isOrder: true,
+    orderId: '26041618ABCD',
+    history: [
+      { title: 'Đang giao hàng', body: 'Nhân viên giao hàng đang trên đường đến.', time: '08:00 14-05-26' },
+      { title: 'Người bán đã xác nhận', body: 'Người bán đã xác nhận và chuẩn bị gói hàng.', time: '19:00 13-05-26' },
+    ],
+  },
+];
+
+const HIGHLIGHT_NOTIFICATIONS = [
+  {
+    id: 'hl1', title: 'Hoàn tiền thành công',
+    body: 'Bạn vừa được hoàn 25.000đ vào ví Glocal từ đơn hàng #260416.',
+    time: '11:20 14-05-26',
+    image: 'https://cdn-icons-png.flaticon.com/512/2489/2489756.png',
+    isRead: false, isOrder: false,
+  },
+  {
+    id: 'hl2', title: 'Liên kết ngân hàng',
+    body: 'Liên kết MB Bank ngay để nhận gói quà tặng 500k cho người mới.',
+    time: '15:00 12-05-26',
+    image: 'https://cdn-icons-png.flaticon.com/512/2830/2830266.png',
+    isRead: true, isOrder: false,
+  },
+  {
+    id: 'hl3', title: 'Voucher mới dành cho bạn',
+    body: 'Bạn có 2 voucher giảm giá mới từ GlocalCart. Dùng ngay hôm nay!',
+    time: '09:00 11-05-26',
+    image: 'https://cdn-icons-png.flaticon.com/512/3094/3094211.png',
+    isRead: true, isOrder: false,
+  },
+];
+
+const PROMO_NOTIFICATIONS = [
+  {
+    id: 'pr1', title: '🎁 Voucher miễn ship cho bạn!',
+    body: 'Nhận ngay voucher miễn phí vận chuyển toàn sàn, áp dụng cho đơn từ 99k.',
+    time: '08:00 15-05-26',
+    image: 'https://cdn-icons-png.flaticon.com/512/1390/1390166.png',
+    isRead: false, isOrder: false,
+  },
+  {
+    id: 'pr2', title: '🔥 Flash Sale 12h hôm nay',
+    body: 'Hàng ngàn sản phẩm giảm đến 80%. Mua ngay trước khi hết!',
+    time: '07:00 15-05-26',
+    image: 'https://cdn-icons-png.flaticon.com/512/3094/3094196.png',
+    isRead: true, isOrder: false,
+  },
+  {
+    id: 'pr3', title: '💛 Thẻ quà "đa-zi-năng" tặng ai cũng được',
+    body: 'Mua thẻ quà GlocalCart – tặng ai cũng được, dùng mọi sản phẩm.',
+    time: '15:00 13-05-26',
+    image: 'https://cdn-icons-png.flaticon.com/512/1170/1170678.png',
+    isRead: true, isOrder: false,
+  },
+];
+
+const FINANCE_NOTIFICATIONS = [
+  {
+    id: 'fi1', title: 'Voucher miễn lãi kì đầu',
+    body: '🎁 Voucher miễn lãi kì đầu cho bạn khi liên kết thẻ tín dụng mới.',
+    time: '10:00 14-05-26',
+    image: 'https://cdn-icons-png.flaticon.com/512/2830/2830211.png',
+    isRead: false, isOrder: false,
+  },
+  {
+    id: 'fi2', title: 'Glocal Pay – Ví điện tử',
+    body: 'Nạp tiền vào Glocal Pay để thanh toán dễ dàng hơn và nhận thêm ưu đãi.',
+    time: '09:00 12-05-26',
+    image: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+    isRead: true, isOrder: false,
+  },
+];
+
+// ─── Order fallback icon ───
+const ORDER_ICON = 'https://cdn-icons-png.flaticon.com/512/679/679821.png';
+
+type TabType = 'orders' | 'highlights' | 'promo' | 'finance';
+
+const TABS = [
+  { key: 'orders' as TabType, icon: 'cube-outline', label: 'Đơn hàng' },
+  { key: 'highlights' as TabType, icon: 'star-outline', label: 'Nổi bật' },
+  { key: 'promo' as TabType, icon: 'pricetag-outline', label: 'Khuyến mãi' },
+  { key: 'finance' as TabType, icon: 'card-outline', label: 'Tài chính' },
+];
 
 export default function NotificationsScreen({ navigation }: any) {
-    const insets = useSafeAreaInsets();
-    const { isLoggedIn, setGuestMode } = useAuth();
-    const { items: cartItems } = useCartStore();
-    const { totalUnreadCount } = useChatStore();
-    const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+  const insets = useSafeAreaInsets();
+  const { isLoggedIn, setGuestMode } = useAuth();
+  const [activeTab, setActiveTab] = useState<TabType>('orders');
+  const [orderData, setOrderData] = useState(ORDER_UPDATES);
+  const [highlightData, setHighlightData] = useState(HIGHLIGHT_NOTIFICATIONS);
+  const [promoData, setPromoData] = useState(PROMO_NOTIFICATIONS);
+  const [financeData, setFinanceData] = useState(FINANCE_NOTIFICATIONS);
 
-    if (!isLoggedIn) {
-        return (
-            <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-                <Ionicons name="notifications-outline" size={80} color="#ccc" />
-                <Text style={{ fontSize: 18, color: '#333', fontWeight: 'bold', marginTop: 20 }}>Thông báo</Text>
-                <Text style={{ fontSize: 14, color: '#999', textAlign: 'center', marginTop: 10, marginBottom: 30 }}>Đăng nhập để xem các cập nhật mới nhất về đơn hàng và ưu đãi dành riêng cho bạn.</Text>
-                <TouchableOpacity 
-                    style={{ backgroundColor: colors.primary, paddingHorizontal: 40, paddingVertical: 12, borderRadius: 4 }}
-                    onPress={() => setGuestMode(false)}
-                >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>ĐĂNG NHẬP</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-    
-    const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
-
-    const [categories, setCategories] = useState([
-        { id: 'promo', title: 'Khuyến mãi', sub: '💛Thẻ quà "đa-zi-năng" tặng ai cũng được', badge: 2, icon: 'pricetag-outline', color: '#EE4D2D' },
-        { id: 'live', title: 'Live & Video', sub: 'Mua ngay 30/5_P02', badge: 1, icon: 'play-circle-outline', color: '#32CD32' },
-        { id: 'finance', title: 'Thông tin Tài chính', sub: '🎁 Voucher miễn lãi kì đầu cho bạn...', badge: 1, icon: 'card-outline', color: '#FF4500' },
-        { id: 'update', title: 'Cập nhật GlocalCart', sub: 'Dành vài phút chia sẻ TẠI ĐÂY để...', badge: 0, icon: 'notifications-outline', color: '#EE4D2D' },
-        { id: 'award', title: 'Giải thưởng GlocalCart', sub: 'Lướt xem sản phẩm và cửa hàng...', badge: 0, icon: 'trophy-outline', color: '#4169E1' },
-    ]);
-
-    const [orderUpdates, setOrderUpdates] = useState([
-        { 
-            id: 'ord1', 
-            title: 'Giao kiện hàng thành công', 
-            body: 'Kiện hàng SPXVN060869737914 của đơn hàng 26041618Q1RX22 đã giao thành công đến bạn.',
-            time: '15:31 19-04-26',
-            image: 'https://cdn-icons-png.flaticon.com/512/679/679821.png',
-            isRead: false,
-            history: [
-                { id: 'h1', title: 'Xác nhận đã nhận hàng', body: 'Xác nhận đã nhận hàng nếu đơn hàng 26041618Q1RX22 đã giao và sản phẩm không có vấn đề. Đánh giá ngay và nhận 200 Xu.', time: '15:31 19-04-26' },
-                { id: 'h2', title: 'Bạn có đơn hàng đang trên đường giao', body: 'Đơn hàng 26041618Q1RX22 của bạn vẫn đang trong quá trình vận chuyển.', time: '15:50 18-04-26' },
-                { id: 'h3', title: 'Đang vận chuyển', body: 'Đơn hàng đã rời kho phân loại.', time: '08:28 18-04-26' },
-            ]
-        },
-        { 
-            id: 'ord2', 
-            title: 'Đang giao hàng', 
-            body: 'Đơn hàng 26041618Q1RX22 đang được nhân viên giao hàng vận chuyển đến bạn.',
-            time: '08:15 19-04-26',
-            image: 'https://cdn-icons-png.flaticon.com/512/679/679821.png',
-            isRead: true,
-            history: [{ id: 'h1', title: 'Xác nhận đã nhận hàng', body: 'Xác nhận đã nhận hàng nếu đơn hàng 26041618Q1RX22 đã giao và sản phẩm không có vấn đề. Đánh giá ngay và nhận 200 Xu.', time: '15:31 19-04-26' },
-                { id: 'h2', title: 'Bạn có đơn hàng đang trên đường giao', body: 'Đơn hàng 26041618Q1RX22 của bạn vẫn đang trong quá trình vận chuyển.', time: '15:50 18-04-26' }]
-        },
-    ]);
-
-    const handleCategoryPress = (category: any) => {
-        setCategories(prev => prev.map(c => c.id === category.id ? { ...c, badge: 0 } : c));
-        navigation.navigate('NotificationDetail', { categoryId: category.id, title: category.title });
-    };
-
-    const markAllOrdersAsRead = () => {
-        setOrderUpdates(prev => prev.map(o => ({ ...o, isRead: true })));
-    };
-
-    const toggleExpand = (orderId: string) => {
-        setExpandedOrderId(expandedOrderId === orderId ? null : orderId);
-        setOrderUpdates(prev => prev.map(o => o.id === orderId ? { ...o, isRead: true } : o));
-    };
-
-    const renderHeader = () => (
-        <View style={styles.categoriesContainer}>
-            {categories.map((cat) => (
-                <TouchableOpacity 
-                    key={cat.id} 
-                    style={styles.catItem} 
-                    activeOpacity={0.7}
-                    onPress={() => handleCategoryPress(cat)}
-                >
-                    <View style={styles.iconCircle}>
-                        <Ionicons name={cat.icon as any} size={24} color={cat.color} />
-                    </View>
-                    <View style={styles.catContent}>
-                        <Text style={styles.catTitle}>{cat.title}</Text>
-                        <Text style={styles.catSub} numberOfLines={1}>{cat.sub}</Text>
-                    </View>
-                    {cat.badge > 0 && (
-                        <View style={styles.badge}>
-                            <Text style={styles.badgeText}>{cat.badge}</Text>
-                        </View>
-                    )}
-                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                </TouchableOpacity>
-            ))}
-
-            <View style={styles.sectionDivider}>
-                <Text style={styles.sectionTitle}>Cập nhật đơn hàng</Text>
-                <TouchableOpacity onPress={markAllOrdersAsRead}>
-                    <Text style={styles.readAllText}>Đọc tất cả ({orderUpdates.filter(o => !o.isRead).length})</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
+  if (!isLoggedIn) {
+    return (
+      <View style={[s.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+        <Ionicons name="notifications-outline" size={80} color="#ccc" />
+        <Text style={{ fontSize: 18, color: '#333', fontWeight: 'bold', marginTop: 20 }}>Thông báo</Text>
+        <Text style={{ fontSize: 14, color: '#999', textAlign: 'center', marginTop: 10, marginBottom: 30 }}>
+          Đăng nhập để xem các cập nhật mới nhất về đơn hàng và ưu đãi dành riêng cho bạn.
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: colors.primary, paddingHorizontal: 40, paddingVertical: 12, borderRadius: 4 }}
+          onPress={() => setGuestMode(false)}
+        >
+          <Text style={{ color: '#fff', fontWeight: 'bold' }}>ĐĂNG NHẬP</Text>
+        </TouchableOpacity>
+      </View>
     );
+  }
 
-    const renderOrderItem = ({ item }: any) => {
-        const isExpanded = expandedOrderId === item.id;
-        return (
-            <View>
-                <TouchableOpacity 
-                    style={[styles.orderItem, !item.isRead && styles.orderItemUnread]} 
-                    activeOpacity={0.8}
-                    onPress={() => toggleExpand(item.id)}
-                >
-                    <View style={styles.orderImgContainer}>
-                        <Image source={{ uri: item.image }} style={styles.orderImg} />
-                    </View>
-                    <View style={styles.orderContent}>
-                        <Text style={styles.orderTitle}>{item.title}</Text>
-                        <Text style={styles.orderBody}>{item.body}</Text>
-                        <Text style={styles.orderTime}>{item.time}</Text>
-                    </View>
-                    <Ionicons 
-                        name={isExpanded ? "chevron-up" : "chevron-down"} 
-                        size={20} 
-                        color={colors.textMuted} 
-                        style={{ marginTop: 4 }}
-                    />
-                </TouchableOpacity>
+  const getUnread = (list: any[]) => list.filter(x => !x.isRead).length;
 
-                {isExpanded && item.history && item.history.length > 0 && (
-                    <View style={styles.historyContainer}>
-                        {item.history.map((h: any, idx: number) => (
-                            <View key={h.id} style={styles.historyItem}>
-                                <View style={styles.timelineContainer}>
-                                    <View style={[styles.timelineLine, idx === item.history.length - 1 && { height: 0 }]} />
-                                    <View style={styles.timelineDot} />
-                                </View>
-                                <View style={styles.historyTextContent}>
-                                    <Text style={styles.historyTitle}>{h.title}</Text>
-                                    <Text style={styles.historyBody}>{h.body}</Text>
-                                    <Text style={styles.historyTime}>{h.time}</Text>
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-                )}
-            </View>
-        );
-    };
+  const markRead = (id: string) => {
+    const updater = (list: any[]) => list.map(x => x.id === id ? { ...x, isRead: true } : x);
+    if (activeTab === 'orders') setOrderData(prev => updater(prev));
+    else if (activeTab === 'highlights') setHighlightData(prev => updater(prev));
+    else if (activeTab === 'promo') setPromoData(prev => updater(prev));
+    else setFinanceData(prev => updater(prev));
+  };
+
+  const handleNotificationPress = (item: any) => {
+    markRead(item.id);
+    if (item.isOrder) {
+      navigation.navigate('OrderTracking', { notification: item, orderUpdate: item });
+    } else {
+      navigation.navigate('NotificationContent', { notification: item });
+    }
+  };
+
+  const renderNotification = ({ item }: { item: any }) => {
+    // Ưu tiên ảnh sản phẩm, fallback icon đơn hàng hoặc image
+    const iconSource = item.productImage
+      ? { uri: item.productImage }
+      : item.isOrder
+        ? { uri: ORDER_ICON }
+        : { uri: item.image };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            {/* Header Toolbar */}
-            <View style={styles.toolbar}>
-                <Text style={styles.toolbarTitle}>Thông báo</Text>
-                <View style={styles.toolbarIcons}>
-                    <TouchableOpacity style={styles.toolbarBtn} onPress={() => navigation.navigate('Cart')}>
-                        <Ionicons name="cart-outline" size={26} color="#EE4D2D" />
-                        {cartCount > 0 && (
-                            <View style={styles.iconBadge}><Text style={styles.iconBadgeText}>{cartCount}</Text></View>
-                        )}
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                        style={styles.toolbarBtn}
-                        onPress={() => navigation.navigate('ChatList')}
-                    >
-                        <Ionicons name="chatbubble-ellipses-outline" size={24} color="#EE4D2D" />
-                        {totalUnreadCount > 0 && (
-                            <View style={styles.iconBadge}><Text style={styles.iconBadgeText}>{totalUnreadCount}</Text></View>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            <FlatList
-                data={orderUpdates}
-                renderItem={renderOrderItem}
-                keyExtractor={item => item.id}
-                ListHeaderComponent={renderHeader}
-                contentContainerStyle={{ paddingBottom: 20 }}
-            />
+      <TouchableOpacity
+        style={[s.notifItem, !item.isRead && s.notifItemUnread]}
+        onPress={() => handleNotificationPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={s.notifIconWrap}>
+          <Image source={iconSource} style={s.notifIcon} resizeMode="contain" />
+          {!item.isRead && <View style={s.unreadDot} />}
         </View>
+        <View style={s.notifBody}>
+          <Text style={[s.notifTitle, !item.isRead && s.notifTitleBold]}>{item.title}</Text>
+          <Text style={s.notifDesc} numberOfLines={2}>{item.body}</Text>
+          <Text style={s.notifTime}>{item.time}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color="#ccc" style={{ marginTop: 4 }} />
+      </TouchableOpacity>
     );
+  };
+
+  const getTabData = (): any[] => {
+    switch (activeTab) {
+      case 'orders': return orderData;
+      case 'highlights': return highlightData;
+      case 'promo': return promoData;
+      case 'finance': return financeData;
+      default: return [];
+    }
+  };
+
+  const getUnreadForTab = (key: TabType) => {
+    switch (key) {
+      case 'orders': return getUnread(orderData);
+      case 'highlights': return getUnread(highlightData);
+      case 'promo': return getUnread(promoData);
+      case 'finance': return getUnread(financeData);
+    }
+  };
+
+  return (
+    <View style={[s.container, { paddingTop: insets.top }]}>
+      {/* ─── Header ─── */}
+      <View style={s.header}>
+        <Text style={s.headerTitle}>Thông báo</Text>
+        <View style={s.headerIcons}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('Cart')}>
+            <Ionicons name="cart-outline" size={24} color="#333" />
+            <CartBadge />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('ChatList')}>
+            <Ionicons name="chatbubble-ellipses-outline" size={24} color="#333" />
+            <ChatBadge />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ─── Tabs scrollable ─── */}
+      <View style={s.tabsWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabsScroll}>
+          {TABS.map(tab => {
+            const unread = getUnreadForTab(tab.key);
+            const isActive = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[s.tab, isActive && s.tabActive]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Ionicons name={tab.icon as any} size={15} color={isActive ? colors.primary : '#999'} />
+                <Text style={[s.tabText, isActive && s.tabTextActive]}>{tab.label}</Text>
+                {unread > 0 && (
+                  <View style={s.tabBadge}><Text style={s.tabBadgeText}>{unread}</Text></View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* ─── List ─── */}
+      <FlatList
+        data={getTabData()}
+        keyExtractor={item => item.id}
+        renderItem={renderNotification}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        ItemSeparatorComponent={() => <View style={s.separator} />}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={s.empty}>
+            <Ionicons name="notifications-off-outline" size={60} color="#ddd" />
+            <Text style={s.emptyText}>Chưa có thông báo nào</Text>
+          </View>
+        }
+      />
+    </View>
+  );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    toolbar: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        paddingHorizontal: spacing.md, 
-        paddingVertical: 12, 
-        backgroundColor: colors.white 
-    },
-    toolbarTitle: { fontSize: 24, fontWeight: '400', color: colors.text },
-    toolbarIcons: { flexDirection: 'row', gap: 15 },
-    toolbarBtn: { position: 'relative', padding: 4 },
-    iconBadge: { 
-        position: 'absolute', 
-        top: -2, 
-        right: -6, 
-        backgroundColor: '#EE4D2D', 
-        borderRadius: 10, 
-        minWidth: 18, 
-        height: 18, 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: colors.white
-    },
-    iconBadgeText: { color: colors.white, fontSize: 10, fontWeight: 'bold' },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff',
+  },
+  headerTitle: { fontSize: 22, fontWeight: '700', color: '#111' },
+  headerIcons: { flexDirection: 'row', gap: 8 },
+  iconBtn: { padding: 6, position: 'relative' },
 
-    categoriesContainer: { backgroundColor: colors.white, marginBottom: 8 },
-    catItem: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        paddingVertical: 15, 
-        paddingHorizontal: 16, 
-        borderBottomWidth: 0.5, 
-        borderBottomColor: '#f0f0f0' 
-    },
-    iconCircle: { 
-        width: 44, 
-        height: 44, 
-        borderRadius: 22, 
-        borderWidth: 1, 
-        borderColor: '#f0f0f0', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        marginRight: 12
-    },
-    catContent: { flex: 1 },
-    catTitle: { fontSize: 16, color: '#333', marginBottom: 2 },
-    catSub: { fontSize: 13, color: '#999' },
-    badge: { 
-        backgroundColor: '#EE4D2D', 
-        borderRadius: 10, 
-        minWidth: 20, 
-        height: 20, 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        marginRight: 6
-    },
-    badgeText: { color: colors.white, fontSize: 11, fontWeight: 'bold' },
+  tabsWrapper: { backgroundColor: '#fff', borderBottomWidth: 0.5, borderBottomColor: '#eee' },
+  tabsScroll: { paddingHorizontal: 8 },
+  tab: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, paddingHorizontal: 12, gap: 5,
+    borderBottomWidth: 2, borderBottomColor: 'transparent', marginRight: 4,
+  },
+  tabActive: { borderBottomColor: colors.primary },
+  tabText: { fontSize: 13, color: '#999', fontWeight: '500' },
+  tabTextActive: { color: colors.primary, fontWeight: '600' },
+  tabBadge: {
+    backgroundColor: colors.primary, borderRadius: 8,
+    minWidth: 16, height: 16, paddingHorizontal: 3,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tabBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
 
-    sectionDivider: { 
-        flexDirection: 'row', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        padding: 16, 
-        backgroundColor: '#fafafa' 
-    },
-    sectionTitle: { fontSize: 15, color: '#666' },
-    readAllText: { fontSize: 14, color: '#EE4D2D' },
-
-    orderItem: { 
-        flexDirection: 'row', 
-        padding: 16, 
-        backgroundColor: colors.white, 
-        borderBottomWidth: 0.5, 
-        borderBottomColor: '#f0f0f0',
-        alignItems: 'flex-start'
-    },
-    orderItemUnread: { backgroundColor: '#FFF5F1' },
-    orderImgContainer: { 
-        width: 50, 
-        height: 50, 
-        borderWidth: 1, 
-        borderColor: '#eee', 
-        marginRight: 12,
-        borderRadius: 4,
-        overflow: 'hidden'
-    },
-    orderImg: { width: '100%', height: '100%' },
-    orderContent: { flex: 1 },
-    orderTitle: { fontSize: 15, fontWeight: '500', color: '#333', marginBottom: 6 },
-    orderBody: { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 8 },
-    orderTime: { fontSize: 12, color: '#999' },
-
-    historyContainer: { backgroundColor: '#f9f9f9', paddingLeft: 40, paddingBottom: 10 },
-    historyItem: { flexDirection: 'row', paddingRight: 16, paddingVertical: 12 },
-    timelineContainer: { position: 'absolute', left: -25, top: 0, bottom: 0, alignItems: 'center' },
-    timelineLine: { width: 1, flex: 1, backgroundColor: '#ddd' },
-    timelineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ccc', marginTop: 18, position: 'absolute' },
-    historyTextContent: { flex: 1 },
-    historyTitle: { fontSize: 14, color: '#444', fontWeight: '500', marginBottom: 4 },
-    historyBody: { fontSize: 13, color: '#777', lineHeight: 18, marginBottom: 6 },
-    historyTime: { fontSize: 11, color: '#aaa' },
+  notifItem: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 14,
+  },
+  notifItemUnread: { backgroundColor: '#FFFAF9' },
+  notifIconWrap: { width: 56, height: 56, marginRight: 14, position: 'relative' },
+  notifIcon: { width: 56, height: 56, borderRadius: 10, backgroundColor: '#f5f5f5' },
+  unreadDot: {
+    position: 'absolute', top: -2, right: -2,
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: colors.primary, borderWidth: 1.5, borderColor: '#fff',
+  },
+  notifBody: { flex: 1 },
+  notifTitle: { fontSize: 14, color: '#333', marginBottom: 4 },
+  notifTitleBold: { fontWeight: '700', color: '#111' },
+  notifDesc: { fontSize: 13, color: '#666', lineHeight: 19, marginBottom: 6 },
+  notifTime: { fontSize: 12, color: '#aaa' },
+  separator: { height: 0.5, backgroundColor: '#f0f0f0' },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80, gap: 12 },
+  emptyText: { fontSize: 15, color: '#bbb' },
 });

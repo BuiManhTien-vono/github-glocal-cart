@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import apiClient from '../../services/api/apiClient';
 import { colors } from '../../theme/colors';
@@ -19,12 +19,22 @@ interface ReviewItem {
 
 interface ReviewSectionProps {
   productId: number;
+  navigation?: any;
 }
 
-export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId }) => {
+export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, navigation }) => {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalItems, setTotalItems] = useState(0);
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  const FILTERS = [
+    { key: 'all', label: 'Tất cả' },
+    { key: '5', label: '5 Sao' },
+    { key: '4', label: '4 Sao' },
+    { key: 'image', label: 'Có hình ảnh' },
+    { key: 'comment', label: 'Có bình luận' },
+  ];
 
   useEffect(() => {
     fetchReviews();
@@ -51,34 +61,37 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId }) => {
     }
   };
 
+  const filteredReviews = reviews.filter(r => {
+    if (activeFilter === 'all') return true;
+    if (activeFilter === '5') return r.rating === 5;
+    if (activeFilter === '4') return r.rating === 4;
+    if (activeFilter === 'image') return r.images && r.images.length > 0;
+    if (activeFilter === 'comment') return r.comment && r.comment.trim().length > 0;
+    return true;
+  });
+
   const renderStars = (rating: number, size: number = 14) => {
     const stars = [];
     for (let i = 1; i <= 5; i++) {
       stars.push(
-        <Ionicons 
-          key={i} 
-          name={i <= rating ? "star" : "star-outline"} 
-          size={size} 
-          color="#FFD700" 
-        />
+        <Ionicons key={i} name={i <= rating ? 'star' : 'star-outline'} size={size} color="#FFD700" />
       );
     }
     return <View style={{ flexDirection: 'row' }}>{stars}</View>;
   };
 
   if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="small" color={colors.primary} />
-      </View>
-    );
+    return <View style={styles.center}><ActivityIndicator size="small" color={colors.primary} /></View>;
   }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Đánh giá sản phẩm</Text>
-        <TouchableOpacity style={styles.viewAllBtn}>
+        <TouchableOpacity
+          style={styles.viewAllBtn}
+          onPress={() => navigation?.navigate('AllReviews', { productId, totalItems })}
+        >
           <Text style={styles.viewAllText}>Xem tất cả ({totalItems})</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
         </TouchableOpacity>
@@ -94,23 +107,24 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId }) => {
         </View>
       </View>
 
-      <View style={styles.filterScroll}>
-        <TouchableOpacity style={[styles.filterChip, styles.filterChipActive]}>
-          <Text style={[styles.filterText, styles.filterTextActive]}>Tất cả</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.filterChip}>
-          <Text style={styles.filterText}>5 Sao (1.2k)</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.filterChip}>
-          <Text style={styles.filterText}>Có hình ảnh (45)</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+        {FILTERS.map(f => (
+          <TouchableOpacity
+            key={f.key}
+            style={[styles.filterChip, activeFilter === f.key && styles.filterChipActive]}
+            onPress={() => setActiveFilter(f.key)}
+          >
+            <Text style={[styles.filterText, activeFilter === f.key && styles.filterTextActive]}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-      {reviews.length === 0 ? (
+      {filteredReviews.length === 0 ? (
         <Text style={styles.emptyText}>Chưa có đánh giá nào cho sản phẩm này.</Text>
       ) : (
         <View style={styles.listContainer}>
-          {reviews.map((item) => (
+          {filteredReviews.slice(0, 3).map((item) => (
+
             <View key={item.id} style={styles.reviewItem}>
               <Image source={{ uri: item.avatar }} style={styles.avatar} />
               <View style={styles.reviewContent}>
