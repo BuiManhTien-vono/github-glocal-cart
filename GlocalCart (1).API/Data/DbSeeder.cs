@@ -10,33 +10,59 @@ namespace GlocalCart.API.Data
     {
         public static async Task SeedAsync(AppDbContext context, UserManager<User> userManager, RoleManager<IdentityRole<int>> roleManager)
         {
-            // Tự động đồng bộ ảnh gốc từ file WebP vào Database nếu chưa có
-            var existingImages = await context.ProductImages.Where(pi => pi.ImageData == null).ToListAsync();
-            if (existingImages.Any())
+            await EnsureShipperRoleAndUserAsync(context, userManager, roleManager);
+
+            // === FORCE CẬP NHẬT ẢNH ĐÚNG THEO TÊN SẢN PHẨM ===
+            // Chạy mỗi lần khởi động để đảm bảo ảnh luôn đúng với sản phẩm
+            var productImageFileMap = new Dictionary<string, string>
             {
-                var imageDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "products");
-                if (Directory.Exists(imageDir))
+                { "Điện thoại iPhone 15 Pro",  "iphone15pro.png" },
+                { "Tai nghe AirPods Pro 2",    "airpods_pro2.png" },
+                { "Laptop MacBook Air M2",      "macbook_air_m2.png" },
+                { "Ốp lưng Silicone",          "op_lung_silicone.png" },
+                { "Áo sơ mi nam công sở",      "ao_so_mi_nam.png" },
+                { "Quần Jean nam phong cách",   "quan_jean_nam.png" },
+                { "Giày thể thao Sneaker",     "giay_sneaker.png" },
+                { "Tai nghe Sony WF",          "tai_nghe_sony.png" },
+                { "Nồi chiên không dầu",       "noi_chien_khong_dau.png" },
+                { "Bếp từ đôi hồng ngoại",    "bep_tu_doi.png" },
+                { "Bàn phím cơ không dây",     "ban_phim_co.png" },
+                { "Chuột không dây Logitech",  "chuot_logitech.png" },
+                { "Tủ quần áo gỗ sồi",        "tu_quan_ao_go.png" },
+                { "Ghế làm việc Ergonomic",    "ghe_ergonomic.png" },
+                { "Tinh chất Dưỡng Da",        "tinh_chat_duong_da.png" },
+                { "Sữa rửa mặt Cetaphil",     "sua_rua_mat_cetaphil.png" },
+            };
+
+            var imageDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "products");
+            var productsWithImages = await context.Products
+                .Include(p => p.Images)
+                .Where(p => p.Images.Any())
+                .ToListAsync();
+
+            bool imageUpdated = false;
+            foreach (var product in productsWithImages)
+            {
+                if (!productImageFileMap.TryGetValue(product.Name, out var imgFile)) continue;
+                var imgPath = Path.Combine(imageDir, imgFile);
+                if (!File.Exists(imgPath)) continue;
+
+                var imgData = await File.ReadAllBytesAsync(imgPath);
+                foreach (var img in product.Images)
                 {
-                    var webpFiles = Directory.GetFiles(imageDir, "*.webp");
-                    if (webpFiles.Any())
-                    {
-                        var randFile = new Random();
-                        foreach (var pi in existingImages)
-                        {
-                            var randomFile = webpFiles[randFile.Next(webpFiles.Length)];
-                            pi.ImageData = await File.ReadAllBytesAsync(randomFile);
-                            pi.ContentType = "image/webp";
-                            pi.ImageUrl = $"/api/products/images/{pi.Id}/data";
-                        }
-                        await context.SaveChangesAsync();
-                    }
+                    img.ImageData = imgData;
+                    img.ContentType = "image/png";
+                    img.ImageUrl = $"/api/products/images/{img.Id}/data";
+                    imageUpdated = true;
                 }
+                product.MediaUrl = $"/api/products/images/{product.Images.First().Id}/data";
             }
+            if (imageUpdated) await context.SaveChangesAsync();
 
             if (await context.Products.AnyAsync()) return;
 
             // Đảm bảo roles tồn tại
-            string[] roleNames = { "Member", "Seller", "Admin" };
+            string[] roleNames = { "Member", "Seller", "Admin", "Shipper" };
             foreach (var roleName in roleNames)
             {
                 if (!await roleManager.RoleExistsAsync(roleName))
@@ -172,15 +198,51 @@ namespace GlocalCart.API.Data
             await context.Products.AddRangeAsync(products);
             await context.SaveChangesAsync();
 
+            // Tạo ProductImage cho từng sản phẩm mới seed (dùng lại productImageFileMap và imageDir đã khai báo ở trên)
             var images = new List<ProductImage>();
             var catalogProducts = new List<CatalogProduct>();
             foreach (var p in products)
             {
-                images.Add(new ProductImage { ProductId = p.Id, ImageUrl = "https://via.placeholder.com/600", IsMain = true });
+                byte[]? imageData = null;
+                string contentType = "image/png";
+
+                if (productImageFileMap.TryGetValue(p.Name, out var imageFileName))
+                {
+                    var imagePath = Path.Combine(imageDir, imageFileName);
+                    if (File.Exists(imagePath))
+                    {
+                        imageData = await File.ReadAllBytesAsync(imagePath);
+                    }
+                }
+
+                images.Add(new ProductImage
+                {
+                    ProductId = p.Id,
+                    ImageData = imageData,
+                    ContentType = contentType,
+                    ImageUrl = "", // Tạm để trống, sẽ cập nhật sau khi có Id
+                    IsMain = true
+                });
                 catalogProducts.Add(new CatalogProduct { ProductId = p.Id, CatalogId = rand.Next(1, 4) });
             }
             await context.ProductImages.AddRangeAsync(images);
+            await context.SaveChangesAsync();
+
+            // Sau khi có ID, cập nhật ImageUrl trỏ đến endpoint API + cập nhật MediaUrl của Product
+            foreach (var img in images)
+            {
+                img.ImageUrl = $"/api/products/images/{img.Id}/data";
+            }
+            foreach (var img in images)
+            {
+                var product = products.FirstOrDefault(p => p.Id == img.ProductId);
+                if (product != null) product.MediaUrl = img.ImageUrl;
+            }
+            await context.SaveChangesAsync();
+
             await context.CatalogProducts.AddRangeAsync(catalogProducts);
+
+
 
             var cartItems = new List<CartItem>();
             for (int i = 0; i < 15; i++)
@@ -264,8 +326,12 @@ namespace GlocalCart.API.Data
                     
                     var shipment = new Shipment
                     {
-                        OrderId = order.Id, TrackingNumber = $"VNPOST{123123+order.Id}",
-                        ShipmentMethod = "Standard", EstimatedArrival = DateTime.UtcNow.AddDays(3), ShipmentDate = DateTime.UtcNow
+                        OrderId = order.Id,
+                        Status = ShipmentStatus.Pending,
+                        TrackingNumber = $"VNPOST{123123 + order.Id}",
+                        ShipmentMethod = "Standard",
+                        EstimatedArrival = DateTime.UtcNow.AddDays(3),
+                        ShipmentDate = DateTime.UtcNow
                     };
                     shipments.Add(shipment);
                 }
@@ -296,6 +362,35 @@ namespace GlocalCart.API.Data
             await context.Notifications.AddRangeAsync(notifications);
 
             await context.SaveChangesAsync();
+        }
+
+        private static async Task EnsureShipperRoleAndUserAsync(
+            AppDbContext context,
+            UserManager<User> userManager,
+            RoleManager<IdentityRole<int>> roleManager)
+        {
+            if (!await roleManager.RoleExistsAsync("Shipper"))
+                await roleManager.CreateAsync(new IdentityRole<int> { Name = "Shipper" });
+
+            if (await userManager.FindByNameAsync("shipper") != null)
+                return;
+
+            var shipper = new User
+            {
+                UserName = "shipper",
+                Email = "shipper@glocalcart.com",
+                FullName = "Nguyễn Văn Giao",
+                PhoneNumber = "0911222333",
+                Role = UserRole.Shipper,
+                IsSeller = false,
+                AccountStatus = AccountStatus.Active,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            var result = await userManager.CreateAsync(shipper, "Shipper@123");
+            if (result.Succeeded)
+                await userManager.AddToRoleAsync(shipper, "Shipper");
         }
     }
 }

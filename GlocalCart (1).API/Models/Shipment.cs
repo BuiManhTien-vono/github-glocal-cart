@@ -35,10 +35,24 @@ namespace GlocalCart.API.Models
         [MaxLength(100)]
         public string? TrackingNumber { get; set; }
 
+        /// <summary>
+        /// Trạng thái hiện tại của vận đơn
+        /// </summary>
+        public ShipmentStatus Status { get; set; } = ShipmentStatus.Pending;
+
+        /// <summary>
+        /// Shipper đã nhận đơn (null = chưa có shipper nhận)
+        /// </summary>
+        public int? ShipperId { get; set; }
+
+        public DateTime? AssignedAt { get; set; }
+        public DateTime? DeliveredAt { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation
         public Order Order { get; set; } = null!;
+        public User? Shipper { get; set; }
         public ICollection<ShipmentLog> ShipmentLogs { get; set; } = new List<ShipmentLog>();
     }
 }

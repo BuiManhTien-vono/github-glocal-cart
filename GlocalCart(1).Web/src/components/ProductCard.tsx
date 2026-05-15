@@ -79,6 +79,8 @@ export default function ProductCard({ product, index, showFavoriteBadge = false,
           fill 
           className="object-cover group-hover:scale-110 transition-transform duration-700 opacity-90 group-hover:opacity-100"
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+          loading="eager"
+          priority={index !== undefined && index <= 4}
         />
         
         {/* Badges */}

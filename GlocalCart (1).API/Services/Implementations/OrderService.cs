@@ -74,22 +74,23 @@ namespace GlocalCart.API.Services.Implementations
                 ci.Product.AvailableItemCount -= ci.Quantity;
             }
 
-            // Tạo Payment mô phỏng
+            var isBankTransfer = dto.PaymentMethod == PaymentMethod.ElectronicBankTransfer;
             _db.Payments.Add(new Payment
             {
                 OrderId = order.Id,
                 Method = dto.PaymentMethod,
-                Status = PaymentStatus.Completed,
+                Status = PaymentStatus.Unpaid,
                 Amount = order.TotalAmount,
-                TransactionRef = "TXN-" + Guid.NewGuid().ToString("N")[..12].ToUpper()
+                TransactionRef = isBankTransfer ? null : null
             });
 
-            // Ghi OrderLog đầu tiên
             _db.OrderLogs.Add(new OrderLog
             {
                 OrderId = order.Id,
                 Status = OrderStatus.Pending,
-                Note = "Đơn hàng được tạo."
+                Note = isBankTransfer
+                    ? "Đơn hàng được tạo. Chờ thanh toán chuyển khoản."
+                    : "Đơn hàng được tạo (COD). Chờ seller xử lý."
             });
 
             // Xóa giỏ hàng
@@ -115,7 +116,7 @@ namespace GlocalCart.API.Services.Implementations
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Seller)
                 .Include(o => o.ShippingAddress)
                 .Include(o => o.Payment)
-                .Include(o => o.Shipment)
+                .Include(o => o.Shipment).ThenInclude(s => s!.Shipper)
                 .Where(o => o.BuyerId == buyerId)
                 .OrderByDescending(o => o.OrderDate)
                 .Select(o => MapToDto(o))
@@ -129,7 +130,7 @@ namespace GlocalCart.API.Services.Implementations
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Seller)
                 .Include(o => o.ShippingAddress)
                 .Include(o => o.Payment)
-                .Include(o => o.Shipment)
+                .Include(o => o.Shipment).ThenInclude(s => s!.Shipper)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
@@ -199,7 +200,8 @@ namespace GlocalCart.API.Services.Implementations
             return await _db.Orders
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Product).ThenInclude(p => p.Images)
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Seller)
-                .Include(o => o.ShippingAddress).Include(o => o.Payment).Include(o => o.Shipment)
+                .Include(o => o.ShippingAddress).Include(o => o.Payment)
+                .Include(o => o.Shipment).ThenInclude(s => s!.Shipper)
                 .Where(o => orderIds.Contains(o.Id))
                 .OrderByDescending(o => o.OrderDate)
                 .Select(o => MapToDto(o))
@@ -208,7 +210,7 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<bool> UpdateOrderStatusAsync(int sellerId, int orderId, UpdateOrderStatusDto dto)
         {
-            var order = await _db.Orders.Include(o => o.OrderItems)
+            var order = await _db.Orders.Include(o => o.OrderItems).Include(o => o.Payment)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
@@ -217,6 +219,12 @@ namespace GlocalCart.API.Services.Implementations
 
             if (!Enum.TryParse<OrderStatus>(dto.Status, true, out var newStatus))
                 throw new ArgumentException("Trạng thái không hợp lệ.");
+
+            if (newStatus is OrderStatus.Shipped or OrderStatus.Complete)
+                throw new InvalidOperationException("Seller không thể chuyển sang Shipped/Complete. Vui lòng tạo vận đơn và để Shipper xử lý.");
+
+            if (newStatus != OrderStatus.Canceled)
+                OrderBusinessRules.EnsureSellerCanFulfill(order.Payment);
 
             order.Status = newStatus;
             _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = newStatus, Note = dto.Note ?? $"Seller cập nhật: {newStatus}" });
@@ -255,7 +263,7 @@ namespace GlocalCart.API.Services.Implementations
         // === SHIPMENT ===
         public async Task<ShipmentInfoDto> CreateShipmentAsync(int sellerId, int orderId, CreateShipmentDto dto)
         {
-            var order = await _db.Orders.Include(o => o.OrderItems).Include(o => o.Shipment)
+            var order = await _db.Orders.Include(o => o.OrderItems).Include(o => o.Shipment).Include(o => o.Payment)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
@@ -265,44 +273,58 @@ namespace GlocalCart.API.Services.Implementations
             if (order.Shipment != null)
                 throw new InvalidOperationException("Đơn hàng đã có thông tin vận chuyển.");
 
+            OrderBusinessRules.EnsureSellerCanFulfill(order.Payment);
+
+            if (order.Status is OrderStatus.Canceled or OrderStatus.Complete)
+                throw new InvalidOperationException("Không thể tạo vận đơn cho đơn đã hủy/hoàn tất.");
+
             var shipment = new Shipment
             {
                 OrderId = orderId,
+                Status = ShipmentStatus.Pending,
                 ShipmentDate = dto.ShipmentDate ?? DateTime.UtcNow,
                 EstimatedArrival = dto.EstimatedArrival,
                 ShipmentMethod = dto.ShipmentMethod,
-                TrackingNumber = dto.TrackingNumber
+                TrackingNumber = dto.TrackingNumber ?? "GC-" + Guid.NewGuid().ToString("N")[..8].ToUpper()
             };
 
             _db.Shipments.Add(shipment);
-            order.Status = OrderStatus.Shipped;
-            _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Shipped, Note = "Đơn hàng đã được gửi." });
 
-            await _db.SaveChangesAsync();
+            if (order.Status == OrderStatus.Pending)
+                order.Status = OrderStatus.Unshipped;
 
-            _db.ShipmentLogs.Add(new ShipmentLog { ShipmentId = shipment.Id, Status = ShipmentStatus.Shipped, Note = "Bắt đầu vận chuyển." });
-            await _db.SaveChangesAsync();
-
-            await _notif.CreateNotificationAsync(order.BuyerId, $"Đơn hàng #{order.OrderNumber} đã được gửi đi.");
-
-            return new ShipmentInfoDto
+            _db.OrderLogs.Add(new OrderLog
             {
-                Id = shipment.Id, ShipmentDate = shipment.ShipmentDate,
-                EstimatedArrival = shipment.EstimatedArrival,
-                ShipmentMethod = shipment.ShipmentMethod, TrackingNumber = shipment.TrackingNumber
-            };
+                OrderId = orderId,
+                Status = order.Status,
+                Note = "Seller đã tạo vận đơn. Chờ shipper nhận giao."
+            });
+
+            await _db.SaveChangesAsync();
+
+            _db.ShipmentLogs.Add(new ShipmentLog
+            {
+                ShipmentId = shipment.Id,
+                Status = ShipmentStatus.Pending,
+                Note = "Vận đơn chờ shipper nhận."
+            });
+            await _db.SaveChangesAsync();
+
+            await _notif.CreateNotificationAsync(order.BuyerId,
+                $"Đơn hàng #{order.OrderNumber} đã được đóng gói, chờ shipper giao.");
+
+            return MapShipmentDto(shipment);
         }
 
         public async Task<ShipmentInfoDto> GetShipmentAsync(int userId, int orderId)
         {
-            var shipment = await _db.Shipments.FirstOrDefaultAsync(s => s.OrderId == orderId)
+            await GetOrderByIdAsync(userId, orderId);
+
+            var shipment = await _db.Shipments.Include(s => s.Shipper)
+                .FirstOrDefaultAsync(s => s.OrderId == orderId)
                 ?? throw new KeyNotFoundException("Chưa có thông tin vận chuyển.");
-            return new ShipmentInfoDto
-            {
-                Id = shipment.Id, ShipmentDate = shipment.ShipmentDate,
-                EstimatedArrival = shipment.EstimatedArrival,
-                ShipmentMethod = shipment.ShipmentMethod, TrackingNumber = shipment.TrackingNumber
-            };
+
+            return MapShipmentDto(shipment);
         }
 
         public async Task<bool> UpdateShipmentStatusAsync(int sellerId, int shipmentId, UpdateShipmentStatusDto dto)
@@ -317,18 +339,24 @@ namespace GlocalCart.API.Services.Implementations
             if (!Enum.TryParse<ShipmentStatus>(dto.Status, true, out var newStatus))
                 throw new ArgumentException("Trạng thái vận chuyển không hợp lệ.");
 
-            _db.ShipmentLogs.Add(new ShipmentLog { ShipmentId = shipmentId, Status = newStatus, Note = dto.Note });
+            if (newStatus is ShipmentStatus.Delivered or ShipmentStatus.Shipped)
+                throw new InvalidOperationException(
+                    "Seller không thể đánh dấu Shipped/Delivered. Shipper sẽ nhận và xác nhận giao hàng qua API /api/shipper.");
 
-            // Nếu giao thành công -> cập nhật Order
-            if (newStatus == ShipmentStatus.Delivered)
+            if (newStatus == ShipmentStatus.OnHold && shipment.Status == ShipmentStatus.Pending)
             {
-                shipment.Order.Status = OrderStatus.Complete;
-                _db.OrderLogs.Add(new OrderLog { OrderId = shipment.OrderId, Status = OrderStatus.Complete, Note = "Đã giao hàng thành công." });
-                await _notif.CreateNotificationAsync(shipment.Order.BuyerId, $"Đơn hàng #{shipment.Order.OrderNumber} đã giao thành công!");
+                shipment.Status = ShipmentStatus.OnHold;
+                _db.ShipmentLogs.Add(new ShipmentLog
+                {
+                    ShipmentId = shipmentId,
+                    Status = newStatus,
+                    Note = dto.Note ?? "Tạm giữ vận chuyển."
+                });
+                await _db.SaveChangesAsync();
+                return true;
             }
 
-            await _db.SaveChangesAsync();
-            return true;
+            throw new InvalidOperationException($"Seller không thể chuyển vận đơn sang trạng thái: {newStatus}");
         }
 
         public async Task<List<ShipmentLogDto>> GetShipmentLogsAsync(int userId, int shipmentId)
@@ -361,12 +389,21 @@ namespace GlocalCart.API.Services.Implementations
                 Method = o.Payment.Method.ToString(), Status = o.Payment.Status.ToString(),
                 Amount = o.Payment.Amount, TransactionRef = o.Payment.TransactionRef
             } : null,
-            Shipment = o.Shipment != null ? new ShipmentInfoDto
-            {
-                Id = o.Shipment.Id, ShipmentDate = o.Shipment.ShipmentDate,
-                EstimatedArrival = o.Shipment.EstimatedArrival,
-                ShipmentMethod = o.Shipment.ShipmentMethod, TrackingNumber = o.Shipment.TrackingNumber
-            } : null
+            Shipment = o.Shipment != null ? MapShipmentDto(o.Shipment) : null
+        };
+
+        private static ShipmentInfoDto MapShipmentDto(Shipment s) => new()
+        {
+            Id = s.Id,
+            Status = s.Status.ToString(),
+            ShipmentDate = s.ShipmentDate,
+            EstimatedArrival = s.EstimatedArrival,
+            ShipmentMethod = s.ShipmentMethod,
+            TrackingNumber = s.TrackingNumber,
+            ShipperId = s.ShipperId,
+            ShipperName = s.Shipper?.FullName,
+            AssignedAt = s.AssignedAt,
+            DeliveredAt = s.DeliveredAt
         };
     }
 }

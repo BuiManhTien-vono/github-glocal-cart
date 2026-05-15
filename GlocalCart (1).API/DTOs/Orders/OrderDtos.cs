@@ -62,10 +62,15 @@ namespace GlocalCart.API.DTOs.Orders
     public class ShipmentInfoDto
     {
         public int Id { get; set; }
+        public string Status { get; set; } = string.Empty;
         public DateTime? ShipmentDate { get; set; }
         public DateTime? EstimatedArrival { get; set; }
         public string? ShipmentMethod { get; set; }
         public string? TrackingNumber { get; set; }
+        public int? ShipperId { get; set; }
+        public string? ShipperName { get; set; }
+        public DateTime? AssignedAt { get; set; }
+        public DateTime? DeliveredAt { get; set; }
     }
 
     public class UpdateOrderStatusDto

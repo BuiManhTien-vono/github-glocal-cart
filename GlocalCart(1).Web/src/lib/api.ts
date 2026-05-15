@@ -66,66 +66,62 @@ const handleResponse = async (res: Response) => {
 export const api = {
   products: {
     getAll: async (search: string = '', categoryId?: number, sellerId?: number, categoryIds?: number[], minPrice?: number, maxPrice?: number): Promise<Product[]> => {
-      let products = getLocalProducts();
+      const filterLocal = (products: Product[]) => {
+        let filtered = products;
+        if (search) {
+          const lowerSearch = search.toLowerCase();
+          filtered = filtered.filter(p =>
+            p.name.toLowerCase().includes(lowerSearch) ||
+            p.description.toLowerCase().includes(lowerSearch)
+          );
+        }
+        if (categoryId) {
+          filtered = filtered.filter(p => p.categoryId === categoryId);
+        }
+        if (categoryIds && categoryIds.length > 0) {
+          filtered = filtered.filter(p => categoryIds.includes(p.categoryId));
+        }
+        if (minPrice !== undefined) {
+          filtered = filtered.filter(p => p.price >= minPrice);
+        }
+        if (maxPrice !== undefined) {
+          filtered = filtered.filter(p => p.price <= maxPrice);
+        }
+        return filtered;
+      };
 
-      if (search) {
-        const lowerSearch = search.toLowerCase();
-        products = products.filter(p => 
-          p.name.toLowerCase().includes(lowerSearch) || 
-          p.description.toLowerCase().includes(lowerSearch)
-        );
-      }
-
-      if (categoryId) {
-        products = products.filter(p => p.categoryId === categoryId);
-      }
-
-      if (categoryIds && categoryIds.length > 0) {
-        products = products.filter(p => categoryIds.includes(p.categoryId));
-      }
-
-      if (minPrice !== undefined) {
-        products = products.filter(p => p.price >= minPrice);
-      }
-
-      if (maxPrice !== undefined) {
-        products = products.filter(p => p.price <= maxPrice);
-      }
-
-      // If you still want to try fetching from API and only use local as fallback:
-      /*
       try {
         const url = new URL(`${API_BASE_URL}/products`);
         if (search) url.searchParams.append('name', search);
         if (categoryId) url.searchParams.append('categoryId', categoryId.toString());
         if (sellerId) url.searchParams.append('sellerId', sellerId.toString());
-        
+        if (minPrice !== undefined) url.searchParams.append('minPrice', minPrice.toString());
+        if (maxPrice !== undefined) url.searchParams.append('maxPrice', maxPrice.toString());
+        url.searchParams.append('page', '1');
+        url.searchParams.append('pageSize', '50');
+
         const res = await fetch(url.toString(), { cache: 'no-store' });
         const data = await handleResponse(res);
-        return data?.items || data || [];
+        const items: Product[] = data?.items || data || [];
+        if (categoryIds && categoryIds.length > 0) {
+          return items.filter(p => categoryIds.includes(p.categoryId));
+        }
+        return items;
       } catch (error) {
-        console.error('API fetch failed, using local data', error);
+        console.error('API fetch failed, falling back to local data:', error);
+        return filterLocal(getLocalProducts());
       }
-      */
-
-      return products;
     },
-    
-    getById: async (id: number): Promise<Product | null> => {
-      const products = getLocalProducts();
-      const product = products.find(p => p.id === id);
-      
-      if (product) return product;
 
-      /*
+    getById: async (id: number): Promise<Product | null> => {
       try {
         const res = await fetch(`${API_BASE_URL}/products/${id}`, { cache: 'no-store' });
         return await handleResponse(res);
       } catch (error) {
-        console.error(`Failed to fetch product ${id}`, error);
+        console.error(`Failed to fetch product ${id}, falling back to local data:`, error);
+        const products = getLocalProducts();
+        return products.find(p => p.id === id) || null;
       }
-      */
-      return null;
     }
   },
   
@@ -307,6 +303,19 @@ export const api = {
       return {
         vietQrUrl: `https://img.vietqr.io/image/970422-123456789-compact2.jpg?amount=1030000&addInfo=Order%20${orderId}`
       };
+    },
+    confirmTransfer: async (orderId: number) => {
+      const res = await fetch(`${API_BASE_URL}/Payments/${orderId}/confirm-transfer`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      return await handleResponse(res);
+    },
+    getStatus: async (orderId: number) => {
+      const res = await fetch(`${API_BASE_URL}/Payments/${orderId}/status`, {
+        headers: getAuthHeaders()
+      });
+      return await handleResponse(res);
     }
   },
 

@@ -263,11 +263,18 @@ namespace GlocalCart.API.Data
             modelBuilder.Entity<Shipment>(entity =>
             {
                 entity.HasIndex(s => s.OrderId).IsUnique();
+                entity.HasIndex(s => s.ShipperId);
 
                 entity.HasOne(s => s.Order)
                     .WithOne(o => o.Shipment)
                     .HasForeignKey<Shipment>(s => s.OrderId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(s => s.Shipper)
+                    .WithMany()
+                    .HasForeignKey(s => s.ShipperId)
+                    .OnDelete(DeleteBehavior.SetNull)
+                    .IsRequired(false);
             });
 
             // ========================
@@ -306,7 +313,8 @@ namespace GlocalCart.API.Data
             modelBuilder.Entity<IdentityRole<int>>().HasData(
                 new IdentityRole<int> { Id = 1, Name = "Member", NormalizedName = "MEMBER" },
                 new IdentityRole<int> { Id = 2, Name = "Seller", NormalizedName = "SELLER" },
-                new IdentityRole<int> { Id = 3, Name = "Admin", NormalizedName = "ADMIN" }
+                new IdentityRole<int> { Id = 3, Name = "Admin", NormalizedName = "ADMIN" },
+                new IdentityRole<int> { Id = 4, Name = "Shipper", NormalizedName = "SHIPPER" }
             );
 
             // Danh mục sản phẩm mẫu (theo yêu cầu)

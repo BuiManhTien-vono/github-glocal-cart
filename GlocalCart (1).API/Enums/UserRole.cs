@@ -7,6 +7,7 @@ namespace GlocalCart.API.Enums
     {
         Member,  // Thành viên (Buyer)
         Seller,  // Người bán
-        Admin    // Quản trị viên
+        Admin,   // Quản trị viên
+        Shipper  // Nhân viên giao hàng
     }
 }

@@ -38,4 +38,17 @@ namespace GlocalCart.API.DTOs.Payments
         
         public string Status { get; set; } = "PAID"; // "PAID", "FAILED"
     }
+
+    public class PaymentStatusDto
+    {
+        public int OrderId { get; set; }
+        public string OrderNumber { get; set; } = string.Empty;
+        public string Method { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string? TransactionRef { get; set; }
+        public bool CanInitiatePayment { get; set; }
+        public bool CanConfirmTransfer { get; set; }
+        public bool IsPaid { get; set; }
+    }
 }
