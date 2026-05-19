@@ -62,6 +62,8 @@ import ChatListScreen from '../screens/Shop/ChatListScreen';
 import ChatDetailScreen from '../screens/Shop/ChatDetailScreen';
 import ReportProductScreen from '../screens/Shop/ReportProductScreen';
 import OrderTrackingScreen from '../screens/Shop/OrderTrackingScreen';
+import VietQRScreen from '../screens/Shop/VietQRScreen';
+import PaymentWaitingScreen from '../screens/Shop/PaymentWaitingScreen';
 
 // Shipper Screens
 import ShipperAvailableScreen from '../screens/Shipper/ShipperAvailableScreen';
@@ -72,6 +74,8 @@ import ShipperCompletedScreen from '../screens/Shipper/ShipperCompletedScreen';
 import ShipperChangePasswordScreen from '../screens/Shipper/ShipperChangePasswordScreen';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import SellerCreateShipmentScreen from '../screens/Seller/SellerCreateShipmentScreen';
 
 // ─── Stacks ───
 const Stack = createNativeStackNavigator();
@@ -117,6 +121,7 @@ function ProfileStack() {
       <Stack.Screen name="AdminProducts" component={AdminProductsScreen} />
       <Stack.Screen name="SellerProducts" component={SellerProductScreen} />
       <Stack.Screen name="SellerOrders" component={SellerOrdersScreen} />
+      <Stack.Screen name="SellerCreateShipment" component={SellerCreateShipmentScreen} />
       <Stack.Screen name="SellerShopInfo" component={SellerShopInfoScreen} />
       <Stack.Screen name="SellerCategories" component={SellerCategoriesScreen} />
       <Stack.Screen name="SellerAddCategory" component={SellerAddCategoryScreen} />
@@ -248,6 +253,8 @@ function AppStack() {
       <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
       <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
       <Stack.Screen name="NotificationContent" component={NotificationContentScreen} />
+      <Stack.Screen name="VietQR" component={VietQRScreen} />
+      <Stack.Screen name="PaymentWaiting" component={PaymentWaitingScreen} options={{ gestureEnabled: false }} />
     </Stack.Navigator>
   );
 }

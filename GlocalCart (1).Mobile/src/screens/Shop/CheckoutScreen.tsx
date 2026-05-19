@@ -58,14 +58,14 @@ export default function CheckoutScreen({ navigation, route }: any) {
       Alert.alert('Thông báo', 'Vui lòng chọn địa chỉ giao hàng');
       return;
     }
-    if (selectedPayment === 'bank' && !selectedBank) {
-      Alert.alert('Thông báo', 'Vui lòng chọn tài khoản ngân hàng để thanh toán.');
+    if (!items || items.length === 0) {
+      Alert.alert('Thông báo', 'Giỏ hàng của bạn đang trống.');
       return;
     }
 
     setIsPlacingOrder(true);
     try {
-      const paymentMethodCode = selectedPayment === 'cod' ? 0 : selectedPayment === 'card' ? 1 : 2;
+      const paymentMethodCode = selectedPayment === 'bank' ? 1 : 0;
       const orderData = {
         shippingAddressId: selectedAddress.id,
         paymentMethod: paymentMethodCode,
@@ -74,43 +74,39 @@ export default function CheckoutScreen({ navigation, route }: any) {
       };
 
       let createdOrder: any = null;
-      try {
-        createdOrder = await apiClient.post('/orders', orderData);
-      } catch {}
-
-      // Tạo đơn hàng local nếu API fail
-      if (!createdOrder) {
-        createdOrder = {
-          id: Date.now(),
-          orderNumber: `GLC${Date.now().toString().slice(-8)}`,
-          status: 0,
-          totalAmount: total,
-          createdAt: new Date().toISOString(),
-          orderItems: items.map(item => ({
-            productId: item.productId || item.id,
-            productName: item.productName,
-            productImage: item.productImage,
-            quantity: item.quantity,
-            price: item.priceSnapshot,
-          })),
-          shippingAddress: selectedAddress,
-          paymentMethod: selectedPayment,
-        };
-      }
+      createdOrder = await apiClient.post('/orders', orderData);
 
       clearCart();
 
-      Alert.alert(
-        '🎉 Đặt hàng thành công!',
-        `Đơn hàng ${createdOrder.orderNumber || '#' + createdOrder.id} đã được đặt. Chúng tôi sẽ xác nhận trong thời gian sớm nhất!`,
-        [{
-          text: 'Xem đơn hàng',
-          onPress: () => navigation.replace('MyOrders', {
-            activeTab: 'Chờ xác nhận',
-            newOrder: createdOrder,
-          }),
-        }]
-      );
+      if (paymentMethodCode === 1) {
+        Alert.alert(
+          '🎉 Đặt hàng thành công!',
+          `Đơn hàng ${createdOrder.orderNumber || '#' + createdOrder.id} đã được tạo. Vui lòng tiến hành thanh toán để người bán xác nhận đơn.`,
+          [{
+            text: 'Thanh toán ngay',
+            onPress: () => navigation.replace('VietQR', { orderId: createdOrder.id })
+          }],
+          { cancelable: false }
+        );
+      } else {
+        Alert.alert(
+          '🎉 Đặt hàng thành công!',
+          `Đơn hàng ${createdOrder.orderNumber || '#' + createdOrder.id} đã được đặt. Chúng tôi sẽ xác nhận trong thời gian sớm nhất!`,
+          [{
+            text: 'Xem đơn hàng',
+            onPress: () => {
+              navigation.navigate('MainTabs', {
+                screen: 'Profile',
+                params: {
+                  screen: 'OrderDetail',
+                  params: { orderId: createdOrder.id, fromPayment: true }
+                }
+              });
+            }
+          }],
+          { cancelable: false }
+        );
+      }
     } catch (error: any) {
       Alert.alert('Lỗi', error.message || 'Không thể đặt hàng. Vui lòng thử lại.');
     } finally {
@@ -200,28 +196,11 @@ export default function CheckoutScreen({ navigation, route }: any) {
             </TouchableOpacity>
           ))}
 
-          {/* Chọn bank account nếu chọn 'bank' */}
           {selectedPayment === 'bank' && (
             <View style={s.bankPicker}>
-              {bankAccounts.length === 0 ? (
-                <TouchableOpacity style={s.addBankBtn}
-                  onPress={() => navigation.navigate('AccountSettings')}>
-                  <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
-                  <Text style={{ color: colors.primary, fontSize: 14 }}>Thêm tài khoản ngân hàng</Text>
-                </TouchableOpacity>
-              ) : (
-                bankAccounts.map((b, i) => (
-                  <TouchableOpacity key={i} style={[s.bankItem, selectedBank?.id === b.id && s.bankItemActive]}
-                    onPress={() => setSelectedBank(b)}>
-                    <Ionicons name="card" size={20} color={selectedBank?.id === b.id ? colors.primary : '#999'} />
-                    <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text style={s.bankName}>{b.bankName}</Text>
-                      <Text style={s.bankNumber}>**** {b.accountNumber?.slice(-4)}</Text>
-                    </View>
-                    {selectedBank?.id === b.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
-                  </TouchableOpacity>
-                ))
-              )}
+              <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 20 }}>
+                Hệ thống sẽ tạo mã VietQR tự động để bạn quét thanh toán bằng ứng dụng ngân hàng.
+              </Text>
             </View>
           )}
         </View>

@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 
 const BASE_URL = Platform.OS === 'web'
   ? 'http://localhost:5100/api'
-  : 'http://192.168.1.3:5100/api';
+  : 'http://192.168.1.6:5100/api';
 
 const apiClient = axios.create({
   baseURL: BASE_URL,

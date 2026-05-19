@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using GlocalCart.API.Data;
 using GlocalCart.API.DTOs.Orders;
 using GlocalCart.API.Enums;
@@ -12,11 +13,13 @@ namespace GlocalCart.API.Services.Implementations
     {
         private readonly AppDbContext _db;
         private readonly INotificationService _notif;
+        private readonly IServiceScopeFactory _scopeFactory;
 
-        public OrderService(AppDbContext db, INotificationService notif)
+        public OrderService(AppDbContext db, INotificationService notif, IServiceScopeFactory scopeFactory)
         {
             _db = db;
             _notif = notif;
+            _scopeFactory = scopeFactory;
         }
 
         public async Task<OrderResponseDto> CreateOrderAsync(int buyerId, CreateOrderDto dto)
@@ -102,8 +105,11 @@ namespace GlocalCart.API.Services.Implementations
             var sellerIds = cartItems.Select(ci => ci.Product.SellerId).Distinct();
             foreach (var sellerId in sellerIds)
             {
-                await _notif.CreateNotificationAsync(sellerId,
-                    $"Bạn có đơn hàng mới #{order.OrderNumber}.");
+                string notifMessage = isBankTransfer
+                    ? $"Bạn có đơn hàng mới #{order.OrderNumber}. Người mua đang tiến hành thanh toán chuyển khoản."
+                    : $"YÊU CẦU XÁC NHẬN: Bạn có đơn hàng mới #{order.OrderNumber} (COD), vui lòng xác nhận để chuẩn bị hàng.";
+                    
+                await _notif.CreateNotificationAsync(sellerId, notifMessage);
             }
 
             return await GetOrderByIdAsync(buyerId, order.Id);
@@ -296,24 +302,63 @@ namespace GlocalCart.API.Services.Implementations
             _db.OrderLogs.Add(new OrderLog
             {
                 OrderId = orderId,
-                Status = order.Status,
-                Note = "Seller đã tạo vận đơn. Chờ shipper nhận giao."
+                Status = OrderStatus.Unshipped,
+                Note = "Seller đã tạo vận đơn. Chờ lấy hàng."
             });
 
             await _db.SaveChangesAsync();
 
-            _db.ShipmentLogs.Add(new ShipmentLog
+            // Auto-transition background task
+            _ = Task.Run(async () =>
             {
-                ShipmentId = shipment.Id,
-                Status = ShipmentStatus.Pending,
-                Note = "Vận đơn chờ shipper nhận."
+                // Wait 30s before changing to Shipped
+                await Task.Delay(TimeSpan.FromSeconds(30));
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var notif = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                    var o = await db.Orders.Include(x => x.Shipment).FirstOrDefaultAsync(x => x.Id == orderId);
+                    if (o != null && o.Status == OrderStatus.Unshipped)
+                    {
+                        o.Status = OrderStatus.Shipped;
+                        if (o.Shipment != null) o.Shipment.Status = ShipmentStatus.Shipped;
+                        db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Shipped, Note = "Đơn hàng đã được lấy. Đang vận chuyển." });
+                        await db.SaveChangesAsync();
+                        await notif.CreateNotificationAsync(o.BuyerId, $"Đơn hàng #{o.OrderNumber} đang được giao.");
+                    }
+                }
+
+                // Wait another 30s before changing to Complete
+                await Task.Delay(TimeSpan.FromSeconds(30));
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    var notif = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                    var o = await db.Orders.Include(x => x.Shipment).FirstOrDefaultAsync(x => x.Id == orderId);
+                    if (o != null && o.Status == OrderStatus.Shipped)
+                    {
+                        o.Status = OrderStatus.Complete;
+                        if (o.Shipment != null)
+                        {
+                            o.Shipment.Status = ShipmentStatus.Delivered;
+                            o.Shipment.DeliveredAt = DateTime.UtcNow;
+                        }
+                        db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Complete, Note = "Giao hàng thành công." });
+                        await db.SaveChangesAsync();
+                        await notif.CreateNotificationAsync(o.BuyerId, $"Đơn hàng #{o.OrderNumber} đã giao thành công.");
+                    }
+                }
             });
-            await _db.SaveChangesAsync();
 
-            await _notif.CreateNotificationAsync(order.BuyerId,
-                $"Đơn hàng #{order.OrderNumber} đã được đóng gói, chờ shipper giao.");
-
-            return MapShipmentDto(shipment);
+            return new ShipmentInfoDto
+            {
+                Id = shipment.Id,
+                Status = shipment.Status.ToString(),
+                ShipmentDate = shipment.ShipmentDate,
+                EstimatedArrival = shipment.EstimatedArrival,
+                ShipmentMethod = shipment.ShipmentMethod,
+                TrackingNumber = shipment.TrackingNumber
+            };
         }
 
         public async Task<ShipmentInfoDto> GetShipmentAsync(int userId, int orderId)
