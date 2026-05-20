@@ -46,6 +46,11 @@ namespace GlocalCart.API.Models
         public int? ShipperId { get; set; }
 
         public DateTime? AssignedAt { get; set; }
+        public DateTime? AcceptedAt { get; set; }
+        public DateTime? PickedUpAt { get; set; }
+        public DateTime? ArrivedAt { get; set; }
+        public DateTime? BuyerConfirmedReceiptAt { get; set; }
+        public DateTime? TransferReportedAt { get; set; }
         public DateTime? DeliveredAt { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

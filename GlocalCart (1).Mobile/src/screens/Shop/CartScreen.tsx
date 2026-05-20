@@ -172,19 +172,27 @@ export default function CartScreen() {
 
   const handleCheckout = () => {
     if (selectedIds.length === 0) {
-      Alert.alert('Thông báo', 'Vui lòng chọn ít nhất một sản phẩm để mua hàng.');
+      if (Platform.OS === 'web') {
+        window.alert('Thông báo\n\nVui lòng chọn ít nhất một sản phẩm để mua hàng.');
+      } else {
+        Alert.alert('Thông báo', 'Vui lòng chọn ít nhất một sản phẩm để mua hàng.');
+      }
       return;
     }
-    // Chặn guest thanh toán
     if (!isLoggedIn) {
-      Alert.alert(
-        'Yêu cầu đăng nhập',
-        'Bạn cần đăng nhập để tiến hành thanh toán.',
-        [
-          { text: 'Để sau', style: 'cancel' },
-          { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-        ]
-      );
+      if (Platform.OS === 'web') {
+        const goLogin = window.confirm('Bạn cần đăng nhập để tiến hành thanh toán.\n\nBấm OK để đăng nhập.');
+        if (goLogin) setGuestMode(false);
+      } else {
+        Alert.alert(
+          'Yêu cầu đăng nhập',
+          'Bạn cần đăng nhập để tiến hành thanh toán.',
+          [
+            { text: 'Để sau', style: 'cancel' },
+            { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+          ]
+        );
+      }
       return;
     }
     navigation.navigate('Checkout', { selectedItems: items.filter(i => selectedIds.includes(i.id)) });

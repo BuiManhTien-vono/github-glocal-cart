@@ -171,13 +171,13 @@ namespace GlocalCart.API.Services.Implementations
                 {
                     OrderId = order.Id,
                     Status = order.Status,
-                    Note = $"Ngân hàng xác nhận thanh toán thành công. GD: {transactionId}"
+                    Note = "Thanh toán thành công qua ngân hàng. Đang chờ người bán xác nhận."
                 });
 
                 var sellerIds = order.OrderItems.Select(oi => oi.SellerId).Distinct();
                 foreach (var sellerId in sellerIds)
                     await _notif.CreateNotificationAsync(sellerId,
-                        $"Đơn #{order.OrderNumber} đã thanh toán thành công. Có thể xử lý giao hàng.");
+                        $"YÊU CẦU XÁC NHẬN: Đơn #{order.OrderNumber} đã thanh toán, vui lòng xác nhận để chuẩn bị hàng.");
 
                 await _notif.CreateNotificationAsync(order.BuyerId,
                     $"Thanh toán đơn #{order.OrderNumber} đã được ngân hàng xác nhận.");

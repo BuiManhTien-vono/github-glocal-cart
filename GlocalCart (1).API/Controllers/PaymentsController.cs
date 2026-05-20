@@ -35,6 +35,28 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> ConfirmTransfer(int orderId)
         {
             var result = await _paymentService.ConfirmTransferAsync(UserId, orderId);
+
+            // Auto-simulate webhook in Development
+            var env = HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>();
+            if (env.IsDevelopment())
+            {
+                var scopeFactory = HttpContext.RequestServices.GetRequiredService<IServiceScopeFactory>();
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(3000); // 3 seconds delay for UI to transition
+                        using var scope = scopeFactory.CreateScope();
+                        var pSvc = scope.ServiceProvider.GetRequiredService<IPaymentService>();
+                        await pSvc.SimulateBankCallbackAsync(result.OrderNumber, "PAID");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Auto-Simulate Error]: {ex.Message}");
+                    }
+                });
+            }
+
             return Ok(ApiResponse.Ok(result, "Đã ghi nhận. Đang chờ ngân hàng xác nhận."));
         }
 

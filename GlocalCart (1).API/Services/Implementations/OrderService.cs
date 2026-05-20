@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using GlocalCart.API.Data;
 using GlocalCart.API.DTOs.Orders;
 using GlocalCart.API.Enums;
@@ -12,11 +13,13 @@ namespace GlocalCart.API.Services.Implementations
     {
         private readonly AppDbContext _db;
         private readonly INotificationService _notif;
+        private readonly IServiceScopeFactory _scopeFactory;
 
-        public OrderService(AppDbContext db, INotificationService notif)
+        public OrderService(AppDbContext db, INotificationService notif, IServiceScopeFactory scopeFactory)
         {
             _db = db;
             _notif = notif;
+            _scopeFactory = scopeFactory;
         }
 
         public async Task<OrderResponseDto> CreateOrderAsync(int buyerId, CreateOrderDto dto)
@@ -44,14 +47,14 @@ namespace GlocalCart.API.Services.Implementations
                     throw new InvalidOperationException($"Sản phẩm '{item.Product.Name}' không khả dụng.");
             }
 
-            // Tạo đơn hàng
             var order = new Order
             {
                 OrderNumber = "GC-" + DateTime.UtcNow.Ticks.ToString()[^10..],
                 BuyerId = buyerId,
                 ShippingAddressId = dto.ShippingAddressId,
                 Status = OrderStatus.Pending,
-                TotalAmount = cartItems.Sum(ci => ci.PriceSnapshot * ci.Quantity),
+                ShippingFee = 30000m,
+                TotalAmount = cartItems.Sum(ci => ci.PriceSnapshot * ci.Quantity) + 30000m,
                 Note = dto.Note
             };
 
@@ -102,8 +105,11 @@ namespace GlocalCart.API.Services.Implementations
             var sellerIds = cartItems.Select(ci => ci.Product.SellerId).Distinct();
             foreach (var sellerId in sellerIds)
             {
-                await _notif.CreateNotificationAsync(sellerId,
-                    $"Bạn có đơn hàng mới #{order.OrderNumber}.");
+                string notifMessage = isBankTransfer
+                    ? $"Bạn có đơn hàng mới #{order.OrderNumber}. Người mua đang tiến hành thanh toán chuyển khoản."
+                    : $"YÊU CẦU XÁC NHẬN: Bạn có đơn hàng mới #{order.OrderNumber} (COD), vui lòng xác nhận để chuẩn bị hàng.";
+                    
+                await _notif.CreateNotificationAsync(sellerId, notifMessage);
             }
 
             return await GetOrderByIdAsync(buyerId, order.Id);
@@ -112,6 +118,7 @@ namespace GlocalCart.API.Services.Implementations
         public async Task<PagedResult<OrderResponseDto>> GetBuyerOrdersAsync(int buyerId, int page, int pageSize)
         {
             return await _db.Orders
+                .Include(o => o.Buyer)
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Product).ThenInclude(p => p.Images)
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Seller)
                 .Include(o => o.ShippingAddress)
@@ -198,6 +205,7 @@ namespace GlocalCart.API.Services.Implementations
                 .ToListAsync();
 
             return await _db.Orders
+                .Include(o => o.Buyer)
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Product).ThenInclude(p => p.Images)
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Seller)
                 .Include(o => o.ShippingAddress).Include(o => o.Payment)
@@ -273,8 +281,6 @@ namespace GlocalCart.API.Services.Implementations
             if (order.Shipment != null)
                 throw new InvalidOperationException("Đơn hàng đã có thông tin vận chuyển.");
 
-            OrderBusinessRules.EnsureSellerCanFulfill(order.Payment);
-
             if (order.Status is OrderStatus.Canceled or OrderStatus.Complete)
                 throw new InvalidOperationException("Không thể tạo vận đơn cho đơn đã hủy/hoàn tất.");
 
@@ -296,24 +302,27 @@ namespace GlocalCart.API.Services.Implementations
             _db.OrderLogs.Add(new OrderLog
             {
                 OrderId = orderId,
-                Status = order.Status,
-                Note = "Seller đã tạo vận đơn. Chờ shipper nhận giao."
+                Status = OrderStatus.Unshipped,
+                Note = "Seller đã tạo vận đơn. Chờ lấy hàng."
             });
 
             await _db.SaveChangesAsync();
 
-            _db.ShipmentLogs.Add(new ShipmentLog
+            var shipperIds = await _db.Users.Where(u => u.Role == UserRole.Shipper).Select(u => u.Id).ToListAsync();
+            foreach (var sId in shipperIds)
             {
-                ShipmentId = shipment.Id,
-                Status = ShipmentStatus.Pending,
-                Note = "Vận đơn chờ shipper nhận."
-            });
-            await _db.SaveChangesAsync();
+                await _notif.CreateNotificationAsync(sId, $"Có đơn hàng mới #{order.OrderNumber} chờ nhận giao.");
+            }
 
-            await _notif.CreateNotificationAsync(order.BuyerId,
-                $"Đơn hàng #{order.OrderNumber} đã được đóng gói, chờ shipper giao.");
-
-            return MapShipmentDto(shipment);
+            return new ShipmentInfoDto
+            {
+                Id = shipment.Id,
+                Status = shipment.Status.ToString(),
+                ShipmentDate = shipment.ShipmentDate,
+                EstimatedArrival = shipment.EstimatedArrival,
+                ShipmentMethod = shipment.ShipmentMethod,
+                TrackingNumber = shipment.TrackingNumber
+            };
         }
 
         public async Task<ShipmentInfoDto> GetShipmentAsync(int userId, int orderId)
@@ -368,10 +377,159 @@ namespace GlocalCart.API.Services.Implementations
                 .ToListAsync();
         }
 
+        public async Task<bool> SelectPaymentMethodAsync(int buyerId, int orderId, SelectPaymentMethodDto dto)
+        {
+            var order = await _db.Orders.Include(o => o.Shipment).Include(o => o.Payment).FirstOrDefaultAsync(o => o.Id == orderId)
+                ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
+
+            if (order.BuyerId != buyerId) throw new UnauthorizedAccessException();
+            if (order.Shipment == null || order.Shipment.Status != ShipmentStatus.Arrived)
+                throw new InvalidOperationException("Chưa thể chọn phương thức thanh toán lúc này.");
+
+            if (order.Shipment.BuyerConfirmedReceiptAt == null)
+                throw new InvalidOperationException("Vui lòng xác nhận đã nhận hàng trước.");
+
+            if (order.Payment == null) throw new InvalidOperationException("Không có thông tin thanh toán.");
+
+            if (dto.Method == "Cash")
+            {
+                order.Payment.Method = PaymentMethod.CreditCard;
+                await _db.SaveChangesAsync();
+                if (order.Shipment.ShipperId.HasValue)
+                {
+                    await _notif.CreateNotificationAsync(
+                        order.Shipment.ShipperId.Value,
+                        $"Khách đơn #{order.OrderNumber} chọn TIỀN MẶT. Vui lòng bấm \"Đã nhận tiền\" sau khi thu.",
+                        NotificationAction.CashSelected,
+                        orderId);
+                }
+            }
+            else if (dto.Method == "Transfer")
+            {
+                order.Payment.Method = PaymentMethod.ElectronicBankTransfer;
+                await _db.SaveChangesAsync();
+            }
+
+            return true;
+        }
+
+        public async Task<bool> ConfirmTransferAsync(int buyerId, int orderId)
+        {
+            var order = await _db.Orders.Include(o => o.Shipment).Include(o => o.Payment)
+                .FirstOrDefaultAsync(o => o.Id == orderId)
+                ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
+
+            if (order.BuyerId != buyerId) throw new UnauthorizedAccessException();
+            if (order.Shipment == null || order.Shipment.Status != ShipmentStatus.Arrived)
+                throw new InvalidOperationException("Chưa thể xác nhận chuyển khoản.");
+
+            if (order.Shipment.BuyerConfirmedReceiptAt == null)
+                throw new InvalidOperationException("Vui lòng xác nhận đã nhận hàng trước.");
+
+            if (order.Payment?.Method != PaymentMethod.ElectronicBankTransfer)
+                throw new InvalidOperationException("Vui lòng chọn phương thức chuyển khoản trước.");
+
+            order.Shipment.TransferReportedAt = DateTime.UtcNow;
+            order.Payment.Status = PaymentStatus.Completed;
+            order.Payment.UpdatedAt = DateTime.UtcNow;
+
+            if (order.Shipment.ShipperId.HasValue)
+            {
+                var shipperAccount = await _db.BankAccounts.FirstOrDefaultAsync(b => b.UserId == order.Shipment.ShipperId.Value);
+                if (shipperAccount != null)
+                    shipperAccount.Balance += order.TotalAmount;
+
+                await _notif.CreateNotificationAsync(
+                    order.Shipment.ShipperId.Value,
+                    $"Khách đơn #{order.OrderNumber} đã chuyển khoản {order.TotalAmount:N0}đ. Vui lòng bấm \"Đã nhận chuyển khoản\".",
+                    NotificationAction.TransferReported,
+                    orderId);
+            }
+
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<ConfirmReceiptResultDto> ConfirmReceiptAsync(int buyerId, int orderId)
+        {
+            var order = await _db.Orders.Include(o => o.Shipment).Include(o => o.Payment)
+                .FirstOrDefaultAsync(o => o.Id == orderId)
+                ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
+
+            if (order.BuyerId != buyerId) throw new UnauthorizedAccessException();
+            if (order.Shipment == null || order.Shipment.Status != ShipmentStatus.Arrived)
+                throw new InvalidOperationException("Đơn hàng chưa đến nơi, chưa thể xác nhận nhận hàng.");
+
+            if (order.Shipment.BuyerConfirmedReceiptAt != null)
+                return new ConfirmReceiptResultDto
+                {
+                    Completed = order.Status == OrderStatus.Complete,
+                    RequiresPayment = order.Payment?.Status == PaymentStatus.Unpaid,
+                    Message = "Đã xác nhận nhận hàng trước đó."
+                };
+
+            order.Shipment.BuyerConfirmedReceiptAt = DateTime.UtcNow;
+
+            if (order.Payment != null && order.Payment.Status == PaymentStatus.Completed)
+            {
+                order.Shipment.Status = ShipmentStatus.Delivered;
+                order.Shipment.DeliveredAt = DateTime.UtcNow;
+                order.Status = OrderStatus.Complete;
+
+                _db.ShipmentLogs.Add(new ShipmentLog
+                {
+                    ShipmentId = order.Shipment.Id,
+                    Status = ShipmentStatus.Delivered,
+                    Note = "Người mua xác nhận nhận hàng (đã thanh toán trước)."
+                });
+                _db.OrderLogs.Add(new OrderLog
+                {
+                    OrderId = orderId,
+                    Status = OrderStatus.Complete,
+                    Note = "Đơn hàng hoàn tất."
+                });
+
+                if (order.Shipment.ShipperId.HasValue)
+                {
+                    var shipperAccount = await _db.BankAccounts.FirstOrDefaultAsync(b => b.UserId == order.Shipment.ShipperId.Value);
+                    if (shipperAccount != null)
+                        shipperAccount.Balance += order.ShippingFee;
+                }
+
+                await _db.SaveChangesAsync();
+
+                if (order.Shipment.ShipperId.HasValue)
+                {
+                    await _notif.CreateNotificationAsync(
+                        order.Shipment.ShipperId.Value,
+                        $"Khách đã nhận hàng đơn #{order.OrderNumber} (đã thanh toán trước).",
+                        NotificationAction.OrderDelivered,
+                        orderId);
+                }
+
+                return new ConfirmReceiptResultDto
+                {
+                    Completed = true,
+                    RequiresPayment = false,
+                    Message = "Đã xác nhận nhận hàng. Đơn hàng hoàn tất."
+                };
+            }
+
+            await _db.SaveChangesAsync();
+
+            return new ConfirmReceiptResultDto
+            {
+                Completed = false,
+                RequiresPayment = true,
+                Message = "Vui lòng chọn phương thức thanh toán."
+            };
+        }
+
         private static OrderResponseDto MapToDto(Order o) => new()
         {
             Id = o.Id, OrderNumber = o.OrderNumber, Status = o.Status.ToString(),
-            OrderDate = o.OrderDate, TotalAmount = o.TotalAmount, Note = o.Note,
+            OrderDate = o.OrderDate, TotalAmount = o.TotalAmount, ShippingFee = o.ShippingFee,
+            BuyerName = o.Buyer?.FullName, Note = o.Note,
             ShippingAddress = new AddressSnapshotDto
             {
                 StreetAddress = o.ShippingAddress.StreetAddress, City = o.ShippingAddress.City,

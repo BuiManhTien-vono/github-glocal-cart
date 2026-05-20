@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ScrollView,
 } from 'react-native';
@@ -10,6 +10,7 @@ import { useChatStore } from '../../store/useChatStore';
 import { useAuth } from '../../context/AuthContext';
 import { CartBadge } from '../../components/common/CartBadge';
 import { ChatBadge } from '../../components/common/ChatBadge';
+import { notificationService, AppNotification } from '../../services/api/notificationService';
 
 // ─── Mock Data ───
 const ORDER_UPDATES = [
@@ -121,14 +122,59 @@ const TABS = [
   { key: 'finance' as TabType, icon: 'card-outline', label: 'Tài chính' },
 ];
 
+function mapApiNotification(n: AppNotification) {
+  const created = new Date(n.createdAt);
+  const time = created.toLocaleString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  });
+  const isOrder = !!n.relatedOrderId;
+  let title = 'Thông báo đơn hàng';
+  if (n.action === 'OrderArrived') title = 'Đơn hàng đã đến nơi';
+  else if (n.action === 'CashSelected') title = 'Khách chọn tiền mặt';
+  else if (n.action === 'TransferReported') title = 'Khách đã chuyển khoản';
+  else if (n.action === 'OrderDelivered') title = 'Giao hàng thành công';
+  else if (n.action === 'OrderAccepted') title = 'Shipper đã nhận đơn';
+
+  return {
+    id: String(n.id),
+    title,
+    body: n.content,
+    time,
+    isRead: n.isRead,
+    isOrder,
+    orderId: n.relatedOrderId,
+    action: n.action,
+    productImage: null,
+  };
+}
+
 export default function NotificationsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { isLoggedIn, setGuestMode } = useAuth();
+  const { isLoggedIn, setGuestMode, user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('orders');
-  const [orderData, setOrderData] = useState(ORDER_UPDATES);
+  const [orderData, setOrderData] = useState<any[]>([]);
   const [highlightData, setHighlightData] = useState(HIGHLIGHT_NOTIFICATIONS);
   const [promoData, setPromoData] = useState(PROMO_NOTIFICATIONS);
   const [financeData, setFinanceData] = useState(FINANCE_NOTIFICATIONS);
+
+  const loadOrderNotifications = useCallback(async () => {
+    try {
+      const res: any = await notificationService.getNotifications(1, 50);
+      const items: AppNotification[] = res?.items || [];
+      setOrderData(items.map(mapApiNotification));
+    } catch (e) {
+      console.log('load notifications', e);
+      setOrderData(ORDER_UPDATES);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLoggedIn) loadOrderNotifications();
+  }, [isLoggedIn, loadOrderNotifications]);
 
   if (!isLoggedIn) {
     return (
@@ -150,7 +196,14 @@ export default function NotificationsScreen({ navigation }: any) {
 
   const getUnread = (list: any[]) => list.filter(x => !x.isRead).length;
 
-  const markRead = (id: string) => {
+  const markRead = async (id: string) => {
+    if (activeTab === 'orders') {
+      try {
+        await notificationService.markAsRead(Number(id));
+      } catch (e) {
+        console.log('mark read', e);
+      }
+    }
     const updater = (list: any[]) => list.map(x => x.id === id ? { ...x, isRead: true } : x);
     if (activeTab === 'orders') setOrderData(prev => updater(prev));
     else if (activeTab === 'highlights') setHighlightData(prev => updater(prev));
@@ -160,9 +213,30 @@ export default function NotificationsScreen({ navigation }: any) {
 
   const handleNotificationPress = (item: any) => {
     markRead(item.id);
-    if (item.isOrder) {
-      navigation.navigate('OrderTracking', { notification: item, orderUpdate: item });
-    } else {
+    if (item.isOrder && item.orderId) {
+      if (item.action === 'OrderArrived') {
+        navigation.navigate('Profile', {
+          screen: 'MyOrders',
+          params: { openConfirmReceiptForOrderId: item.orderId },
+        });
+        return;
+      }
+      if (item.action === 'CashSelected' || item.action === 'TransferReported') {
+        if (user?.role === 'Shipper') {
+          navigation.navigate('ShipperTabs', { screen: 'Delivering' });
+        }
+        return;
+      }
+      const lowerBody = item.body?.toLowerCase() || '';
+      if (lowerBody.includes('thanh toán') || lowerBody.includes('phương thức')) {
+        navigation.navigate('Profile', {
+          screen: 'MyOrders',
+          params: { openPaymentForOrderId: item.orderId },
+        });
+      } else {
+        navigation.navigate('OrderTracking', { notification: item, orderUpdate: item });
+      }
+    } else if (!item.isOrder) {
       navigation.navigate('NotificationContent', { notification: item });
     }
   };

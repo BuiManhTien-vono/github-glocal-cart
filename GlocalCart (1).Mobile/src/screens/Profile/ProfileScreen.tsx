@@ -78,9 +78,9 @@ export default function ProfileScreen({ navigation }: any) {
   // Shopee-style order status items
   const orderStatusItems = [
     { icon: 'wallet-outline', label: 'Chờ xác nhận', color: colors.primary },
-    { icon: 'car-outline', label: 'Đang giao', color: colors.secondary },
-    { icon: 'cube-outline', label: 'Đã giao', color: colors.success },
-    { icon: 'star-outline', label: 'Đánh giá', color: colors.warning },
+    { icon: 'cube-outline', label: 'Chờ lấy hàng', color: colors.info },
+    { icon: 'car-outline', label: 'Chờ giao hàng', color: colors.secondary },
+    { icon: 'checkmark-circle-outline', label: 'Đã giao', color: colors.success },
   ];
 
   // Utilities grid – chỉ giữ 4 mục cốt lõi
@@ -195,14 +195,14 @@ export default function ProfileScreen({ navigation }: any) {
         {/* ===== ORDER STATUS BAR ===== */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Đơn Mua</Text>
+            <Text style={styles.sectionTitle}>{user?.isSeller ? 'Quản Lý Đơn' : 'Đơn Mua'}</Text>
             <TouchableOpacity
               style={styles.viewAllBtn}
               onPress={() => {
                 if (!isLoggedIn) {
                   Alert.alert(
                     'Yêu cầu đăng nhập',
-                    'Vui lòng đăng nhập để xem lịch sử mua hàng.',
+                    'Vui lòng đăng nhập để tiếp tục.',
                     [
                       { text: 'Để sau', style: 'cancel' },
                       { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
@@ -210,15 +210,21 @@ export default function ProfileScreen({ navigation }: any) {
                   );
                   return;
                 }
-                navigation.navigate('MyOrders', { activeTab: 'Tất cả' });
+                navigation.navigate(user?.isSeller ? 'SellerOrders' : 'MyOrders', { activeTab: user?.isSeller ? 'Chờ xác nhận' : 'Tất cả' });
               }}
             >
-              <Text style={styles.viewAllText}>Xem lịch sử mua hàng</Text>
+              <Text style={styles.viewAllText}>{user?.isSeller ? 'Xem tất cả đơn' : 'Xem lịch sử mua hàng'}</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
           <View style={styles.orderStatusRow}>
-            {orderStatusItems.map((item, i) => (
+            {(user?.isSeller ? [
+              { icon: 'wallet-outline', label: 'Chờ xác nhận', color: colors.primary },
+              { icon: 'cube-outline', label: 'Chờ lấy hàng', color: colors.info },
+              { icon: 'car-outline', label: 'Chờ giao hàng', color: colors.secondary },
+              { icon: 'checkmark-circle-outline', label: 'Đã giao', color: colors.success },
+              { icon: 'close-circle-outline', label: 'Đã hủy', color: colors.danger },
+            ] : orderStatusItems).map((item, i) => (
               <TouchableOpacity key={i} style={styles.orderStatusItem} onPress={() => {
                 if (!isLoggedIn) {
                   Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để xem đơn hàng.', [
@@ -227,7 +233,7 @@ export default function ProfileScreen({ navigation }: any) {
                   ]);
                   return;
                 }
-                navigation.navigate('MyOrders', { activeTab: item.label });
+                navigation.navigate(user?.isSeller ? 'SellerOrders' : 'MyOrders', { activeTab: item.label });
               }}>
                 <View style={[styles.orderStatusIcon, { backgroundColor: item.color + '12' }]}>
                   <Ionicons name={item.icon as any} size={24} color={item.color} />

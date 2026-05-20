@@ -53,80 +53,80 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
   useEffect(() => {
     loadCategories();
     if (productId || initialProduct?.id) {
-        fetchProductData(productId || initialProduct.id);
+      fetchProductData(productId || initialProduct.id);
     }
   }, []);
 
   const fetchProductData = async (id: number) => {
     setLoadingProduct(true);
     try {
-        const res = await apiClient.get(`/products/${id}`) as any;
-        if (res) {
-            setName(res.name || '');
-            setDescription(res.description || '');
-            setPrice(res.price != null ? String(res.price) : '');
-            setStock(res.availableItemCount != null ? String(res.availableItemCount) : '');
-            setCategoryId(res.categoryId || null);
-            setCategoryName(res.categoryName || '');
-            
-            // Sync images - Check all possible image fields from API
-            const existingImages: PickedImage[] = [];
-            
-            // 1. Check imageUrls (string array)
-            if (res.imageUrls && Array.isArray(res.imageUrls)) {
-                res.imageUrls.forEach((url: string, i: number) => {
-                    if (url && !url.includes('placeholder')) {
-                        const resolved = resolveProductImageUrl(url);
-                        if (resolved) {
-                            existingImages.push({
-                                uri: resolved,
-                                originalUrl: url,
-                                fileName: `existing_url_${i}.webp`,
-                                mimeType: 'image/webp',
-                                isExisting: true,
-                            });
-                        }
-                    }
-                });
-            }
-            
-            if (res.images && Array.isArray(res.images)) {
-                res.images.forEach((img: any, i: number) => {
-                    const url = img.imageUrl || img.url;
-                    if (url && !url.includes('placeholder')) {
-                        const resolved = resolveProductImageUrl(url);
-                        if (resolved && !existingImages.find(ei => ei.originalUrl === url)) {
-                            existingImages.push({
-                                uri: resolved,
-                                originalUrl: url,
-                                fileName: `existing_img_${img.id || i}.webp`,
-                                mimeType: 'image/webp',
-                                isExisting: true,
-                            });
-                        }
-                    }
-                });
-            }
+      const res = await apiClient.get(`/products/${id}`) as any;
+      if (res) {
+        setName(res.name || '');
+        setDescription(res.description || '');
+        setPrice(res.price != null ? String(res.price) : '');
+        setStock(res.availableItemCount != null ? String(res.availableItemCount) : '');
+        setCategoryId(res.categoryId || null);
+        setCategoryName(res.categoryName || '');
 
-            if (existingImages.length === 0 && res.mediaUrl && !res.mediaUrl.includes('placeholder')) {
-                const resolved = resolveProductImageUrl(res.mediaUrl);
-                if (resolved) {
-                    existingImages.push({
-                        uri: resolved,
-                        originalUrl: res.mediaUrl,
-                        fileName: 'existing_main.webp',
-                        mimeType: 'image/webp',
-                        isExisting: true,
-                    });
-                }
+        // Sync images - Check all possible image fields from API
+        const existingImages: PickedImage[] = [];
+
+        // 1. Check imageUrls (string array)
+        if (res.imageUrls && Array.isArray(res.imageUrls)) {
+          res.imageUrls.forEach((url: string, i: number) => {
+            if (url && !url.includes('placeholder')) {
+              const resolved = resolveProductImageUrl(url);
+              if (resolved) {
+                existingImages.push({
+                  uri: resolved,
+                  originalUrl: url,
+                  fileName: `existing_url_${i}.webp`,
+                  mimeType: 'image/webp',
+                  isExisting: true,
+                });
+              }
             }
-            setImages(existingImages);
+          });
         }
+
+        if (res.images && Array.isArray(res.images)) {
+          res.images.forEach((img: any, i: number) => {
+            const url = img.imageUrl || img.url;
+            if (url && !url.includes('placeholder')) {
+              const resolved = resolveProductImageUrl(url);
+              if (resolved && !existingImages.find(ei => ei.originalUrl === url)) {
+                existingImages.push({
+                  uri: resolved,
+                  originalUrl: url,
+                  fileName: `existing_img_${img.id || i}.webp`,
+                  mimeType: 'image/webp',
+                  isExisting: true,
+                });
+              }
+            }
+          });
+        }
+
+        if (existingImages.length === 0 && res.mediaUrl && !res.mediaUrl.includes('placeholder')) {
+          const resolved = resolveProductImageUrl(res.mediaUrl);
+          if (resolved) {
+            existingImages.push({
+              uri: resolved,
+              originalUrl: res.mediaUrl,
+              fileName: 'existing_main.webp',
+              mimeType: 'image/webp',
+              isExisting: true,
+            });
+          }
+        }
+        setImages(existingImages);
+      }
     } catch (err) {
-        console.warn('Fetch product error:', err);
-        Alert.alert('Lỗi', 'Không thể tải thông tin sản phẩm từ máy chủ.');
+      console.warn('Fetch product error:', err);
+      Alert.alert('Lỗi', 'Không thể tải thông tin sản phẩm từ máy chủ.');
     } finally {
-        setLoadingProduct(false);
+      setLoadingProduct(false);
     }
   };
 
@@ -185,10 +185,10 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
     // React Native fetch FormData cần uri chuẩn trên iOS và Android
     const formattedUri = Platform.OS === 'ios' ? img.uri.replace('file://', '') : img.uri;
     const fileObj: any = { uri: formattedUri, name: img.fileName || 'upload.webp', type: img.mimeType || 'image/jpeg' };
-    
+
     formData.append('file', fileObj);
     formData.append('folderName', 'products');
-    
+
     const token = await require('../../utils/secureStore').getSecureItem('auth_token');
     const response = await fetch(`${apiClient.defaults.baseURL}/upload`, {
       method: 'POST',
@@ -198,13 +198,13 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
       },
       body: formData,
     });
-    
+
     if (!response.ok) {
-        const errText = await response.text();
-        console.error('[Upload Error]', response.status, errText);
-        throw new Error(`Upload failed (${response.status}): ${errText}`);
+      const errText = await response.text();
+      console.error('[Upload Error]', response.status, errText);
+      throw new Error(`Upload failed (${response.status}): ${errText}`);
     }
-    
+
     const res = await response.json();
     return res?.data?.relativeUrl || res?.data?.url || res?.relativeUrl || res?.url || '';
   };
@@ -248,7 +248,7 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
 
       const id = productId || initialProduct?.id;
       await apiClient.put(`/products/${id}`, dto);
-      
+
       Alert.alert('Thành công', 'Sản phẩm đã được lưu vào database.', [
         { text: 'Xong', onPress: () => navigation.goBack() },
       ]);
@@ -263,10 +263,10 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
 
   if (loadingProduct) {
     return (
-        <View style={styles.loadingCenter}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={{ marginTop: 10, color: colors.textSecondary }}>Đang tải dữ liệu sản phẩm...</Text>
-        </View>
+      <View style={styles.loadingCenter}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ marginTop: 10, color: colors.textSecondary }}>Đang tải dữ liệu sản phẩm...</Text>
+      </View>
     );
   }
 
@@ -307,10 +307,10 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
               )}
             </View>
             {images.length === 0 && (
-                <View style={styles.emptyInfo}>
-                    <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
-                    <Text style={styles.emptyText}>Sản phẩm sẽ hiển thị với ảnh mặc định (placeholder).</Text>
-                </View>
+              <View style={styles.emptyInfo}>
+                <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                <Text style={styles.emptyText}>Sản phẩm sẽ hiển thị với ảnh mặc định (placeholder).</Text>
+              </View>
             )}
           </View>
 
@@ -318,14 +318,14 @@ export default function SellerEditProductScreen({ navigation, route }: any) {
           <View style={styles.section}>
             <Text style={styles.label}>Tên sản phẩm *</Text>
             <TextInput style={styles.input} placeholder="Tên sản phẩm..." value={name} onChangeText={setName} />
-            
+
             <Text style={styles.label}>Mô tả</Text>
-            <TextInput 
-                style={[styles.input, styles.textArea]} 
-                placeholder="Nhập mô tả hoặc để trống để xóa..." 
-                value={description} 
-                onChangeText={setDescription} 
-                multiline
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Nhập mô tả hoặc để trống để xóa..."
+              value={description}
+              onChangeText={setDescription}
+              multiline
             />
           </View>
 

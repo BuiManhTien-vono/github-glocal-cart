@@ -4,12 +4,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
+import { paymentApi } from '../../services/api/paymentApi';
 import { Loading } from '../../components/common/Loading';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
+import { getOrderDisplayLabel } from '../../utils/orderDisplayStatus';
 
 export default function OrderDetailScreen({ navigation, route }: any) {
     const orderId = route?.params?.orderId;
+    const fromPayment = route?.params?.fromPayment;
     const insets = useSafeAreaInsets();
     const [order, setOrder] = useState<any>(null);
+    const [paymentStatus, setPaymentStatus] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -17,9 +22,19 @@ export default function OrderDetailScreen({ navigation, route }: any) {
     }, [orderId]);
 
     const fetchOrderDetail = async () => {
+        setIsLoading(true);
         try {
             const data: any = await apiClient.get(`/orders/${orderId}`);
             setOrder(data);
+
+            if (data.paymentMethod === 1) {
+                try {
+                    const payData = await paymentApi.getStatus(orderId);
+                    setPaymentStatus(payData);
+                } catch (e) {
+                    console.log('fetch payment status error:', e);
+                }
+            }
         } catch (error) {
             console.log('fetchOrderDetail error:', error);
         } finally {
@@ -27,14 +42,38 @@ export default function OrderDetailScreen({ navigation, route }: any) {
         }
     };
 
-    const getStatusText = (status: number) => {
+    const handleGoBack = () => {
+        if (fromPayment) {
+            // Ngăn việc "dính" màn hình ở Profile tab khi quay lại
+            navigation.navigate('MainTabs', {
+                screen: 'Profile',
+                params: { screen: 'ProfileMain' }
+            });
+        } else {
+            navigation.goBack();
+        }
+    };
+
+    const getStatusText = (orderData: any) =>
+        getOrderDisplayLabel(orderData?.status, orderData?.shipment?.status);
+
+    const getPaymentStatusText = (status: string) => {
         switch (status) {
-            case 0: return 'Chờ xác nhận';
-            case 1: return 'Đang chuẩn bị';
-            case 2: return 'Đang giao';
-            case 3: return 'Đã giao';
-            case 4: return 'Đã hủy';
-            default: return 'Khác';
+            case 'Unpaid': return 'Chưa thanh toán';
+            case 'Pending': return 'Chờ ngân hàng';
+            case 'Completed': return 'Đã thanh toán';
+            case 'Failed': return 'Thất bại';
+            default: return status;
+        }
+    };
+
+    const getPaymentBadgeColor = (status: string) => {
+        switch (status) {
+            case 'Unpaid': return '#f59e0b';
+            case 'Pending': return '#3b82f6';
+            case 'Completed': return '#10b981';
+            case 'Failed': return '#ef4444';
+            default: return '#6b7280';
         }
     };
 
@@ -42,7 +81,7 @@ export default function OrderDetailScreen({ navigation, route }: any) {
     if (!order) return (
         <View style={styles.center}>
             <Text>Không tìm thấy thông tin đơn hàng</Text>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
+            <TouchableOpacity onPress={handleGoBack}>
                 <Text style={{ color: colors.primary, marginTop: 10 }}>Quay lại</Text>
             </TouchableOpacity>
         </View>
@@ -51,7 +90,7 @@ export default function OrderDetailScreen({ navigation, route }: any) {
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+                <TouchableOpacity style={styles.backBtn} onPress={handleGoBack}>
                     <Ionicons name="arrow-back" size={24} color={colors.white} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Chi tiết đơn hàng</Text>
@@ -61,13 +100,21 @@ export default function OrderDetailScreen({ navigation, route }: any) {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {/* Banner trạng thái */}
                 <View style={styles.statusBanner}>
-                    <Text style={styles.statusBig}>{getStatusText(order.status)}</Text>
+                    <Text style={styles.statusBig}>{getStatusText(order)}</Text>
                     <Text style={styles.statusSub}>Mã đơn hàng: {order.orderNumber}</Text>
                     <Text style={styles.statusSub}>Ngày đặt: {new Date(order.orderDate).toLocaleDateString('vi-VN')}</Text>
+                    
+                    {order.paymentMethod === 1 && paymentStatus && (
+                        <View style={{ marginTop: 12, flexDirection: 'row' }}>
+                            <View style={[styles.paymentBadge, { backgroundColor: getPaymentBadgeColor(paymentStatus.status) }]}>
+                                <Text style={styles.paymentBadgeText}>Thanh toán: {getPaymentStatusText(paymentStatus.status)}</Text>
+                            </View>
+                        </View>
+                    )}
                 </View>
 
                 {/* Khối Tracking */}
-                {order.status === 2 && (
+                {(order.status === 'Shipped' || order.status === 2) && (
                     <TouchableOpacity style={styles.sectionCard} onPress={() => navigation.navigate('ShipmentTracking', { orderId: order.id })}>
                         <View style={styles.rowCenter}>
                             <Ionicons name="car-outline" size={24} color={colors.secondary} style={{ marginRight: 12 }} />
@@ -103,11 +150,16 @@ export default function OrderDetailScreen({ navigation, route }: any) {
 
                 {/* Danh sách SP */}
                 <View style={styles.sectionCard}>
-                    {order.orderItems?.map((item: any, idx: number) => (
-                        <View key={idx} style={[styles.productRow, idx === order.orderItems.length - 1 && { borderBottomWidth: 0 }]}>
+                    {(order.items || order.orderItems)?.map((item: any, idx: number) => {
+                        const itemList = order.items || order.orderItems || [];
+                        const resolvedImage = item.productImage
+                            ? resolveProductImageUrl(item.productImage)
+                            : null;
+                        return (
+                        <View key={idx} style={[styles.productRow, idx === itemList.length - 1 && { borderBottomWidth: 0 }]}>
                             <View style={styles.prodImg}>
-                                {item.productImage ? (
-                                    <Image source={{ uri: item.productImage }} style={styles.fullImg} />
+                                {resolvedImage ? (
+                                    <Image source={{ uri: resolvedImage }} style={styles.fullImg} />
                                 ) : (
                                     <Ionicons name="cube-outline" size={30} color={colors.textMuted} />
                                 )}
@@ -120,16 +172,17 @@ export default function OrderDetailScreen({ navigation, route }: any) {
                                 </View>
                             </View>
                         </View>
-                    ))}
+                        );
+                    })}
 
                     <View style={styles.orderSummary}>
                         <View style={styles.summaryItem}>
                             <Text style={styles.sumLabel}>Tổng tiền hàng</Text>
-                            <Text style={styles.sumVal}>{(order.totalAmount - 30000).toLocaleString('vi-VN')}đ</Text>
+                            <Text style={styles.sumVal}>{(order.totalAmount - (order.shippingFee ?? 30000)).toLocaleString('vi-VN')}đ</Text>
                         </View>
                         <View style={styles.summaryItem}>
                             <Text style={styles.sumLabel}>Phí vận chuyển</Text>
-                            <Text style={styles.sumVal}>30.000đ</Text>
+                            <Text style={styles.sumVal}>{(order.shippingFee ?? 30000).toLocaleString('vi-VN')}đ</Text>
                         </View>
                         <View style={styles.summaryItem}>
                             <Text style={styles.sumLabel}>Tổng thanh toán</Text>
@@ -140,11 +193,16 @@ export default function OrderDetailScreen({ navigation, route }: any) {
             </ScrollView>
 
             <View style={styles.bottomBar}>
-                <TouchableOpacity style={styles.outlineBtn} onPress={() => navigation.goBack()}>
+                <TouchableOpacity style={styles.outlineBtn} onPress={handleGoBack}>
                     <Text style={styles.outlineBtnText}>Quay lại</Text>
                 </TouchableOpacity>
-                {order.status === 3 && (
-                    <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('WriteReview', { productId: order.orderItems?.[0]?.productId, orderId: order.id })}>
+                {order.paymentMethod === 1 && paymentStatus && (paymentStatus.status === 'Unpaid' || paymentStatus.status === 'Failed') && (
+                    <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('VietQR', { orderId: order.id })}>
+                        <Text style={styles.primaryBtnText}>Thanh Toán Ngay</Text>
+                    </TouchableOpacity>
+                )}
+                {(order.status === 'Complete' || order.status === 3) && (
+                    <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('WriteReview', { productId: (order.items || order.orderItems)?.[0]?.productId, orderId: order.id })}>
                         <Text style={styles.primaryBtnText}>Cho Đánh Giá</Text>
                     </TouchableOpacity>
                 )}
@@ -164,6 +222,8 @@ const styles = StyleSheet.create({
     statusBanner: { backgroundColor: colors.primary, padding: 24, paddingBottom: 40 },
     statusBig: { fontSize: 18, fontWeight: '700', color: colors.white, marginBottom: 8 },
     statusSub: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
+    paymentBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+    paymentBadgeText: { color: colors.white, fontSize: 13, fontWeight: '600' },
 
     sectionCard: { backgroundColor: colors.white, padding: 16, marginBottom: 8, marginTop: -16, borderRadius: 12, marginHorizontal: 12, ...shadow.sm },
     rowCenter: { flexDirection: 'row', alignItems: 'flex-start' },

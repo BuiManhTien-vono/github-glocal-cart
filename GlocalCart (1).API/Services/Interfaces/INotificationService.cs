@@ -9,5 +9,6 @@ namespace GlocalCart.API.Services.Interfaces
         Task<bool> MarkAsReadAsync(int userId, int notificationId);
         Task<int> GetUnreadCountAsync(int userId);
         Task CreateNotificationAsync(int userId, string content, Enums.NotificationType type = Enums.NotificationType.Email);
+        Task CreateNotificationAsync(int userId, string content, Enums.NotificationAction action, int? relatedOrderId, Enums.NotificationType type = Enums.NotificationType.Email);
     }
 }

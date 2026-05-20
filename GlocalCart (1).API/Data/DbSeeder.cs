@@ -256,98 +256,24 @@ namespace GlocalCart.API.Data
             }
             await context.CartItems.AddRangeAsync(cartItems);
             
-            var orders = new List<Order>();
-            for (int i = 1; i <= 12; i++)
+            var shipperUser = await userManager.FindByNameAsync("shipper");
+            if (shipperUser != null)
             {
-                var buyer = buyers[i % buyers.Count];
-                var address = addresses.First(a => a.UserId == buyer.Id);
-                var isPaid = i % 2 == 0;
-
-                orders.Add(new Order
+                var hasBankAccount = await context.BankAccounts.AnyAsync(b => b.UserId == shipperUser.Id);
+                if (!hasBankAccount)
                 {
-                    OrderNumber = $"ORD2026{(1000 + i)}",
-                    BuyerId = buyer.Id,
-                    ShippingAddressId = address.Id,
-                    TotalAmount = 0, 
-                    Status = isPaid ? OrderStatus.Shipped : OrderStatus.Pending,
-                    OrderDate = DateTime.UtcNow,
-                    Note = "Giao cho tôi"
-                });
-            }
-            await context.Orders.AddRangeAsync(orders);
-            await context.SaveChangesAsync();
-
-            var orderItems = new List<OrderItem>();
-            var orderLogs = new List<OrderLog>();
-            var payments = new List<Payment>();
-            var shipments = new List<Shipment>();
-            var shipmentLogs = new List<ShipmentLog>();
-            var productReviews = new List<ProductReview>();
-
-            foreach (var order in orders)
-            {
-                var numItems = rand.Next(1, 4);
-                decimal orderTotal = 0;
-                for (int j = 0; j < numItems; j++)
-                {
-                    var product = products[rand.Next(0, products.Count)];
-                    if (!orderItems.Any(oi => oi.OrderId == order.Id && oi.ProductId == product.Id))
+                    context.BankAccounts.Add(new BankAccount
                     {
-                        var oi = new OrderItem
-                        {
-                            OrderId = order.Id, ProductId = product.Id, SellerId = product.SellerId,
-                            UnitPrice = product.Price, Quantity = rand.Next(1, 3)
-                        };
-                        orderTotal += oi.UnitPrice * oi.Quantity;
-                        orderItems.Add(oi);
-
-                        if (order.Id % 2 != 0 && !productReviews.Any(r => r.ProductId == product.Id && r.UserId == order.BuyerId && r.OrderId == order.Id))
-                        {
-                            productReviews.Add(new ProductReview
-                            {
-                                ProductId = product.Id, UserId = order.BuyerId, OrderId = order.Id,
-                                Rating = rand.Next(4, 6), Review = "Sản phẩm tốt.", CreatedAt = DateTime.UtcNow
-                            });
-                        }
-                    }
-                }
-                order.TotalAmount = orderTotal + 30000m; 
-
-                orderLogs.Add(new OrderLog { OrderId = order.Id, Status = OrderStatus.Pending, Note = "Đơn hàng đã được tạo.", CreatedAt = DateTime.UtcNow });
-                
-                if (order.Status == OrderStatus.Shipped)
-                {
-                    orderLogs.Add(new OrderLog { OrderId = order.Id, Status = OrderStatus.Shipped, Note = "Đang giao hàng", CreatedAt = DateTime.UtcNow.AddMinutes(5) });
-                    payments.Add(new Payment
-                    {
-                        OrderId = order.Id, Amount = order.TotalAmount, Method = (PaymentMethod)1,
-                        Status = PaymentStatus.Completed, TransactionRef = $"TXN{10000+order.Id}", CreatedAt = DateTime.UtcNow
+                        UserId = shipperUser.Id,
+                        BankName = "Vietcombank (Shipper)",
+                        RoutingNumber = "01123456",
+                        AccountNumberMasked = "****1111",
+                        Balance = 0,
+                        CreatedAt = DateTime.UtcNow
                     });
-                    
-                    var shipment = new Shipment
-                    {
-                        OrderId = order.Id,
-                        Status = ShipmentStatus.Pending,
-                        TrackingNumber = $"VNPOST{123123 + order.Id}",
-                        ShipmentMethod = "Standard",
-                        EstimatedArrival = DateTime.UtcNow.AddDays(3),
-                        ShipmentDate = DateTime.UtcNow
-                    };
-                    shipments.Add(shipment);
+                    await context.SaveChangesAsync();
                 }
             }
-            await context.OrderItems.AddRangeAsync(orderItems);
-            await context.OrderLogs.AddRangeAsync(orderLogs);
-            await context.Payments.AddRangeAsync(payments);
-            await context.Shipments.AddRangeAsync(shipments);
-            await context.ProductReviews.AddRangeAsync(productReviews);
-            await context.SaveChangesAsync();
-
-            foreach (var shipment in shipments)
-            {
-                shipmentLogs.Add(new ShipmentLog { ShipmentId = shipment.Id, Status = (ShipmentStatus)1, Note = "Hàng đang di chuyển", CreatedAt = DateTime.UtcNow });
-            }
-            await context.ShipmentLogs.AddRangeAsync(shipmentLogs);
 
             var notifications = new List<Notification>();
             for (int i = 1; i <= 20; i++)

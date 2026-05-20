@@ -14,6 +14,7 @@ import { useFollowShopStore } from '../../store/useFollowShopStore';
 import { useAuth } from '../../context/AuthContext';
 import { ImageSlider } from '../../components/shop/ImageSlider';
 import { ReviewSection } from '../../components/shop/ReviewSection';
+import { DailyDiscover } from '../../components/shop/DailyDiscover';
 import { CartBadge } from '../../components/common/CartBadge';
 import { colors } from '../../theme/colors';
 import { resolveProductImageUrl } from '../../utils/imageUtils';
@@ -28,6 +29,7 @@ export default function ProductDetailScreen() {
   const { isLoggedIn, setGuestMode } = useAuth();
 
   const [product, setProduct] = useState<any>(null);
+  const [discoveryProducts, setDiscoveryProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false); // 3-dot menu
 
@@ -46,8 +48,12 @@ export default function ProductDetailScreen() {
   const fetchProductDetail = async () => {
     try {
       setIsLoading(true);
-      const res = await apiClient.get(`/products/${productId}`);
+      const [res, discoveryRes] = await Promise.all([
+        apiClient.get(`/products/${productId}`),
+        apiClient.get('/products') as Promise<any>,
+      ]);
       setProduct(res);
+      setDiscoveryProducts(discoveryRes?.items || discoveryRes || []);
     } catch (error) {
       Alert.alert('Lỗi', 'Không thể tải chi tiết sản phẩm.');
     } finally {
@@ -304,6 +310,9 @@ export default function ProductDetailScreen() {
 
         {/* ─── Reviews ─── */}
         <ReviewSection productId={product.id} navigation={navigation} />
+
+        {/* ─── Daily Discover ─── */}
+        <DailyDiscover data={discoveryProducts} />
       </ScrollView>
 
       {/* ─── Footer với SafeArea ─── */}

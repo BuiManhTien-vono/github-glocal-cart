@@ -22,5 +22,8 @@ namespace GlocalCart.API.Services.Interfaces
         Task<ShipmentInfoDto> GetShipmentAsync(int userId, int orderId);
         Task<bool> UpdateShipmentStatusAsync(int sellerId, int shipmentId, UpdateShipmentStatusDto dto);
         Task<List<ShipmentLogDto>> GetShipmentLogsAsync(int userId, int shipmentId);
+        Task<bool> SelectPaymentMethodAsync(int buyerId, int orderId, SelectPaymentMethodDto dto);
+        Task<bool> ConfirmTransferAsync(int buyerId, int orderId);
+        Task<ConfirmReceiptResultDto> ConfirmReceiptAsync(int buyerId, int orderId);
     }
 }

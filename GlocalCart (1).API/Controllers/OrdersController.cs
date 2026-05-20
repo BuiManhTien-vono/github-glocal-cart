@@ -72,5 +72,24 @@ namespace GlocalCart.API.Controllers
         [HttpGet("{id}/shipment")]
         public async Task<IActionResult> GetShipment(int id) =>
             Ok(ApiResponse.Ok(await _orderService.GetShipmentAsync(UserId, id)));
+
+        // === BUYER PAYMENT PING-PONG ===
+        [HttpPost("{id}/payment-method")]
+        public async Task<IActionResult> SelectPaymentMethod(int id, [FromBody] SelectPaymentMethodDto dto)
+        {
+            await _orderService.SelectPaymentMethodAsync(UserId, id, dto);
+            return Ok(ApiResponse.Ok("Đã gửi lựa chọn thanh toán."));
+        }
+
+        [HttpPost("{id}/confirm-transfer")]
+        public async Task<IActionResult> ConfirmTransfer(int id)
+        {
+            await _orderService.ConfirmTransferAsync(UserId, id);
+            return Ok(ApiResponse.Ok("Đã thông báo chuyển khoản thành công."));
+        }
+
+        [HttpPost("{id}/confirm-receipt")]
+        public async Task<IActionResult> ConfirmReceipt(int id) =>
+            Ok(ApiResponse.Ok(await _orderService.ConfirmReceiptAsync(UserId, id)));
     }
 }

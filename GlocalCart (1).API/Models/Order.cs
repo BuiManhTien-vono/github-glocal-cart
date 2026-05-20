@@ -44,6 +44,12 @@ namespace GlocalCart.API.Models
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalAmount { get; set; }
 
+        /// <summary>
+        /// Phí vận chuyển
+        /// </summary>
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal ShippingFee { get; set; } = 30000;
+
         [MaxLength(500)]
         public string? Note { get; set; }
 

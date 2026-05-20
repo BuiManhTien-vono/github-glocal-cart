@@ -5,9 +5,11 @@ namespace GlocalCart.API.Enums
     /// </summary>
     public enum ShipmentStatus
     {
-        Pending,    // Đang chờ vận chuyển
-        Shipped,    // Đang giao
+        Pending,    // Chờ lấy hàng (chưa có shipper)
+        Shipped,    // Chờ giao hàng (đã lấy hàng, đang đi giao)
         Delivered,  // Đã giao thành công
-        OnHold      // Tạm giữ
+        OnHold,     // Tạm giữ
+        Arrived,    // Đã đến nơi, chờ xác nhận nhận hàng / thanh toán
+        Accepted    // Shipper đã nhận đơn, chờ lấy hàng tại seller
     }
 }
