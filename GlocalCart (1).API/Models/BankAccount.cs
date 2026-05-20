@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GlocalCart.API.Models
 {
@@ -22,6 +23,12 @@ namespace GlocalCart.API.Models
         /// </summary>
         [Required, MaxLength(30)]
         public string AccountNumberMasked { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Số dư trong tài khoản
+        /// </summary>
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Balance { get; set; } = 0;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

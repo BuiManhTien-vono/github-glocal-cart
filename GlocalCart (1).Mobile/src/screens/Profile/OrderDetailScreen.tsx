@@ -6,6 +6,8 @@ import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { paymentApi } from '../../services/api/paymentApi';
 import { Loading } from '../../components/common/Loading';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
+import { getOrderDisplayLabel } from '../../utils/orderDisplayStatus';
 
 export default function OrderDetailScreen({ navigation, route }: any) {
     const orderId = route?.params?.orderId;
@@ -52,16 +54,8 @@ export default function OrderDetailScreen({ navigation, route }: any) {
         }
     };
 
-    const getStatusText = (status: number) => {
-        switch (status) {
-            case 0: return 'Chờ xác nhận';
-            case 1: return 'Đang chuẩn bị';
-            case 2: return 'Đang giao';
-            case 3: return 'Đã giao';
-            case 4: return 'Đã hủy';
-            default: return 'Khác';
-        }
-    };
+    const getStatusText = (orderData: any) =>
+        getOrderDisplayLabel(orderData?.status, orderData?.shipment?.status);
 
     const getPaymentStatusText = (status: string) => {
         switch (status) {
@@ -106,7 +100,7 @@ export default function OrderDetailScreen({ navigation, route }: any) {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {/* Banner trạng thái */}
                 <View style={styles.statusBanner}>
-                    <Text style={styles.statusBig}>{getStatusText(order.status)}</Text>
+                    <Text style={styles.statusBig}>{getStatusText(order)}</Text>
                     <Text style={styles.statusSub}>Mã đơn hàng: {order.orderNumber}</Text>
                     <Text style={styles.statusSub}>Ngày đặt: {new Date(order.orderDate).toLocaleDateString('vi-VN')}</Text>
                     
@@ -120,7 +114,7 @@ export default function OrderDetailScreen({ navigation, route }: any) {
                 </View>
 
                 {/* Khối Tracking */}
-                {order.status === 2 && (
+                {(order.status === 'Shipped' || order.status === 2) && (
                     <TouchableOpacity style={styles.sectionCard} onPress={() => navigation.navigate('ShipmentTracking', { orderId: order.id })}>
                         <View style={styles.rowCenter}>
                             <Ionicons name="car-outline" size={24} color={colors.secondary} style={{ marginRight: 12 }} />
@@ -156,11 +150,16 @@ export default function OrderDetailScreen({ navigation, route }: any) {
 
                 {/* Danh sách SP */}
                 <View style={styles.sectionCard}>
-                    {order.orderItems?.map((item: any, idx: number) => (
-                        <View key={idx} style={[styles.productRow, idx === order.orderItems.length - 1 && { borderBottomWidth: 0 }]}>
+                    {(order.items || order.orderItems)?.map((item: any, idx: number) => {
+                        const itemList = order.items || order.orderItems || [];
+                        const resolvedImage = item.productImage
+                            ? resolveProductImageUrl(item.productImage)
+                            : null;
+                        return (
+                        <View key={idx} style={[styles.productRow, idx === itemList.length - 1 && { borderBottomWidth: 0 }]}>
                             <View style={styles.prodImg}>
-                                {item.productImage ? (
-                                    <Image source={{ uri: item.productImage }} style={styles.fullImg} />
+                                {resolvedImage ? (
+                                    <Image source={{ uri: resolvedImage }} style={styles.fullImg} />
                                 ) : (
                                     <Ionicons name="cube-outline" size={30} color={colors.textMuted} />
                                 )}
@@ -173,16 +172,17 @@ export default function OrderDetailScreen({ navigation, route }: any) {
                                 </View>
                             </View>
                         </View>
-                    ))}
+                        );
+                    })}
 
                     <View style={styles.orderSummary}>
                         <View style={styles.summaryItem}>
                             <Text style={styles.sumLabel}>Tổng tiền hàng</Text>
-                            <Text style={styles.sumVal}>{(order.totalAmount - 30000).toLocaleString('vi-VN')}đ</Text>
+                            <Text style={styles.sumVal}>{(order.totalAmount - (order.shippingFee ?? 30000)).toLocaleString('vi-VN')}đ</Text>
                         </View>
                         <View style={styles.summaryItem}>
                             <Text style={styles.sumLabel}>Phí vận chuyển</Text>
-                            <Text style={styles.sumVal}>30.000đ</Text>
+                            <Text style={styles.sumVal}>{(order.shippingFee ?? 30000).toLocaleString('vi-VN')}đ</Text>
                         </View>
                         <View style={styles.summaryItem}>
                             <Text style={styles.sumLabel}>Tổng thanh toán</Text>
@@ -201,8 +201,8 @@ export default function OrderDetailScreen({ navigation, route }: any) {
                         <Text style={styles.primaryBtnText}>Thanh Toán Ngay</Text>
                     </TouchableOpacity>
                 )}
-                {order.status === 3 && (
-                    <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('WriteReview', { productId: order.orderItems?.[0]?.productId, orderId: order.id })}>
+                {(order.status === 'Complete' || order.status === 3) && (
+                    <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('WriteReview', { productId: (order.items || order.orderItems)?.[0]?.productId, orderId: order.id })}>
                         <Text style={styles.primaryBtnText}>Cho Đánh Giá</Text>
                     </TouchableOpacity>
                 )}

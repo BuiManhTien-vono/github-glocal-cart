@@ -21,8 +21,13 @@ namespace GlocalCart.API.Services.Implementations
                 .OrderByDescending(n => n.CreatedAt)
                 .Select(n => new NotificationDto
                 {
-                    Id = n.Id, Type = n.Type.ToString(), Content = n.Content,
-                    IsRead = n.IsRead, CreatedAt = n.CreatedAt
+                    Id = n.Id,
+                    Type = n.Type.ToString(),
+                    Action = n.Action.ToString(),
+                    RelatedOrderId = n.RelatedOrderId,
+                    Content = n.Content,
+                    IsRead = n.IsRead,
+                    CreatedAt = n.CreatedAt
                 })
                 .ToPagedResultAsync(page, pageSize);
         }
@@ -43,11 +48,18 @@ namespace GlocalCart.API.Services.Implementations
             return await _db.Notifications.CountAsync(n => n.UserId == userId && !n.IsRead);
         }
 
-        public async Task CreateNotificationAsync(int userId, string content, NotificationType type = NotificationType.Email)
+        public Task CreateNotificationAsync(int userId, string content, NotificationType type = NotificationType.Email) =>
+            CreateNotificationAsync(userId, content, NotificationAction.General, null, type);
+
+        public async Task CreateNotificationAsync(int userId, string content, NotificationAction action, int? relatedOrderId, NotificationType type = NotificationType.Email)
         {
             _db.Notifications.Add(new Notification
             {
-                UserId = userId, Content = content, Type = type
+                UserId = userId,
+                Content = content,
+                Type = type,
+                Action = action,
+                RelatedOrderId = relatedOrderId
             });
             await _db.SaveChangesAsync();
         }

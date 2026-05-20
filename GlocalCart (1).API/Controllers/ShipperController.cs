@@ -20,39 +20,58 @@ namespace GlocalCart.API.Controllers
 
         public ShipperController(IShipperService shipperService) => _shipperService = shipperService;
 
-        /// <summary>
-        /// Danh sách vận đơn chờ shipper nhận (đã có vận đơn, chưa gán shipper).
-        /// </summary>
         [HttpGet("shipments/available")]
         public async Task<IActionResult> GetAvailable([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
             Ok(ApiResponse.Ok(await _shipperService.GetAvailableShipmentsAsync(page, pageSize)));
 
-        /// <summary>
-        /// Vận đơn shipper đang giao.
-        /// </summary>
         [HttpGet("shipments/mine")]
         public async Task<IActionResult> GetMine([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
             Ok(ApiResponse.Ok(await _shipperService.GetMyShipmentsAsync(UserId, page, pageSize)));
 
-        /// <summary>
-        /// Chi tiết vận đơn.
-        /// </summary>
+        [HttpGet("shipments/completed")]
+        public async Task<IActionResult> GetCompleted([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
+            Ok(ApiResponse.Ok(await _shipperService.GetCompletedShipmentsAsync(UserId, page, pageSize)));
+
         [HttpGet("shipments/{id}")]
         public async Task<IActionResult> GetDetail(int id) =>
             Ok(ApiResponse.Ok(await _shipperService.GetShipmentDetailAsync(UserId, id)));
 
-        /// <summary>
-        /// Shipper nhận đơn giao hàng.
-        /// </summary>
         [HttpPost("shipments/{id}/accept")]
         public async Task<IActionResult> Accept(int id, [FromBody] ShipperActionDto? dto) =>
             Ok(ApiResponse.Ok(
                 await _shipperService.AcceptShipmentAsync(UserId, id, dto?.Note),
-                "Đã nhận đơn giao hàng."));
+                "Đã nhận đơn. Vui lòng đợi 30 giây rồi xác nhận đã lấy hàng."));
 
-        /// <summary>
-        /// Shipper xác nhận đã giao thành công.
-        /// </summary>
+        [HttpPost("shipments/{id}/confirm-pickup")]
+        public async Task<IActionResult> ConfirmPickup(int id, [FromBody] ShipperActionDto? dto) =>
+            Ok(ApiResponse.Ok(
+                await _shipperService.ConfirmPickupAsync(UserId, id, dto?.Note),
+                "Đã xác nhận lấy hàng."));
+
+        [HttpPost("shipments/{id}/confirm-arrival")]
+        public async Task<IActionResult> ConfirmArrival(int id, [FromBody] ShipperActionDto? dto) =>
+            Ok(ApiResponse.Ok(
+                await _shipperService.ConfirmArrivalAsync(UserId, id, dto?.Note),
+                "Đã xác nhận đến nơi."));
+
+        [HttpPost("shipments/{id}/confirm-cash-received")]
+        public async Task<IActionResult> ConfirmCashReceived(int id, [FromBody] ShipperActionDto? dto) =>
+            Ok(ApiResponse.Ok(
+                await _shipperService.ConfirmCashReceivedAsync(UserId, id, dto?.Note),
+                "Đã xác nhận nhận tiền mặt."));
+
+        [HttpPost("shipments/{id}/confirm-transfer-received")]
+        public async Task<IActionResult> ConfirmTransferReceived(int id, [FromBody] ShipperActionDto? dto) =>
+            Ok(ApiResponse.Ok(
+                await _shipperService.ConfirmTransferReceivedAsync(UserId, id, dto?.Note),
+                "Đã xác nhận nhận chuyển khoản."));
+
+        [HttpPost("shipments/{id}/request-payment")]
+        public async Task<IActionResult> RequestPayment(int id) =>
+            Ok(ApiResponse.Ok(
+                await _shipperService.RequestPaymentAsync(UserId, id),
+                "Đã gửi thông báo đến người mua."));
+
         [HttpPost("shipments/{id}/deliver")]
         public async Task<IActionResult> Deliver(int id, [FromBody] ShipperActionDto? dto) =>
             Ok(ApiResponse.Ok(

@@ -4,6 +4,7 @@ using GlocalCart.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace GlocalCart.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260519133938_UpdateOrderAndBank")]
+    partial class UpdateOrderAndBank
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -345,9 +348,6 @@ namespace GlocalCart.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("Action")
-                        .HasColumnType("int");
-
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -358,9 +358,6 @@ namespace GlocalCart.API.Migrations
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("bit");
-
-                    b.Property<int?>("RelatedOrderId")
-                        .HasColumnType("int");
 
                     b.Property<int>("Type")
                         .HasColumnType("int");
@@ -661,16 +658,7 @@ namespace GlocalCart.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime?>("AcceptedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ArrivedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<DateTime?>("AssignedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("BuyerConfirmedReceiptAt")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime>("CreatedAt")
@@ -684,9 +672,6 @@ namespace GlocalCart.API.Migrations
 
                     b.Property<int>("OrderId")
                         .HasColumnType("int");
-
-                    b.Property<DateTime?>("PickedUpAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("ShipmentDate")
                         .HasColumnType("datetime2");
@@ -704,9 +689,6 @@ namespace GlocalCart.API.Migrations
                     b.Property<string>("TrackingNumber")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime?>("TransferReportedAt")
-                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
@@ -921,28 +903,28 @@ namespace GlocalCart.API.Migrations
                         new
                         {
                             Id = 1,
-                            ConcurrencyStamp = "e34414f7-6755-442d-b312-65c4827ecdc8",
+                            ConcurrencyStamp = "ac30e997-79cb-4c3a-80d8-4b3a50842894",
                             Name = "Member",
                             NormalizedName = "MEMBER"
                         },
                         new
                         {
                             Id = 2,
-                            ConcurrencyStamp = "ef6bd8a3-5c23-408d-9a98-47c41f0ce457",
+                            ConcurrencyStamp = "06d0a023-0660-4e15-b301-f61c85362241",
                             Name = "Seller",
                             NormalizedName = "SELLER"
                         },
                         new
                         {
                             Id = 3,
-                            ConcurrencyStamp = "e12dbb9a-07b0-480e-be62-a2d93b99f31d",
+                            ConcurrencyStamp = "f470b47a-f9dd-4ad5-b03b-23f02dc1d2fb",
                             Name = "Admin",
                             NormalizedName = "ADMIN"
                         },
                         new
                         {
                             Id = 4,
-                            ConcurrencyStamp = "0c88d3ad-9b9c-45ea-94e1-23525fd9d057",
+                            ConcurrencyStamp = "4b97f931-4306-4efe-ac40-995dfcbf19b6",
                             Name = "Shipper",
                             NormalizedName = "SHIPPER"
                         });

@@ -6,11 +6,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { resolveProductImageUrl } from '../../utils/imageUtils';
+import {
+  SELLER_ORDER_TABS,
+  getOrderDisplayLabel,
+  matchesTabLabel,
+} from '../../utils/orderDisplayStatus';
 
 export default function SellerOrdersScreen({ route, navigation }: any) {
     const insets = useSafeAreaInsets();
-    const tabs = ['Chờ xác nhận', 'Vận chuyển', 'Đang giao', 'Hoàn tất', 'Đã hủy'];
-    const initialTab = (route.params?.activeTab && route.params.activeTab !== 'Tất cả') ? route.params.activeTab : 'Chờ xác nhận';
+    const tabs = SELLER_ORDER_TABS;
+    const legacyTabMap: Record<string, string> = {
+      'Vận chuyển': 'Chờ lấy hàng',
+      'Đang giao': 'Chờ giao hàng',
+      'Hoàn tất': 'Đã giao',
+    };
+    const rawTab = route.params?.activeTab;
+    const mappedTab = rawTab ? (legacyTabMap[rawTab] ?? rawTab) : 'Chờ xác nhận';
+    const initialTab = tabs.includes(mappedTab) ? mappedTab : 'Chờ xác nhận';
     const [activeTab, setActiveTab] = useState(initialTab);
 
     const [orders, setOrders] = useState<any[]>([]);
@@ -89,36 +101,26 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
         );
     };
 
-    const getStatusText = (status: string | number) => {
-        switch (String(status).toLowerCase()) {
-            case '0': case 'pending': return 'Chờ xác nhận';
-            case '1': case 'processing': 
-            case '5': case 'unshipped': return 'Vận chuyển';
-            case '2': case 'shipped': return 'Đang giao';
-            case '3': case 'delivered': case 'complete': return 'Hoàn tất';
-            case '4': case 'canceled': return 'Đã hủy';
-            default: return 'Khác';
-        }
-    };
+    const getStatusText = (order: any) =>
+        getOrderDisplayLabel(order.status, order.shipment?.status);
 
     const getStatusColor = (statusText: string) => {
         switch (statusText) {
             case 'Chờ xác nhận': return colors.warning;
-            case 'Vận chuyển': return colors.secondary;
-            case 'Đang giao': return colors.primary;
-            case 'Hoàn tất': return colors.success;
+            case 'Chờ lấy hàng': return colors.info;
+            case 'Chờ giao hàng': return colors.primary;
+            case 'Đã giao': return colors.success;
             case 'Đã hủy': return colors.danger;
             default: return colors.text;
         }
     };
 
-    const filtered = orders.filter(o => {
-        if (activeTab === 'Tất cả') return true;
-        return getStatusText(o.status) === activeTab;
-    });
+    const filtered = orders.filter(o =>
+        matchesTabLabel(o.status, o.shipment?.status, activeTab)
+    );
 
     const renderItem = ({ item }: any) => {
-        const statusText = getStatusText(item.status);
+        const statusText = getStatusText(item);
         const statusColor = getStatusColor(statusText);
         const firstItem = item.items?.[0] || item.orderItems?.[0];
         const itemsCount = item.items?.length || item.orderItems?.length || 0;
@@ -129,7 +131,7 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
                 <View style={styles.orderHeader}>
                     <View>
                         <Text style={styles.orderId}>Đơn: {item.orderNumber}</Text>
-                        <Text style={styles.buyerName}>Người mua ID: {item.buyerId}</Text>
+                        <Text style={styles.buyerName}>Người mua: {item.buyerName || `ID: ${item.buyerId}`}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
                         <Text style={[styles.statusBadge, { color: statusColor }]}>{statusText}</Text>
@@ -157,7 +159,7 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
                                 <Text style={styles.denyBtnText}>Từ chối</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.approveBtn} onPress={() => handleCreateShipment(item.id)}>
-                                <Text style={styles.approveBtnText}>Tạo vận đơn</Text>
+                                <Text style={styles.approveBtnText}>Xác nhận đơn</Text>
                             </TouchableOpacity>
                         </>
                     )}

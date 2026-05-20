@@ -78,9 +78,9 @@ export default function ProfileScreen({ navigation }: any) {
   // Shopee-style order status items
   const orderStatusItems = [
     { icon: 'wallet-outline', label: 'Chờ xác nhận', color: colors.primary },
-    { icon: 'car-outline', label: 'Đang giao', color: colors.secondary },
-    { icon: 'cube-outline', label: 'Đã giao', color: colors.success },
-    { icon: 'star-outline', label: 'Đánh giá', color: colors.warning },
+    { icon: 'cube-outline', label: 'Chờ lấy hàng', color: colors.info },
+    { icon: 'car-outline', label: 'Chờ giao hàng', color: colors.secondary },
+    { icon: 'checkmark-circle-outline', label: 'Đã giao', color: colors.success },
   ];
 
   // Utilities grid – chỉ giữ 4 mục cốt lõi
@@ -220,8 +220,9 @@ export default function ProfileScreen({ navigation }: any) {
           <View style={styles.orderStatusRow}>
             {(user?.isSeller ? [
               { icon: 'wallet-outline', label: 'Chờ xác nhận', color: colors.primary },
-              { icon: 'cube-outline', label: 'Vận chuyển', color: colors.secondary },
-              { icon: 'checkmark-circle-outline', label: 'Hoàn tất', color: colors.success },
+              { icon: 'cube-outline', label: 'Chờ lấy hàng', color: colors.info },
+              { icon: 'car-outline', label: 'Chờ giao hàng', color: colors.secondary },
+              { icon: 'checkmark-circle-outline', label: 'Đã giao', color: colors.success },
               { icon: 'close-circle-outline', label: 'Đã hủy', color: colors.danger },
             ] : orderStatusItems).map((item, i) => (
               <TouchableOpacity key={i} style={styles.orderStatusItem} onPress={() => {

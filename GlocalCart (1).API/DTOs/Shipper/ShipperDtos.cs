@@ -8,6 +8,8 @@ namespace GlocalCart.API.DTOs.Shipper
         public string OrderStatus { get; set; } = string.Empty;
         public string ShipmentStatus { get; set; } = string.Empty;
         public decimal TotalAmount { get; set; }
+        public string? PaymentMethod { get; set; }
+        public string? PaymentStatus { get; set; }
         public string? TrackingNumber { get; set; }
         public string? ShipmentMethod { get; set; }
         public DateTime? ShipmentDate { get; set; }
@@ -17,10 +19,28 @@ namespace GlocalCart.API.DTOs.Shipper
         public string BuyerPhone { get; set; } = string.Empty;
         public string DeliveryAddress { get; set; } = string.Empty;
         public string? ShipperName { get; set; }
+        public int? ShipperId { get; set; }
+        public decimal ShippingFee { get; set; }
+        public List<ShipperOrderItemDto> OrderItems { get; set; } = new();
+        public bool CanConfirmPickup { get; set; }
+        public bool CanConfirmArrival { get; set; }
+        public int PickupCountdownSeconds { get; set; }
+        public int ArrivalCountdownSeconds { get; set; }
+        public bool BuyerConfirmedReceipt { get; set; }
+        public bool AwaitingCash { get; set; }
+        public bool AwaitingTransferConfirm { get; set; }
     }
 
     public class ShipperActionDto
     {
         public string? Note { get; set; }
+    }
+
+    public class ShipperOrderItemDto
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
+        public int Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
     }
 }

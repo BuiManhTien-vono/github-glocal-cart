@@ -13,10 +13,8 @@ export default function ShipperCompletedScreen() {
 
   const loadData = async () => {
     try {
-      const response: any = await shipperService.getMyShipments();
-      const items = response?.items || [];
-      // Mặc định API có thể trả về cả Shipped và Delivered, nhưng tạm lọc local nếu cần
-      setCompletedShipments(items.filter((s: Shipment) => s.shipmentStatus === 'Delivered'));
+      const response: any = await shipperService.getCompletedShipments();
+      setCompletedShipments(response?.items || []);
     } catch (e) {
       console.log('Lỗi tải danh sách', e);
     }
@@ -38,7 +36,7 @@ export default function ShipperCompletedScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Đã hoàn thành</Text>
+        <Text style={styles.headerTitle}>Đã giao</Text>
         <Text style={styles.headerSubtitle}>Tổng cộng {completedShipments.length} đơn hàng</Text>
       </View>
       

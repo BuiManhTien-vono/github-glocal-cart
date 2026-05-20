@@ -18,6 +18,10 @@ namespace GlocalCart.API.Models
         /// </summary>
         public NotificationType Type { get; set; }
 
+        public NotificationAction Action { get; set; } = NotificationAction.General;
+
+        public int? RelatedOrderId { get; set; }
+
         /// <summary>
         /// Nội dung thông báo (theo UML: content: string)
         /// </summary>

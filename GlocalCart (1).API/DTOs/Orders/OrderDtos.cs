@@ -22,6 +22,8 @@ namespace GlocalCart.API.DTOs.Orders
         public string Status { get; set; } = string.Empty;
         public DateTime OrderDate { get; set; }
         public decimal TotalAmount { get; set; }
+        public decimal ShippingFee { get; set; }
+        public string? BuyerName { get; set; }
         public string? Note { get; set; }
         public AddressSnapshotDto ShippingAddress { get; set; } = null!;
         public List<OrderItemResponseDto> Items { get; set; } = new();
@@ -40,6 +42,11 @@ namespace GlocalCart.API.DTOs.Orders
         public int Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal Subtotal => UnitPrice * Quantity;
+    }
+
+    public class SelectPaymentMethodDto
+    {
+        public string Method { get; set; } = string.Empty;
     }
 
     public class AddressSnapshotDto
@@ -121,5 +128,12 @@ namespace GlocalCart.API.DTOs.Orders
         public string Status { get; set; } = string.Empty;
         public string? Note { get; set; }
         public DateTime CreatedAt { get; set; }
+    }
+
+    public class ConfirmReceiptResultDto
+    {
+        public bool Completed { get; set; }
+        public bool RequiresPayment { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 }

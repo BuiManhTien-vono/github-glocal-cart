@@ -214,7 +214,7 @@ function ShipperTabs() {
         tabBarHideOnKeyboard: true,
       })}
     >
-      <Tab.Screen name="Available" component={ShipperAvailableScreen} options={{ tabBarLabel: 'Chờ nhận' }} />
+      <Tab.Screen name="Available" component={ShipperAvailableScreen} options={{ tabBarLabel: 'Chờ lấy hàng' }} />
       <Tab.Screen name="Delivering" component={ShipperDeliveringScreen} options={{ tabBarLabel: 'Đang giao' }} />
       <Tab.Screen name="Completed" component={ShipperCompletedScreen} options={{ tabBarLabel: 'Đã giao' }} />
       <Tab.Screen name="ShipperProfile" component={ShipperProfileScreen} options={{ tabBarLabel: 'Tài khoản' }} />

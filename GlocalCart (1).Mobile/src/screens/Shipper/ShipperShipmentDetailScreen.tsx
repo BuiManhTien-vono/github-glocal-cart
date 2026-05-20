@@ -1,18 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker } from 'react-native-maps';
 import { colors } from '../../theme/colors';
 import { Shipment, shipperService } from '../../services/api/shipperService';
-import { useAuth } from '../../context/AuthContext';
+import { MapView, Marker } from '../../components/Map/MapComponent';
+import { getShipmentBadgeLabel } from '../../utils/orderDisplayStatus';
+
+function getFooterAction(shipment: Shipment): { label: string; type: string; disabled?: boolean } | null {
+  if (shipment.shipmentStatus === 'Delivered') return null;
+  if (!shipment.shipperId) return { label: 'Nhận đơn', type: 'accept' };
+  if (shipment.shipmentStatus === 'Accepted') {
+    if (shipment.canConfirmPickup) return { label: 'Đã lấy hàng', type: 'pickup' };
+    return { label: `Chờ lấy hàng (${shipment.pickupCountdownSeconds ?? 0}s)`, type: 'wait', disabled: true };
+  }
+  if (shipment.shipmentStatus === 'Shipped') {
+    if (shipment.canConfirmArrival) return { label: 'Đã đến nơi', type: 'arrival' };
+    return { label: `Đang giao (${shipment.arrivalCountdownSeconds ?? 0}s)`, type: 'wait', disabled: true };
+  }
+  if (shipment.shipmentStatus === 'Arrived') {
+    if (shipment.awaitingCash) return { label: 'Đã nhận tiền', type: 'cash' };
+    if (shipment.awaitingTransferConfirm) return { label: 'Đã nhận chuyển khoản', type: 'transfer' };
+    if (shipment.paymentStatus === 'Completed' && shipment.buyerConfirmedReceipt) {
+      return { label: 'Hoàn thành đơn', type: 'deliver' };
+    }
+    return { label: 'Chờ người mua xác nhận', type: 'wait', disabled: true };
+  }
+  return null;
+}
 
 export default function ShipperShipmentDetailScreen() {
-  const { user } = useAuth();
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const [shipment, setShipment] = useState<Shipment>(route.params?.shipment);
+
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const data: any = await shipperService.getShipmentDetail(route.params.shipmentId);
+        if (data) setShipment(data);
+      } catch (e) {
+        console.log('refresh shipment', e);
+      }
+    };
+    refresh();
+    const timer = setInterval(refresh, 2000);
+    return () => clearInterval(timer);
+  }, [route.params?.shipmentId]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
@@ -30,44 +65,50 @@ export default function ShipperShipmentDetailScreen() {
     Linking.openURL(url);
   };
 
+  const footerAction = getFooterAction(shipment);
+
   const handleAction = async () => {
-    // If not assigned to me yet
-    if (!shipment.shipperId) {
-      Alert.alert('Nhận đơn', 'Bạn muốn nhận giao đơn hàng này?', [
-        { text: 'Hủy', style: 'cancel' },
-        { 
-          text: 'Nhận đơn', 
-          onPress: async () => {
-            try {
-              await shipperService.acceptShipment(shipment.shipmentId);
-              Alert.alert('Thành công', 'Đã nhận đơn hàng!');
-              navigation.goBack();
-            } catch (error: any) {
-              Alert.alert('Lỗi', error.message || 'Không thể nhận đơn.');
-            }
-          } 
-        }
-      ]);
-    } else if (shipment.shipmentStatus !== 'Delivered') {
-      Alert.alert('Xác nhận đã giao', 'Bạn xác nhận đã giao đơn hàng này thành công?', [
-        { text: 'Hủy', style: 'cancel' },
-        { 
-          text: 'Xác nhận', 
-          onPress: async () => {
-            try {
-              await shipperService.deliverShipment(shipment.shipmentId);
-              Alert.alert('Thành công', 'Đơn hàng đã được đánh dấu hoàn thành!');
-              navigation.goBack();
-            } catch (error: any) {
-              Alert.alert('Lỗi', error.message || 'Lỗi khi xác nhận giao hàng.');
-            }
-          } 
-        }
-      ]);
+    if (!footerAction || footerAction.disabled) return;
+    try {
+      switch (footerAction.type) {
+        case 'accept':
+          await shipperService.acceptShipment(shipment.shipmentId);
+          Alert.alert('Thành công', 'Đã nhận đơn! Vui lòng chờ để lấy hàng.');
+          // Navigate về tab Chờ lấy hàng (Available)
+          navigation.navigate('ShipperTabs', { screen: 'Available' });
+          break;
+        case 'pickup':
+          await shipperService.confirmPickup(shipment.shipmentId);
+          Alert.alert('Thành công', 'Đã lấy hàng.');
+          break;
+        case 'arrival':
+          await shipperService.confirmArrival(shipment.shipmentId);
+          Alert.alert('Thành công', 'Đã đến nơi.');
+          break;
+        case 'cash':
+          await shipperService.confirmCashReceived(shipment.shipmentId);
+          Alert.alert('Thành công', 'Đã nhận tiền mặt.');
+          navigation.goBack();
+          break;
+        case 'transfer':
+          await shipperService.confirmTransferReceived(shipment.shipmentId);
+          Alert.alert('Thành công', 'Đã nhận chuyển khoản.');
+          navigation.goBack();
+          break;
+        case 'deliver':
+          await shipperService.deliverShipment(shipment.shipmentId);
+          Alert.alert('Thành công', 'Đơn hoàn tất.');
+          navigation.goBack();
+          break;
+      }
+      const data: any = await shipperService.getShipmentDetail(shipment.shipmentId);
+      if (data) setShipment(data);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error.message || 'Thao tác thất bại');
     }
   };
 
-  const isCOD = false; // Tạm bỏ qua PaymentMethod vì Backend DTO chưa hỗ trợ
+  const isCOD = shipment.paymentStatus !== 'Completed';
 
   // Toàn độ mẫu cho bản đồ (nên dùng Geocoding API từ deliveryAddress trong thực tế)
   const mockLocation = {
@@ -130,7 +171,7 @@ export default function ShipperShipmentDetailScreen() {
                 <Text style={styles.buyerPhone}>Shipper của GlocalCart</Text>
               </View>
               <View style={styles.badgePaid}>
-                <Text style={styles.badgePaidText}>Đang giao</Text>
+                <Text style={styles.badgePaidText}>{getShipmentBadgeLabel(shipment.shipmentStatus)}</Text>
               </View>
             </View>
           </View>
@@ -178,18 +219,42 @@ export default function ShipperShipmentDetailScreen() {
           </View>
         </View>
 
+        {/* Danh sách sản phẩm */}
+        {shipment.orderItems && shipment.orderItems.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Sản phẩm trong đơn</Text>
+            {shipment.orderItems.map((item: any, idx: number) => (
+              <View key={idx}>
+                <View style={styles.productRow}>
+                  <View style={styles.productIconBg}>
+                    <Ionicons name="cube-outline" size={20} color={colors.primary} />
+                  </View>
+                  <View style={styles.productDetails}>
+                    <Text style={styles.productName} numberOfLines={2}>{item.productName}</Text>
+                    <Text style={styles.productMeta}>
+                      {item.unitPrice?.toLocaleString('vi-VN')}đ × {item.quantity}
+                      {'  '}
+                      <Text style={styles.productSubtotal}>= {(item.unitPrice * item.quantity).toLocaleString('vi-VN')}đ</Text>
+                    </Text>
+                  </View>
+                </View>
+                {idx < shipment.orderItems.length - 1 && <View style={styles.divider} />}
+              </View>
+            ))}
+          </View>
+        )}
+
       </ScrollView>
 
       {/* Action Footer */}
       <View style={styles.footer}>
-        {shipment.shipmentStatus !== 'Delivered' ? (
-          <TouchableOpacity 
-            style={styles.mainActionBtn} 
+        {footerAction ? (
+          <TouchableOpacity
+            style={[styles.mainActionBtn, footerAction.disabled && { backgroundColor: colors.border }]}
             onPress={handleAction}
+            disabled={footerAction.disabled}
           >
-            <Text style={styles.mainActionText}>
-              {!shipment.shipperId ? 'Nhận Giao Đơn Này' : 'Xác Nhận Đã Giao'}
-            </Text>
+            <Text style={styles.mainActionText}>{footerAction.label}</Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.completedBtn}>
@@ -398,5 +463,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  productIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  productDetails: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  productMeta: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  productSubtotal: {
+    fontWeight: '700',
+    color: colors.primary,
   },
 });
