@@ -45,7 +45,7 @@ namespace GlocalCart.API.Services.Implementations
         {
             var product = await _db.Products
                 .Include(p => p.Seller).Include(p => p.Category).Include(p => p.Images).Include(p => p.Reviews)
-                .FirstOrDefaultAsync(p => p.Id == id)
+                .FirstOrDefaultAsync(p => p.Id == id && p.IsActive && !p.IsLocked)
                 ?? throw new KeyNotFoundException("Không tìm thấy sản phẩm.");
             return MapToDto(product);
         }
@@ -96,7 +96,7 @@ namespace GlocalCart.API.Services.Implementations
                 await _db.SaveChangesAsync();
             }
 
-            return await GetProductByIdAsync(product.Id);
+            return await GetProductByIdForOwnerAsync(product.Id);
         }
 
         /// <summary>
@@ -161,7 +161,7 @@ namespace GlocalCart.API.Services.Implementations
                 }
             }
 
-            return await GetProductByIdAsync(product.Id);
+            return await GetProductByIdForOwnerAsync(product.Id);
         }
 
         /// <summary>
@@ -243,7 +243,7 @@ namespace GlocalCart.API.Services.Implementations
             }
 
             await _db.SaveChangesAsync();
-            return await GetProductByIdAsync(product.Id);
+            return await GetProductByIdForOwnerAsync(product.Id);
         }
 
         public async Task<bool> ToggleVisibilityAsync(int sellerId, int productId)
@@ -321,6 +321,16 @@ namespace GlocalCart.API.Services.Implementations
             AverageRating = p.Reviews.Any() ? p.Reviews.Average(r => r.Rating) : 0,
             ReviewCount = p.Reviews.Count
         };
+
+        private async Task<ProductResponseDto> GetProductByIdForOwnerAsync(int id)
+        {
+            var product = await _db.Products
+                .Include(p => p.Seller).Include(p => p.Category).Include(p => p.Images).Include(p => p.Reviews)
+                .FirstOrDefaultAsync(p => p.Id == id)
+                ?? throw new KeyNotFoundException("Không tìm thấy sản phẩm.");
+
+            return MapToDto(product);
+        }
 
         private async Task<List<int>> GetCategoryIdsRecursive(int parentId)
         {

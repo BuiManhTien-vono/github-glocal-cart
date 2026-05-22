@@ -238,7 +238,6 @@ namespace GlocalCart.API.Services.Implementations
                 throw new InvalidOperationException("Đơn hàng không thanh toán tiền mặt tại cửa.");
 
             await CompleteShipmentAsync(shipment, shipperId, note ?? "Shipper đã nhận tiền mặt.");
-            await CreditShipperBalanceAsync(shipperId, shipment.Order.TotalAmount);
 
             return MapToDto(shipment);
         }
@@ -290,13 +289,28 @@ namespace GlocalCart.API.Services.Implementations
                 throw new InvalidOperationException("Người mua chưa xác nhận nhận hàng.");
 
             await CompleteShipmentAsync(shipment, shipperId, note ?? "Giao hàng thành công.");
-            await CreditShipperBalanceAsync(shipperId, shipment.Order.ShippingFee);
 
             return MapToDto(shipment);
         }
 
         private async Task CompleteShipmentAsync(Shipment shipment, int shipperId, string note)
         {
+            if (shipment.Status == ShipmentStatus.Delivered || shipment.Order.Status == OrderStatus.Complete)
+                throw new InvalidOperationException("Đơn hàng đã hoàn tất trước đó.");
+
+            if (shipment.Order.Payment == null)
+                throw new InvalidOperationException("Đơn hàng chưa có thông tin thanh toán.");
+
+            if (shipment.Order.Payment.Method == PaymentMethod.CreditCard)
+            {
+                shipment.Order.Payment.Status = PaymentStatus.Completed;
+                shipment.Order.Payment.UpdatedAt = DateTime.UtcNow;
+            }
+            else if (shipment.Order.Payment.Status != PaymentStatus.Completed)
+            {
+                throw new InvalidOperationException("Đơn chưa thanh toán đủ. Vui lòng chờ xác nhận thanh toán.");
+            }
+
             shipment.Status = ShipmentStatus.Delivered;
             shipment.DeliveredAt = DateTime.UtcNow;
             shipment.Order.Status = OrderStatus.Complete;
@@ -315,6 +329,9 @@ namespace GlocalCart.API.Services.Implementations
                 Note = note
             });
 
+            await CreditShipperBalanceAsync(shipperId, shipment.Order.ShippingFee);
+            await CreditSellerPayoutsAsync(shipment.Order);
+
             await _db.SaveChangesAsync();
 
             await _notif.CreateNotificationAsync(
@@ -330,7 +347,23 @@ namespace GlocalCart.API.Services.Implementations
             if (account != null)
             {
                 account.Balance += amount;
-                await _db.SaveChangesAsync();
+            }
+        }
+
+        private async Task CreditSellerPayoutsAsync(Order order)
+        {
+            var sellerPayouts = order.OrderItems
+                .GroupBy(oi => oi.SellerId)
+                .Select(g => new { SellerId = g.Key, Amount = g.Sum(oi => oi.UnitPrice * oi.Quantity) })
+                .ToList();
+
+            foreach (var payout in sellerPayouts)
+            {
+                var sellerAccount = await _db.BankAccounts.FirstOrDefaultAsync(b => b.UserId == payout.SellerId);
+                if (sellerAccount != null)
+                {
+                    sellerAccount.Balance += payout.Amount;
+                }
             }
         }
 

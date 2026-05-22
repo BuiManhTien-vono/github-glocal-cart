@@ -60,20 +60,8 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<bool> ActivateSellerAsync(int userId)
         {
-            var user = await _userManager.FindByIdAsync(userId.ToString())
-                ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
-
-            if (user.IsSeller)
-                throw new InvalidOperationException("Bạn đã là Seller rồi.");
-
-            user.IsSeller = true;
-            user.Role = Enums.UserRole.Seller;
-            user.UpdatedAt = DateTime.UtcNow;
-
-            // Thêm role Seller qua Identity
-            await _userManager.AddToRoleAsync(user, "Seller");
-            await _userManager.UpdateAsync(user);
-            return true;
+            await Task.CompletedTask;
+            throw new InvalidOperationException("Hệ thống hiện hoạt động theo mô hình một cửa hàng. Quyền quản lý bán hàng chỉ do Admin cấp cho nhân viên cửa hàng.");
         }
 
         // === ADDRESSES ===

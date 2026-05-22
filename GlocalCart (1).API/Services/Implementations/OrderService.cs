@@ -24,6 +24,8 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<OrderResponseDto> CreateOrderAsync(int buyerId, CreateOrderDto dto)
         {
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
             // Lấy giỏ hàng
             var cartItems = await _db.CartItems
                 .Include(ci => ci.Product)
@@ -32,6 +34,10 @@ namespace GlocalCart.API.Services.Implementations
 
             if (!cartItems.Any())
                 throw new InvalidOperationException("Giỏ hàng trống.");
+
+            var sellerIdsInCart = cartItems.Select(ci => ci.Product.SellerId).Distinct().ToList();
+            if (sellerIdsInCart.Count > 1)
+                throw new InvalidOperationException("Hiện tại mỗi đơn hàng chỉ hỗ trợ sản phẩm từ một shop. Vui lòng tách giỏ hàng theo từng shop để đặt hàng.");
 
             // Kiểm tra địa chỉ
             var address = await _db.UserAddresses
@@ -100,6 +106,8 @@ namespace GlocalCart.API.Services.Implementations
             _db.CartItems.RemoveRange(cartItems);
 
             await _db.SaveChangesAsync();
+
+            await transaction.CommitAsync();
 
             // Thông báo cho Seller(s)
             var sellerIds = cartItems.Select(ci => ci.Product.SellerId).Distinct();
@@ -172,7 +180,13 @@ namespace GlocalCart.API.Services.Implementations
 
             // Cập nhật Payment
             var payment = await _db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
-            if (payment != null) { payment.Status = PaymentStatus.Refunded; payment.UpdatedAt = DateTime.UtcNow; }
+            if (payment != null)
+            {
+                payment.Status = payment.Status == PaymentStatus.Completed
+                    ? PaymentStatus.Refunded
+                    : PaymentStatus.Canceled;
+                payment.UpdatedAt = DateTime.UtcNow;
+            }
 
             await _db.SaveChangesAsync();
 
@@ -261,7 +275,13 @@ namespace GlocalCart.API.Services.Implementations
             _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Canceled, Note = $"Seller từ chối: {dto.Reason}" });
 
             var payment = await _db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
-            if (payment != null) { payment.Status = PaymentStatus.Refunded; payment.UpdatedAt = DateTime.UtcNow; }
+            if (payment != null)
+            {
+                payment.Status = payment.Status == PaymentStatus.Completed
+                    ? PaymentStatus.Refunded
+                    : PaymentStatus.Canceled;
+                payment.UpdatedAt = DateTime.UtcNow;
+            }
 
             await _db.SaveChangesAsync();
             await _notif.CreateNotificationAsync(order.BuyerId, $"Đơn hàng #{order.OrderNumber} bị từ chối. Lý do: {dto.Reason}");
@@ -283,6 +303,8 @@ namespace GlocalCart.API.Services.Implementations
 
             if (order.Status is OrderStatus.Canceled or OrderStatus.Complete)
                 throw new InvalidOperationException("Không thể tạo vận đơn cho đơn đã hủy/hoàn tất.");
+
+            OrderBusinessRules.EnsureSellerCanFulfill(order.Payment);
 
             var shipment = new Shipment
             {
@@ -370,6 +392,19 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<List<ShipmentLogDto>> GetShipmentLogsAsync(int userId, int shipmentId)
         {
+            var shipment = await _db.Shipments
+                .Include(s => s.Order).ThenInclude(o => o.OrderItems)
+                .FirstOrDefaultAsync(s => s.Id == shipmentId)
+                ?? throw new KeyNotFoundException("Không tìm thấy thông tin vận chuyển.");
+
+            var isBuyer = shipment.Order.BuyerId == userId;
+            var isSeller = shipment.Order.OrderItems.Any(oi => oi.SellerId == userId);
+            var isShipper = shipment.ShipperId == userId;
+            var isAdmin = await _db.Users.AnyAsync(u => u.Id == userId && u.Role == UserRole.Admin);
+
+            if (!isBuyer && !isSeller && !isShipper && !isAdmin)
+                throw new UnauthorizedAccessException("Bạn không có quyền xem lịch sử vận chuyển này.");
+
             return await _db.ShipmentLogs
                 .Where(sl => sl.ShipmentId == shipmentId)
                 .OrderBy(sl => sl.CreatedAt)
@@ -435,10 +470,6 @@ namespace GlocalCart.API.Services.Implementations
 
             if (order.Shipment.ShipperId.HasValue)
             {
-                var shipperAccount = await _db.BankAccounts.FirstOrDefaultAsync(b => b.UserId == order.Shipment.ShipperId.Value);
-                if (shipperAccount != null)
-                    shipperAccount.Balance += order.TotalAmount;
-
                 await _notif.CreateNotificationAsync(
                     order.Shipment.ShipperId.Value,
                     $"Khách đơn #{order.OrderNumber} đã chuyển khoản {order.TotalAmount:N0}đ. Vui lòng bấm \"Đã nhận chuyển khoản\".",
@@ -452,7 +483,10 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<ConfirmReceiptResultDto> ConfirmReceiptAsync(int buyerId, int orderId)
         {
-            var order = await _db.Orders.Include(o => o.Shipment).Include(o => o.Payment)
+            var order = await _db.Orders
+                .Include(o => o.Shipment)
+                .Include(o => o.Payment)
+                .Include(o => o.OrderItems)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
@@ -472,30 +506,6 @@ namespace GlocalCart.API.Services.Implementations
 
             if (order.Payment != null && order.Payment.Status == PaymentStatus.Completed)
             {
-                order.Shipment.Status = ShipmentStatus.Delivered;
-                order.Shipment.DeliveredAt = DateTime.UtcNow;
-                order.Status = OrderStatus.Complete;
-
-                _db.ShipmentLogs.Add(new ShipmentLog
-                {
-                    ShipmentId = order.Shipment.Id,
-                    Status = ShipmentStatus.Delivered,
-                    Note = "Người mua xác nhận nhận hàng (đã thanh toán trước)."
-                });
-                _db.OrderLogs.Add(new OrderLog
-                {
-                    OrderId = orderId,
-                    Status = OrderStatus.Complete,
-                    Note = "Đơn hàng hoàn tất."
-                });
-
-                if (order.Shipment.ShipperId.HasValue)
-                {
-                    var shipperAccount = await _db.BankAccounts.FirstOrDefaultAsync(b => b.UserId == order.Shipment.ShipperId.Value);
-                    if (shipperAccount != null)
-                        shipperAccount.Balance += order.ShippingFee;
-                }
-
                 await _db.SaveChangesAsync();
 
                 if (order.Shipment.ShipperId.HasValue)
@@ -509,9 +519,9 @@ namespace GlocalCart.API.Services.Implementations
 
                 return new ConfirmReceiptResultDto
                 {
-                    Completed = true,
+                    Completed = false,
                     RequiresPayment = false,
-                    Message = "Đã xác nhận nhận hàng. Đơn hàng hoàn tất."
+                    Message = "Đã xác nhận nhận hàng. Vui lòng chờ shipper hoàn tất giao hàng."
                 };
             }
 

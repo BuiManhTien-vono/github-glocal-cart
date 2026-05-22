@@ -11,6 +11,7 @@ namespace GlocalCart.API.Data
         public static async Task SeedAsync(AppDbContext context, UserManager<User> userManager, RoleManager<IdentityRole<int>> roleManager)
         {
             await EnsureShipperRoleAndUserAsync(context, userManager, roleManager);
+            var storeSeller = await EnsureStoreSellerUserAsync(context, userManager, roleManager);
 
             // === FORCE CẬP NHẬT ẢNH ĐÚNG THEO TÊN SẢN PHẨM ===
             // Chạy mỗi lần khởi động để đảm bảo ảnh luôn đúng với sản phẩm
@@ -100,7 +101,7 @@ namespace GlocalCart.API.Data
                     FullName = $"Người dùng {i}",
                     PhoneNumber = $"090000000{i % 10}",
                     Role = UserRole.Member,
-                    IsSeller = i <= 3,
+                    IsSeller = false,
                     AccountStatus = AccountStatus.Active,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -110,16 +111,11 @@ namespace GlocalCart.API.Data
                 if (result.Succeeded)
                 {
                     await userManager.AddToRoleAsync(user, "Member");
-                    if (i <= 3)
-                    {
-                        await userManager.AddToRoleAsync(user, "Seller");
-                    }
                     users.Add(user);
                 }
             }
 
-            var sellers = users.Where(u => u.IsSeller).ToList();
-            var buyers = users.Where(u => !u.IsSeller).ToList();
+            var buyers = users;
 
             var addresses = new List<UserAddress>();
             var creditCards = new List<CreditCard>();
@@ -175,7 +171,6 @@ namespace GlocalCart.API.Data
 
             for (int i = 0; i < productNames.Length; i++)
             {
-                var seller = sellers[i % sellers.Count];
                 int categoryId = 6; 
                 if (productNames[i].Contains("Áo") || productNames[i].Contains("Quần") || productNames[i].Contains("Giày")) categoryId = 9;
                 else if (productNames[i].Contains("Nồi") || productNames[i].Contains("Bếp")) categoryId = 12;
@@ -183,7 +178,7 @@ namespace GlocalCart.API.Data
 
                 products.Add(new Product
                 {
-                    SellerId = seller.Id,
+                    SellerId = storeSeller.Id,
                     CategoryId = categoryId,
                     Name = productNames[i],
                     Description = $"Mô tả chuẩn SEO cho {productNames[i]} với chất lượng tuyệt đỉnh.",
@@ -317,6 +312,61 @@ namespace GlocalCart.API.Data
             var result = await userManager.CreateAsync(shipper, "Shipper@123");
             if (result.Succeeded)
                 await userManager.AddToRoleAsync(shipper, "Shipper");
+        }
+
+        private static async Task<User> EnsureStoreSellerUserAsync(
+            AppDbContext context,
+            UserManager<User> userManager,
+            RoleManager<IdentityRole<int>> roleManager)
+        {
+            if (!await roleManager.RoleExistsAsync("Seller"))
+                await roleManager.CreateAsync(new IdentityRole<int> { Name = "Seller" });
+
+            var storeSeller = await userManager.FindByNameAsync("store");
+            if (storeSeller == null)
+            {
+                storeSeller = new User
+                {
+                    UserName = "store",
+                    Email = "store@glocalcart.com",
+                    FullName = "GlocalCart Store",
+                    PhoneNumber = "0900111222",
+                    Role = UserRole.Seller,
+                    IsSeller = true,
+                    AccountStatus = AccountStatus.Active,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                var result = await userManager.CreateAsync(storeSeller, "Store@123");
+                if (!result.Succeeded)
+                    throw new InvalidOperationException("Không thể tạo tài khoản cửa hàng mẫu.");
+
+                await userManager.AddToRoleAsync(storeSeller, "Seller");
+            }
+
+            if (!await userManager.IsInRoleAsync(storeSeller, "Seller"))
+                await userManager.AddToRoleAsync(storeSeller, "Seller");
+
+            storeSeller.Role = UserRole.Seller;
+            storeSeller.IsSeller = true;
+            await userManager.UpdateAsync(storeSeller);
+
+            if (!await context.BankAccounts.AnyAsync(b => b.UserId == storeSeller.Id))
+            {
+                context.BankAccounts.Add(new BankAccount
+                {
+                    UserId = storeSeller.Id,
+                    BankName = "Vietcombank (Store)",
+                    RoutingNumber = "01123456",
+                    AccountNumberMasked = "****2222",
+                    Balance = 0,
+                    CreatedAt = DateTime.UtcNow
+                });
+                await context.SaveChangesAsync();
+            }
+
+            return storeSeller;
         }
     }
 }

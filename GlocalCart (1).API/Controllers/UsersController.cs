@@ -36,7 +36,7 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> ActivateSeller()
         {
             await _userService.ActivateSellerAsync(UserId);
-            return Ok(ApiResponse.Ok("Kích hoạt Seller thành công."));
+            return Ok(ApiResponse.Ok("Đã gửi yêu cầu cấp quyền quản lý bán hàng."));
         }
 
         // === ADDRESSES ===

@@ -46,7 +46,11 @@ namespace GlocalCart.API.Services.Implementations
 
             if (existing != null)
             {
-                existing.Quantity += dto.Quantity;
+                var newQuantity = existing.Quantity + dto.Quantity;
+                if (newQuantity > product.AvailableItemCount)
+                    throw new InvalidOperationException("Số lượng trong giỏ vượt quá tồn kho.");
+
+                existing.Quantity = newQuantity;
                 existing.PriceSnapshot = product.Price;
             }
             else
@@ -121,7 +125,9 @@ namespace GlocalCart.API.Services.Implementations
 
                 if (existing != null)
                 {
-                    existing.Quantity = Math.Max(existing.Quantity, syncItem.Quantity);
+                    existing.Quantity = Math.Min(
+                        Math.Max(existing.Quantity, syncItem.Quantity),
+                        product.AvailableItemCount);
                     existing.PriceSnapshot = product.Price;
                 }
                 else
