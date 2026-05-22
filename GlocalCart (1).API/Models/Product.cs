@@ -50,6 +50,12 @@ namespace GlocalCart.API.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>
+        /// Concurrency token để chống bán lố (overselling)
+        /// </summary>
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = null!;
+
         // Navigation
         public User Seller { get; set; } = null!;
         public Category Category { get; set; } = null!;

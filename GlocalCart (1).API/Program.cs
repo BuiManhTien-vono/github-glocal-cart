@@ -78,6 +78,9 @@ builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IShipperService, ShipperService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
+builder.Services.AddHttpClient();
+
+builder.Services.AddHostedService<AutoCancelOrderService>();
 
 // === CONTROLLERS ===
 builder.Services.AddControllers(options =>

@@ -1,6 +1,9 @@
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using GlocalCart.API.DTOs.Payments;
 using GlocalCart.API.Helpers;
+using GlocalCart.API.Services.Implementations;
 using GlocalCart.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,9 +15,19 @@ namespace GlocalCart.API.Controllers
     public class PaymentsController : ControllerBase
     {
         private readonly IPaymentService _paymentService;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _config;
         private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        public PaymentsController(IPaymentService paymentService) => _paymentService = paymentService;
+        public PaymentsController(
+            IPaymentService paymentService,
+            IHttpClientFactory httpClientFactory,
+            IConfiguration config)
+        {
+            _paymentService = paymentService;
+            _httpClientFactory = httpClientFactory;
+            _config = config;
+        }
 
         /// <summary>
         /// Khởi tạo thanh toán VietQR cho đơn chuyển khoản (chỉ người mua).
@@ -28,7 +41,7 @@ namespace GlocalCart.API.Controllers
         }
 
         /// <summary>
-        /// Người mua xác nhận đã chuyển khoản — chờ ngân hàng đối soát.
+        /// Người mua xác nhận đã chuyển khoản — gửi yêu cầu xác minh tới Bank Gateway bên thứ 3.
         /// </summary>
         [HttpPost("{orderId}/confirm-transfer")]
         [Authorize]
@@ -36,26 +49,44 @@ namespace GlocalCart.API.Controllers
         {
             var result = await _paymentService.ConfirmTransferAsync(UserId, orderId);
 
-            // Auto-simulate webhook in Development
-            var env = HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>();
-            if (env.IsDevelopment())
+            // Gửi yêu cầu xác minh tới Bank Gateway (bên thứ 3)
+            _ = Task.Run(async () =>
             {
-                var scopeFactory = HttpContext.RequestServices.GetRequiredService<IServiceScopeFactory>();
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
+                    var paymentSettings = _config.GetSection("PaymentSettings");
+                    var merchantId = paymentSettings["MerchantId"] ?? "MERCHANT_001";
+                    var secretKey = paymentSettings["SecretKey"] ?? "default_secret";
+                    var bankGatewayUrl = paymentSettings["BankGatewayUrl"] ?? "http://localhost:5100";
+
+                    var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    var rawData = $"{merchantId}|{result.OrderNumber}|{(int)result.Amount}|{timestamp}";
+                    var signature = PaymentService.GenerateHmacForTest(rawData, secretKey);
+
+                    var payload = new
                     {
-                        await Task.Delay(3000); // 3 seconds delay for UI to transition
-                        using var scope = scopeFactory.CreateScope();
-                        var pSvc = scope.ServiceProvider.GetRequiredService<IPaymentService>();
-                        await pSvc.SimulateBankCallbackAsync(result.OrderNumber, "PAID");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[Auto-Simulate Error]: {ex.Message}");
-                    }
-                });
-            }
+                        MerchantId = merchantId,
+                        OrderId = result.OrderNumber,
+                        Amount = result.Amount,
+                        Timestamp = timestamp,
+                        Signature = signature
+                    };
+
+                    var client = _httpClientFactory.CreateClient();
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    var response = await client.PostAsync(
+                        $"{bankGatewayUrl}/api/gateway/process-transfer", content);
+
+                    Console.WriteLine(
+                        $"[BankGateway] Gửi xác minh đơn #{result.OrderNumber} → HTTP {(int)response.StatusCode}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[BankGateway Error] Không thể gửi tới Bank Gateway: {ex.Message}");
+                }
+            });
 
             return Ok(ApiResponse.Ok(result, "Đã ghi nhận. Đang chờ ngân hàng xác nhận."));
         }
@@ -69,7 +100,7 @@ namespace GlocalCart.API.Controllers
             Ok(ApiResponse.Ok(await _paymentService.GetPaymentStatusAsync(UserId, orderId)));
 
         /// <summary>
-        /// Webhook từ ngân hàng / payment gateway (HMAC X-Signature).
+        /// Webhook từ ngân hàng / Bank Gateway (HMAC X-Signature).
         /// </summary>
         [HttpPost("webhook")]
         [AllowAnonymous]
@@ -87,3 +118,4 @@ namespace GlocalCart.API.Controllers
         }
     }
 }
+

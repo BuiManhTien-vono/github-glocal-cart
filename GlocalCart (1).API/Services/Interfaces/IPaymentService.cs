@@ -8,6 +8,5 @@ namespace GlocalCart.API.Services.Interfaces
         Task<PaymentStatusDto> ConfirmTransferAsync(int buyerId, int orderId);
         Task<PaymentStatusDto> GetPaymentStatusAsync(int userId, int orderId);
         Task<bool> ProcessCallbackAsync(WebhookRequestDto callback, string signature);
-        Task<bool> SimulateBankCallbackAsync(string orderNumber, string status);
     }
 }

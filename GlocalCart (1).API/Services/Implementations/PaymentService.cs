@@ -129,20 +129,6 @@ namespace GlocalCart.API.Services.Implementations
             return await ApplyBankResultAsync(callback.OrderId, callback.Amount, callback.TransactionId, callback.Status);
         }
 
-        public async Task<bool> SimulateBankCallbackAsync(string orderNumber, string status)
-        {
-            var order = await _db.Orders.Include(o => o.Payment)
-                .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber);
-
-            if (order?.Payment == null) return false;
-
-            return await ApplyBankResultAsync(
-                orderNumber,
-                order.TotalAmount,
-                "SIM-" + Guid.NewGuid().ToString("N")[..12].ToUpper(),
-                status);
-        }
-
         private async Task<bool> ApplyBankResultAsync(string orderNumber, decimal amount, string transactionId, string status)
         {
             var order = await _db.Orders

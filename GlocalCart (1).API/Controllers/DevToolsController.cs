@@ -4,7 +4,7 @@ using GlocalCart.API.Data;
 using GlocalCart.API.DTOs.Payments;
 using GlocalCart.API.Helpers;
 using GlocalCart.API.Services.Implementations;
-using GlocalCart.API.Services.Interfaces;
+
 
 namespace GlocalCart.API.Controllers
 {
@@ -17,13 +17,11 @@ namespace GlocalCart.API.Controllers
     public class DevToolsController : ControllerBase
     {
         private readonly AppDbContext _db;
-        private readonly IPaymentService _paymentService;
         private readonly IWebHostEnvironment _env;
 
-        public DevToolsController(AppDbContext db, IPaymentService paymentService, IWebHostEnvironment env)
+        public DevToolsController(AppDbContext db, IWebHostEnvironment env)
         {
             _db = db;
-            _paymentService = paymentService;
             _env = env;
         }
 
@@ -125,26 +123,7 @@ namespace GlocalCart.API.Controllers
         }
 
         /// <summary>
-        /// Mô phỏng ngân hàng gọi webhook xác nhận thanh toán (chỉ Development).
-        /// </summary>
-        [HttpPost("bank/simulate-callback")]
-        public async Task<IActionResult> SimulateBankCallback([FromBody] BankSimulateDto dto)
-        {
-            if (!_env.IsDevelopment())
-                return NotFound();
 
-            var status = string.IsNullOrWhiteSpace(dto.Status) ? "PAID" : dto.Status.ToUpperInvariant();
-            if (status is not ("PAID" or "FAILED"))
-                return BadRequest(ApiResponse.Fail("Status phải là PAID hoặc FAILED."));
-
-            var ok = await _paymentService.SimulateBankCallbackAsync(dto.OrderNumber, status);
-            if (!ok)
-                return NotFound(ApiResponse.Fail("Không tìm thấy đơn hoặc đơn không dùng chuyển khoản."));
-
-            return Ok(ApiResponse.Ok($"Đã mô phỏng callback ngân hàng: {status}"));
-        }
-
-        /// <summary>
         /// Tạo payload + chữ ký HMAC để test POST /api/payments/webhook (chỉ Development).
         /// </summary>
         [HttpPost("bank/build-webhook")]
