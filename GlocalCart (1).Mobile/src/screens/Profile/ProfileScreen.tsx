@@ -73,6 +73,55 @@ export default function ProfileScreen({ navigation }: any) {
     );
   };
 
+  const handleSupportPress = (label: string) => {
+    switch (label) {
+      case 'Trung tâm trợ giúp':
+        Alert.alert(
+          'Trung tâm trợ giúp GlocalCart',
+          '💡 1. Làm thế nào để mua hàng?\nChọn sản phẩm, thêm vào giỏ hàng và tiến hành thanh toán.\n\n' +
+          '📦 2. Thời gian giao hàng bao lâu?\nThông thường từ 1-3 ngày làm việc tùy thuộc vào địa chỉ nhận hàng.\n\n' +
+          '💳 3. Phương thức thanh toán?\nHỗ trợ chuyển khoản ngân hàng qua mã QR hoặc thanh toán khi nhận hàng (COD).\n\n' +
+          '🔄 4. Chính sách đổi trả?\nHỗ trợ đổi trả miễn phí trong vòng 7 ngày kể từ khi nhận hàng nếu có lỗi từ nhà sản xuất.',
+          [{ text: 'Đã hiểu' }]
+        );
+        break;
+      case 'Chăm sóc khách hàng':
+        Alert.alert(
+          'Chăm sóc khách hàng',
+          'Tổng đài CSKH GlocalCart luôn sẵn sàng phục vụ bạn 24/7.\n\n📞 Hotline: 1900 8888 (1000đ/phút)\n📧 Email: support@glocalcart.vn\n⏰ Giờ làm việc: 08:00 - 22:00 hàng ngày',
+          [
+            { text: 'Gửi Email', onPress: () => Alert.alert('Gửi Email', 'Vui lòng gửi email hỗ trợ tới: support@glocalcart.vn') },
+            { text: 'Chat CSKH', onPress: () => {
+                if (!isLoggedIn) {
+                  Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để chat với CSKH.');
+                  return;
+                }
+                navigation.navigate('ChatList');
+              }
+            },
+            { text: 'Đóng', style: 'cancel' }
+          ]
+        );
+        break;
+      case 'GlocalCart Blog':
+        Alert.alert(
+          'GlocalCart Blog - Góc chia sẻ',
+          '🔥 Các bài viết nổi bật hôm nay:\n\n' +
+          '🍵 1. Bí quyết chọn đặc sản chè Thái Nguyên chính gốc.\n' +
+          '🛍️ 2. Mẹo săn voucher giảm giá cực hời tại GlocalCart.\n' +
+          '🍲 3. Khám phá ẩm thực 3 miền cùng cộng đồng địa phương.\n' +
+          '🏪 4. Cẩm nang khởi nghiệp kinh doanh nông sản online hiệu quả.',
+          [
+            { text: 'Xem sau', style: 'cancel' },
+            { text: 'Đọc ngay', onPress: () => Alert.alert('Thông báo', 'Tính năng đọc trực tiếp trên ứng dụng đang được phát triển. Vui lòng quay lại sau!') }
+          ]
+        );
+        break;
+      default:
+        break;
+    }
+  };
+
   const initial = (user?.fullName || user?.userName || '?')[0].toUpperCase();
 
   // Shopee-style order status items
@@ -308,6 +357,7 @@ export default function ProfileScreen({ navigation }: any) {
               key={i}
               style={[styles.menuItem, i === 0 && { borderTopWidth: 0 }]}
               activeOpacity={0.6}
+              onPress={() => handleSupportPress(item.label)}
             >
               <Ionicons name={item.icon as any} size={22} color={item.color} />
               <Text style={styles.menuLabel}>{item.label}</Text>

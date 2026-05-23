@@ -69,6 +69,7 @@ namespace GlocalCart.API.DTOs.Orders
         public string? TrackingNumber { get; set; }
         public int? ShipperId { get; set; }
         public string? ShipperName { get; set; }
+        public string? ShipperPhone { get; set; }
         public DateTime? AssignedAt { get; set; }
         public DateTime? DeliveredAt { get; set; }
     }

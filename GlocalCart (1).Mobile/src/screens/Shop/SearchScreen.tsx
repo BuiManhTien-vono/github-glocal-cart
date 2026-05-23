@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard, ScrollView, Animated, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import { getSearchHistory, addSearchHistory, clearSearchHistory } from '../../services/db/database';
 import apiClient from '../../services/api/apiClient';
 import { ProductCard } from '../../components/shop/ProductCard';
 import { colors } from '../../theme/colors';
+import { resolveProductImage } from '../../utils/imageUtils';
 
 const HOT_SEARCHES = ['iPhone 15', 'Giày thể thao', 'Áo thun nam', 'Tai nghe bluetooth', 'Váy nữ', 'Sạc dự phòng'];
 
@@ -30,6 +32,7 @@ const SERVICES = ['Đang giảm giá', 'Hàng có sẵn', 'Mua giá bán buôn',
 
 export default function SearchScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<any[]>([]);
@@ -59,9 +62,34 @@ export default function SearchScreen() {
   const [activeTab, setActiveTab] = useState(0); // 0: Liên quan, 1: Mới nhất, 2: Bán chạy, 3: Giá
   const [priceOrder, setPriceOrder] = useState<'asc' | 'desc'>('asc');
 
+  const fetchFlashSaleProducts = async () => {
+    setIsLoading(true);
+    setIsSearching(true);
+    try {
+      const res: any = await apiClient.get('/products');
+      const items = res?.items || res || [];
+      setProducts(items);
+      setActiveTab(0);
+    } catch (error) {
+      console.log('Fetch Flash Sale error:', error);
+      setProducts([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadHistory();
   }, []);
+
+  useEffect(() => {
+    if (route.params?.isFlashSale) {
+      fetchFlashSaleProducts();
+    } else if (route.params?.query) {
+      setSearchQuery(route.params.query);
+      fetchResults(route.params.query);
+    }
+  }, [route.params?.isFlashSale, route.params?.query]);
 
   useEffect(() => {
     if (products.length > 0) {
@@ -292,35 +320,44 @@ export default function SearchScreen() {
           <Ionicons name="arrow-back" size={26} color={colors.primary} />
         </TouchableOpacity>
 
-        <View style={styles.searchBox}>
-          <TextInput
-            style={styles.input}
-            placeholder="Glocal Cart Mall..."
-            value={searchQuery}
-            onChangeText={onTextChange}
-            autoFocus
-            onSubmitEditing={() => fetchResults(searchQuery)}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearchQuery(''); setSuggestions([]); setIsSearching(false); }} style={{ paddingHorizontal: 4 }}>
-              <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={handleCameraPress} style={styles.cameraBtn}>
-            <Ionicons name="camera-outline" size={22} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        {isSearching || showFilters ? (
-          <TouchableOpacity style={styles.headerFilterBtn} onPress={() => setShowFilters(!showFilters)}>
-            <Ionicons name="filter" size={20} color={showFilters ? colors.primary : colors.textSecondary} />
-            <Text style={[styles.headerFilterText, { color: showFilters ? colors.primary : colors.textSecondary }]}>Lọc</Text>
-          </TouchableOpacity>
+        {route.params?.isFlashSale ? (
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#ee4d2d', fontStyle: 'italic' }}>FLASH</Text>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#ee4d2d', fontStyle: 'italic', marginRight: 8 }}> SALE</Text>
+          </View>
         ) : (
-          <TouchableOpacity style={styles.searchBtn} onPress={() => fetchResults(searchQuery)}>
-            <Text style={styles.searchBtnText}>Tìm</Text>
-          </TouchableOpacity>
+          <View style={styles.searchBox}>
+            <TextInput
+              style={styles.input}
+              placeholder="Glocal Cart Mall..."
+              value={searchQuery}
+              onChangeText={onTextChange}
+              autoFocus
+              onSubmitEditing={() => fetchResults(searchQuery)}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => { setSearchQuery(''); setSuggestions([]); setIsSearching(false); }} style={{ paddingHorizontal: 4 }}>
+                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleCameraPress} style={styles.cameraBtn}>
+              <Ionicons name="camera-outline" size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {route.params?.isFlashSale ? null : (
+          isSearching || showFilters ? (
+            <TouchableOpacity style={styles.headerFilterBtn} onPress={() => setShowFilters(!showFilters)}>
+              <Ionicons name="filter" size={20} color={showFilters ? colors.primary : colors.textSecondary} />
+              <Text style={[styles.headerFilterText, { color: showFilters ? colors.primary : colors.textSecondary }]}>Lọc</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.searchBtn} onPress={() => fetchResults(searchQuery)}>
+              <Text style={styles.searchBtnText}>Tìm</Text>
+            </TouchableOpacity>
+          )
         )}
       </View>
 
@@ -357,11 +394,60 @@ export default function SearchScreen() {
                   keyExtractor={(item) => item.id.toString()}
                   numColumns={2}
                   contentContainerStyle={styles.listContainer}
-                  renderItem={({ item }) => (
-                    <View style={{ width: '50%', padding: 4 }}>
-                      <ProductCard item={item} customWidth="100%" />
-                    </View>
-                  )}
+                  renderItem={({ item, index }) => {
+                    if (route.params?.isFlashSale) {
+                      // Fake discount data giống trang chủ để đồng bộ tag giảm giá và giá đỏ
+                      const discount = 20 + ((index % 6) * 5); // 20%, 25%, 30%, 35%, 40%, 45%
+                      const discountedPrice = item.price * (1 - discount / 100);
+                      const soldPercentage = ((item.id * 13) % 60) + 25; // range 25% to 85%
+                      const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/150';
+
+                      return (
+                        <View style={{ width: '50%', padding: 4 }}>
+                          <TouchableOpacity 
+                            style={styles.flashSaleCard}
+                            onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}
+                          >
+                            <View style={styles.flashSaleImageBox}>
+                              <Image source={{ uri: mainImage }} style={styles.flashSaleImage} />
+                              <View style={styles.flashSaleBadge}>
+                                <Text style={styles.flashSaleBadgeText}>-{discount}%</Text>
+                              </View>
+                              <View style={styles.flashSaleLabelFav}>
+                                <Text style={styles.flashSaleLabelFavText}>Yêu thích</Text>
+                              </View>
+                            </View>
+                            
+                            <View style={styles.flashSaleInfo}>
+                              <Text style={styles.flashSaleName} numberOfLines={2}>
+                                {item.name}
+                              </Text>
+                              
+                              <View style={styles.flashSalePriceRow}>
+                                <Text style={styles.flashSalePrice}>
+                                  ₫{discountedPrice.toLocaleString('vi-VN')}
+                                </Text>
+                                <Text style={styles.flashSaleOriginalPrice}>
+                                  ₫{item.price.toLocaleString('vi-VN')}
+                                </Text>
+                              </View>
+                              
+                              <View style={styles.flashSaleProgressBarBg}>
+                                <View style={[styles.flashSaleProgressBarFill, { width: `${soldPercentage}%` }]} />
+                                <Text style={styles.flashSaleProgressText}>Đang bán chạy</Text>
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <View style={{ width: '50%', padding: 4 }}>
+                        <ProductCard item={item} customWidth="100%" />
+                      </View>
+                    );
+                  }}
                   ListEmptyComponent={() => (
                     <View style={styles.empty}>
                       <Ionicons name="search-outline" size={80} color={colors.border} />
@@ -864,5 +950,104 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Flash Sale Card Styles
+  flashSaleCard: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  flashSaleImageBox: {
+    width: '100%',
+    aspectRatio: 1,
+    position: 'relative',
+    backgroundColor: '#f5f5f5',
+  },
+  flashSaleImage: {
+    width: '100%',
+    height: '100%',
+  },
+  flashSaleBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: 'rgba(255,212,36,0.9)',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderBottomLeftRadius: 4,
+  },
+  flashSaleBadgeText: {
+    fontSize: 10,
+    color: '#ee4d2d',
+    fontWeight: '700',
+  },
+  flashSaleLabelFav: {
+    position: 'absolute',
+    top: 4,
+    left: -4,
+    backgroundColor: '#ff6b35',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  flashSaleLabelFavText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  flashSaleInfo: {
+    padding: 8,
+  },
+  flashSaleName: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#333',
+    height: 32,
+    marginBottom: 6,
+  },
+  flashSalePriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 6,
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  flashSalePrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ee4d2d',
+  },
+  flashSaleOriginalPrice: {
+    fontSize: 10,
+    color: '#999',
+    textDecorationLine: 'underline line-through',
+  },
+  flashSaleProgressBarBg: {
+    width: '100%',
+    height: 14,
+    backgroundColor: '#ffbda6',
+    borderRadius: 7,
+    position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  flashSaleProgressBarFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#ee4d2d',
+  },
+  flashSaleProgressText: {
+    fontSize: 9,
+    color: '#fff',
+    fontWeight: '600',
+    zIndex: 1,
   },
 });

@@ -20,6 +20,7 @@ import ChangePasswordScreen from '../screens/Profile/ChangePasswordScreen';
 import PaymentMethodsScreen from '../screens/Profile/PaymentMethodsScreen';
 import MyOrdersScreen from '../screens/Profile/MyOrdersScreen';
 import OrderDetailScreen from '../screens/Profile/OrderDetailScreen';
+import CancelOrderDetailScreen from '../screens/Profile/CancelOrderDetailScreen';
 import ShipmentTrackingScreen from '../screens/Profile/ShipmentTrackingScreen';
 import FavoritesScreen from '../screens/Profile/FavoritesScreen';
 import AccountSettingsScreen from '../screens/Profile/AccountSettingsScreen';
@@ -38,6 +39,7 @@ import SellerAddProductScreen from '../screens/Seller/SellerAddProductScreen';
 import SellerEditProductScreen from '../screens/Seller/SellerEditProductScreen';
 import SellerShopScreen from '../screens/Seller/SellerShopScreen';
 import SellerReviewScreen from '../screens/Seller/SellerReviewScreen';
+import SellerCreateShipmentScreen from '../screens/Seller/SellerCreateShipmentScreen';
 
 // Admin Screens
 import AdminDashboardScreen from '../screens/Admin/AdminDashboardScreen';
@@ -62,6 +64,9 @@ import ChatListScreen from '../screens/Shop/ChatListScreen';
 import ChatDetailScreen from '../screens/Shop/ChatDetailScreen';
 import ReportProductScreen from '../screens/Shop/ReportProductScreen';
 import OrderTrackingScreen from '../screens/Shop/OrderTrackingScreen';
+import AllReviewsScreen from '../screens/Shop/AllReviewsScreen';
+import VietQRScreen from '../screens/Shop/VietQRScreen';
+import PaymentWaitingScreen from '../screens/Shop/PaymentWaitingScreen';
 
 // Shipper Screens
 import ShipperAvailableScreen from '../screens/Shipper/ShipperAvailableScreen';
@@ -117,6 +122,7 @@ function ProfileStack() {
       <Stack.Screen name="AdminProducts" component={AdminProductsScreen} />
       <Stack.Screen name="SellerProducts" component={SellerProductScreen} />
       <Stack.Screen name="SellerOrders" component={SellerOrdersScreen} />
+      <Stack.Screen name="SellerCreateShipment" component={SellerCreateShipmentScreen} />
       <Stack.Screen name="SellerShopInfo" component={SellerShopInfoScreen} />
       <Stack.Screen name="SellerCategories" component={SellerCategoriesScreen} />
       <Stack.Screen name="SellerAddCategory" component={SellerAddCategoryScreen} />
@@ -128,7 +134,7 @@ function ProfileStack() {
       <Stack.Screen name="SellerReview" component={SellerReviewScreen} />
       <Stack.Screen name="MyOrders" component={MyOrdersScreen} />
       <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
-      <Stack.Screen name="ShipmentTracking" component={ShipmentTrackingScreen} />
+      <Stack.Screen name="CancelOrderDetailScreen" component={CancelOrderDetailScreen} />
     </Stack.Navigator>
   );
 }
@@ -240,14 +246,18 @@ function AppStack() {
       <Stack.Screen name="Checkout" component={CheckoutScreen} />
       <Stack.Screen name="Addresses" component={AddressesScreen} />
       <Stack.Screen name="WriteReview" component={WriteReviewScreen} />
+      <Stack.Screen name="AllReviews" component={AllReviewsScreen} />
       <Stack.Screen name="ShopView" component={ShopScreen} />
       <Stack.Screen name="ShopDetail" component={ShopDetailScreen} />
       <Stack.Screen name="ChatList" component={ChatListScreen} />
       <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
       <Stack.Screen name="ReportProduct" component={ReportProductScreen} />
-      <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
+      <Stack.Screen name="OrderTracking" component={ShipmentTrackingScreen} />
+      <Stack.Screen name="ShipmentTracking" component={ShipmentTrackingScreen} />
       <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
       <Stack.Screen name="NotificationContent" component={NotificationContentScreen} />
+      <Stack.Screen name="VietQR" component={VietQRScreen} />
+      <Stack.Screen name="PaymentWaiting" component={PaymentWaitingScreen} options={{ gestureEnabled: false }} />
     </Stack.Navigator>
   );
 }

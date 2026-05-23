@@ -31,9 +31,9 @@ namespace GlocalCart.API.Controllers
             Ok(ApiResponse.Ok(await _orderService.GetOrderByIdAsync(UserId, id)));
 
         [HttpPatch("{id}/cancel")]
-        public async Task<IActionResult> CancelOrder(int id)
+        public async Task<IActionResult> CancelOrder(int id, [FromBody] CancelOrderDto dto)
         {
-            await _orderService.CancelOrderAsync(UserId, id);
+            await _orderService.CancelOrderAsync(UserId, id, dto?.Reason);
             return Ok(ApiResponse.Ok("Đã hủy đơn hàng."));
         }
 
