@@ -13,6 +13,22 @@ namespace GlocalCart.API.DTOs.Orders
 
         [MaxLength(500)]
         public string? Note { get; set; }
+
+        /// <summary>
+        /// Danh sách sản phẩm (tùy chọn). Nếu có → tạo đơn từ items này (Buy Now).
+        /// Nếu null/rỗng → tạo đơn từ giỏ hàng trên server.
+        /// </summary>
+        public List<OrderItemInputDto>? Items { get; set; }
+    }
+
+    public class OrderItemInputDto
+    {
+        [Required]
+        public int ProductId { get; set; }
+
+        [Required]
+        [Range(1, 999)]
+        public int Quantity { get; set; }
     }
 
     public class OrderResponseDto
@@ -69,6 +85,7 @@ namespace GlocalCart.API.DTOs.Orders
         public string? TrackingNumber { get; set; }
         public int? ShipperId { get; set; }
         public string? ShipperName { get; set; }
+        public string? ShipperPhone { get; set; }
         public DateTime? AssignedAt { get; set; }
         public DateTime? DeliveredAt { get; set; }
     }

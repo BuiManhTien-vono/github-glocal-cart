@@ -284,6 +284,9 @@ namespace GlocalCart.API.Data
             var shipmentLogs = new List<ShipmentLog>();
             var productReviews = new List<ProductReview>();
 
+            var shipperUser = context.Users.FirstOrDefault(u => u.UserName == "shipper");
+            var shipperId = shipperUser?.Id;
+
             foreach (var order in orders)
             {
                 var numItems = rand.Next(1, 4);
@@ -327,9 +330,11 @@ namespace GlocalCart.API.Data
                     var shipment = new Shipment
                     {
                         OrderId = order.Id,
-                        Status = ShipmentStatus.Pending,
+                        Status = ShipmentStatus.Shipped,
+                        ShipperId = shipperId,
+                        AssignedAt = DateTime.UtcNow,
                         TrackingNumber = $"VNPOST{123123 + order.Id}",
-                        ShipmentMethod = "Standard",
+                        ShipmentMethod = "Giao Hàng Nhanh",
                         EstimatedArrival = DateTime.UtcNow.AddDays(3),
                         ShipmentDate = DateTime.UtcNow
                     };

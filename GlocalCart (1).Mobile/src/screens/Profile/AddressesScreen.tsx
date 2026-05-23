@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Header } from '../../components/common/Header';
 import { Loading } from '../../components/common/Loading';
 import apiClient from '../../services/api/apiClient';
+import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, shadow } from '../../theme/colors';
 
 const LOCAL_STORAGE_KEY = '@glocal_addresses';
@@ -45,6 +46,7 @@ interface Address {
 export default function AddressScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const isSelecting = route.params?.isSelecting || false;
+  const { user } = useAuth();
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +104,7 @@ export default function AddressScreen({ navigation, route }: any) {
   };
 
   const handleSave = async () => {
-    if (!form.fullName || !form.phone || !form.street || !form.city || !form.district || !form.ward) {
+    if (!form.street || !form.city || !form.district || !form.ward) {
       Alert.alert('Thiếu thông tin', 'Vui lòng điền đầy đủ các thông tin bắt buộc.');
       return;
     }
@@ -121,12 +123,12 @@ export default function AddressScreen({ navigation, route }: any) {
           currentList[idx] = { ...form, id: editId } as Address;
         }
         // Thử API
-        try { await apiClient.put(`/users/addresses/${editId}`, form); } catch (e) {}
+        try { await apiClient.put(`/users/addresses/${editId}`, form); } catch (e) { }
       } else {
         // Thêm mới
         const newAddr = { ...form, id: Date.now().toString() };
         currentList.push(newAddr);
-        try { await apiClient.post('/users/addresses', form); } catch (e) {}
+        try { await apiClient.post('/users/addresses', form); } catch (e) { }
       }
 
       await saveLocalAddresses(currentList);
@@ -145,7 +147,7 @@ export default function AddressScreen({ navigation, route }: any) {
       {
         text: 'Xóa', style: 'destructive', onPress: async () => {
           try {
-            try { await apiClient.delete(`/users/addresses/${id}`); } catch (e) {}
+            try { await apiClient.delete(`/users/addresses/${id}`); } catch (e) { }
             const newList = addresses.filter(a => a.id !== id);
             await saveLocalAddresses(newList);
           } catch (e: any) { Alert.alert('Lỗi', e.message); }
@@ -188,7 +190,10 @@ export default function AddressScreen({ navigation, route }: any) {
           >
             {item.isDefault && <View style={s.defBadge}><Ionicons name="checkmark-circle" size={12} color="#FFF" /><Text style={s.defText}>Mặc định</Text></View>}
             <View style={s.cardTop}><Ionicons name="location" size={20} color={colors.primary} />
-              <View style={{ flex: 1 }}><Text style={s.name}>{item.fullName}</Text><Text style={s.phone}>{item.phone}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.name}>{item.fullName || user?.fullName || 'Người nhận'}</Text>
+                <Text style={s.phone}>{item.phone || user?.phone || 'Số điện thoại'}</Text>
+              </View>
             </View>
             <Text style={s.detail}>{item.street}</Text>
             <Text style={s.detail}>{[item.ward, item.district, item.city].filter(Boolean).join(', ')}</Text>
@@ -209,7 +214,7 @@ export default function AddressScreen({ navigation, route }: any) {
           >
             <View style={[s.modal, { paddingBottom: insets.bottom + 20 }]}>
               <View style={s.handle} /><Text style={s.modalTitle}>{editId ? 'Sửa Địa Chỉ' : 'Thêm Địa Chỉ Mới'}</Text>
-              
+
               {activePicker ? (
                 <View style={{ flex: 1 }}>
                   <TouchableOpacity onPress={() => setActivePicker(null)} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
@@ -235,31 +240,16 @@ export default function AddressScreen({ navigation, route }: any) {
                         {(activePicker === 'city' && form.city === opt ||
                           activePicker === 'district' && form.district === opt ||
                           activePicker === 'ward' && form.ward === opt) && (
-                          <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                        )}
+                            <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                          )}
                       </TouchableOpacity>
                     ))}
-                    {(activePicker === 'district' && districts.length === 0) && <Text style={{color: '#999'}}>Vui lòng chọn Thành phố trước.</Text>}
-                    {(activePicker === 'ward' && wards.length === 0) && <Text style={{color: '#999'}}>Vui lòng chọn Quận/Huyện trước.</Text>}
+                    {(activePicker === 'district' && districts.length === 0) && <Text style={{ color: '#999' }}>Vui lòng chọn Thành phố trước.</Text>}
+                    {(activePicker === 'ward' && wards.length === 0) && <Text style={{ color: '#999' }}>Vui lòng chọn Quận/Huyện trước.</Text>}
                   </ScrollView>
                 </View>
               ) : (
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                  {/* Họ Tên & SĐT */}
-                  <View style={s.field}>
-                    <Text style={s.label}>Họ tên *</Text>
-                    <View style={s.inputWrap}>
-                      <Ionicons name="person-outline" size={18} color={colors.textMuted} style={{ marginRight: 10 }} />
-                      <TextInput style={s.input} value={form.fullName} onChangeText={v => setForm({ ...form, fullName: v })} placeholder="Nhập họ và tên" />
-                    </View>
-                  </View>
-                  <View style={s.field}>
-                    <Text style={s.label}>SĐT *</Text>
-                    <View style={s.inputWrap}>
-                      <Ionicons name="call-outline" size={18} color={colors.textMuted} style={{ marginRight: 10 }} />
-                      <TextInput style={s.input} value={form.phone} onChangeText={v => setForm({ ...form, phone: v })} placeholder="Nhập số điện thoại" keyboardType="phone-pad" />
-                    </View>
-                  </View>
 
                   {/* Thành phố */}
                   <View style={s.field}>
@@ -302,7 +292,7 @@ export default function AddressScreen({ navigation, route }: any) {
                     <Ionicons name={form.isDefault ? 'checkbox' : 'square-outline'} size={24} color={colors.primary} />
                     <Text style={s.defTogText}>Đặt làm mặc định</Text>
                   </TouchableOpacity>
-                  
+
                   <View style={s.modalActs}>
                     <TouchableOpacity style={s.cancelBtn} onPress={resetForm}><Text style={s.cancelText}>Hủy</Text></TouchableOpacity>
                     <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.7 }]} onPress={handleSave} disabled={saving}><Text style={s.saveText}>{saving ? 'Đang lưu...' : 'Lưu'}</Text></TouchableOpacity>

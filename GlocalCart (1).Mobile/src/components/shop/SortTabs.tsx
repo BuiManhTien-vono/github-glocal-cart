@@ -5,8 +5,26 @@ import { colors } from '../../theme/colors';
 
 const tabs = ['Liên quan', 'Mới nhất', 'Bán chạy', 'Giá'];
 
-export const SortTabs = () => {
-  const [activeTab, setActiveTab] = useState(0);
+interface SortTabsProps {
+  activeTab?: number;
+  onTabChange?: (idx: number) => void;
+  priceOrder?: 'asc' | 'desc';
+  onFilterPress?: () => void;
+}
+
+export const SortTabs = ({ activeTab, onTabChange, priceOrder = 'asc', onFilterPress }: SortTabsProps) => {
+  const [localActiveTab, setLocalActiveTab] = useState(0);
+
+  const hasProps = activeTab !== undefined && onTabChange !== undefined;
+  const currentActiveTab = hasProps ? activeTab : localActiveTab;
+
+  const handleTabPress = (idx: number) => {
+    if (hasProps) {
+      onTabChange(idx);
+    } else {
+      setLocalActiveTab(idx);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -14,23 +32,32 @@ export const SortTabs = () => {
         {tabs.map((tab, idx) => (
           <TouchableOpacity 
             key={idx} 
-            style={[styles.tabButton, activeTab === idx && styles.tabButtonActive]}
-            onPress={() => setActiveTab(idx)}
+            style={[styles.tabButton, currentActiveTab === idx && styles.tabButtonActive]}
+            onPress={() => handleTabPress(idx)}
           >
-            <Text style={[styles.tabText, activeTab === idx && styles.tabTextActive]}>
+            <Text style={[styles.tabText, currentActiveTab === idx && styles.tabTextActive]}>
               {tab}
             </Text>
             {tab === 'Giá' && (
               <View style={styles.priceArrows}>
-                <Ionicons name="chevron-up" size={10} color={colors.textMuted} style={{ marginBottom: -4 }} />
-                <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
+                <Ionicons 
+                  name="caret-up" 
+                  size={10} 
+                  color={currentActiveTab === idx && priceOrder === 'asc' ? colors.primary : colors.textMuted} 
+                  style={{ marginBottom: -4 }} 
+                />
+                <Ionicons 
+                  name="caret-down" 
+                  size={10} 
+                  color={currentActiveTab === idx && priceOrder === 'desc' ? colors.primary : colors.textMuted} 
+                />
               </View>
             )}
           </TouchableOpacity>
         ))}
       </ScrollView>
       
-      <TouchableOpacity style={styles.filterBtn}>
+      <TouchableOpacity style={styles.filterBtn} onPress={onFilterPress}>
         <Ionicons name="filter" size={16} color={colors.textSecondary} />
         <Text style={styles.filterText}>Lọc</Text>
       </TouchableOpacity>
@@ -90,3 +117,4 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 });
+

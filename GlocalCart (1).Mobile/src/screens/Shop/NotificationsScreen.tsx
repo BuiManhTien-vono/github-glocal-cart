@@ -10,6 +10,8 @@ import { useChatStore } from '../../store/useChatStore';
 import { useAuth } from '../../context/AuthContext';
 import { CartBadge } from '../../components/common/CartBadge';
 import { ChatBadge } from '../../components/common/ChatBadge';
+import { useFocusEffect } from '@react-navigation/native';
+import { notificationHelper } from '../../utils/notificationHelper';
 
 // ─── Mock Data ───
 const ORDER_UPDATES = [
@@ -125,10 +127,22 @@ export default function NotificationsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { isLoggedIn, setGuestMode } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('orders');
-  const [orderData, setOrderData] = useState(ORDER_UPDATES);
+  const [orderData, setOrderData] = useState<any[]>([]);
   const [highlightData, setHighlightData] = useState(HIGHLIGHT_NOTIFICATIONS);
   const [promoData, setPromoData] = useState(PROMO_NOTIFICATIONS);
   const [financeData, setFinanceData] = useState(FINANCE_NOTIFICATIONS);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadNotifications = async () => {
+        const notifs = await notificationHelper.getNotifications();
+        setOrderData(notifs);
+      };
+      if (isLoggedIn) {
+        loadNotifications();
+      }
+    }, [isLoggedIn])
+  );
 
   if (!isLoggedIn) {
     return (
@@ -150,18 +164,23 @@ export default function NotificationsScreen({ navigation }: any) {
 
   const getUnread = (list: any[]) => list.filter(x => !x.isRead).length;
 
-  const markRead = (id: string) => {
-    const updater = (list: any[]) => list.map(x => x.id === id ? { ...x, isRead: true } : x);
-    if (activeTab === 'orders') setOrderData(prev => updater(prev));
-    else if (activeTab === 'highlights') setHighlightData(prev => updater(prev));
-    else if (activeTab === 'promo') setPromoData(prev => updater(prev));
-    else setFinanceData(prev => updater(prev));
+  const markRead = async (id: string) => {
+    if (activeTab === 'orders') {
+      const updated = orderData.map(x => x.id === id ? { ...x, isRead: true } : x);
+      setOrderData(updated);
+      await notificationHelper.saveNotifications(updated);
+    } else {
+      const updater = (list: any[]) => list.map(x => x.id === id ? { ...x, isRead: true } : x);
+      if (activeTab === 'highlights') setHighlightData(prev => updater(prev));
+      else if (activeTab === 'promo') setPromoData(prev => updater(prev));
+      else setFinanceData(prev => updater(prev));
+    }
   };
 
   const handleNotificationPress = (item: any) => {
     markRead(item.id);
     if (item.isOrder) {
-      navigation.navigate('OrderTracking', { notification: item, orderUpdate: item });
+      navigation.navigate('OrderTracking', { orderId: item.orderId, notification: item, orderUpdate: item });
     } else {
       navigation.navigate('NotificationContent', { notification: item });
     }

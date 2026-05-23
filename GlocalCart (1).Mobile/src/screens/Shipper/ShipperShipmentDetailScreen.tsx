@@ -7,6 +7,7 @@ import MapView, { Marker } from 'react-native-maps';
 import { colors } from '../../theme/colors';
 import { Shipment, shipperService } from '../../services/api/shipperService';
 import { useAuth } from '../../context/AuthContext';
+import { notificationHelper } from '../../utils/notificationHelper';
 
 export default function ShipperShipmentDetailScreen() {
   const { user } = useAuth();
@@ -40,6 +41,10 @@ export default function ShipperShipmentDetailScreen() {
           onPress: async () => {
             try {
               await shipperService.acceptShipment(shipment.shipmentId);
+              await notificationHelper.updateOrderNotification(
+                shipment.orderNumber,
+                'Shipped'
+              );
               Alert.alert('Thành công', 'Đã nhận đơn hàng!');
               navigation.goBack();
             } catch (error: any) {
@@ -56,6 +61,10 @@ export default function ShipperShipmentDetailScreen() {
           onPress: async () => {
             try {
               await shipperService.deliverShipment(shipment.shipmentId);
+              await notificationHelper.updateOrderNotification(
+                shipment.orderNumber,
+                'Complete'
+              );
               Alert.alert('Thành công', 'Đơn hàng đã được đánh dấu hoàn thành!');
               navigation.goBack();
             } catch (error: any) {

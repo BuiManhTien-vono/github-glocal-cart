@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -8,6 +8,23 @@ import { resolveProductImage } from '../../utils/imageUtils';
 
 export const FlashSale = ({ data }: { data: any[] }) => {
   const navigation = useNavigation<any>();
+
+  // Countdown timer state: 2 hours in seconds (7200 seconds)
+  const [timeLeft, setTimeLeft] = useState(7200);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 7200));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatNumber = (num: number) => num.toString().padStart(2, '0');
+
+  const hours = Math.floor(timeLeft / 3600);
+  const minutes = Math.floor((timeLeft % 3600) / 60);
+  const seconds = timeLeft % 60;
+
   if (!data || data.length === 0) return null;
 
   return (
@@ -17,14 +34,14 @@ export const FlashSale = ({ data }: { data: any[] }) => {
           <Text style={styles.flashText}>FLASH</Text>
           <Text style={styles.saleText}> SALE</Text>
           <View style={styles.timerContainer}>
-            <Text style={styles.timerBox}>1B</Text>
+            <Text style={styles.timerBox}>{formatNumber(hours)}</Text>
             <Text style={{color: '#000', fontWeight: 'bold'}}>:</Text>
-            <Text style={styles.timerBox}>24</Text>
+            <Text style={styles.timerBox}>{formatNumber(minutes)}</Text>
             <Text style={{color: '#000', fontWeight: 'bold'}}>:</Text>
-            <Text style={styles.timerBox}>59</Text>
+            <Text style={styles.timerBox}>{formatNumber(seconds)}</Text>
           </View>
         </View>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('Search', { isFlashSale: true })}>
           <Text style={styles.seeAll}>Xem tất cả {'>'}</Text>
         </TouchableOpacity>
       </View>
@@ -34,7 +51,8 @@ export const FlashSale = ({ data }: { data: any[] }) => {
           // Fake discount data
           const discount = 20 + (index * 5); // 20%, 25%, 30%...
           const discountedPrice = item.price * (1 - discount / 100);
-          const soldPercentage = Math.floor(Math.random() * 80) + 10;
+          // Use a deterministic value based on item.id so it remains static during timer re-renders
+          const soldPercentage = ((item.id * 13) % 60) + 25; // range 25% to 85%
           const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/150';
 
           return (

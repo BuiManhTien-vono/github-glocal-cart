@@ -4,6 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'react-native';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
 
 export default function WriteReviewScreen({ navigation, route }: any) {
     const [rating, setRating] = useState(0);
@@ -14,6 +17,8 @@ export default function WriteReviewScreen({ navigation, route }: any) {
     const productId = route?.params?.productId;
     const orderId = route?.params?.orderId;
     const productName = route?.params?.productName || 'Sản phẩm';
+    const productImageRaw = route?.params?.productImage;
+    const productImage = productImageRaw ? resolveProductImageUrl(productImageRaw) : null;
 
     const handleSubmit = async () => {
         if (rating === 0) {
@@ -28,6 +33,12 @@ export default function WriteReviewScreen({ navigation, route }: any) {
                 review: review,
                 orderId: orderId
             });
+
+            // Mark as reviewed locally
+            if (orderId && productId) {
+                const key = `@reviewed_${orderId}_${productId}`;
+                await AsyncStorage.setItem(key, 'true');
+            }
 
             Alert.alert('Thành công', 'Cảm ơn bạn đã đánh giá sản phẩm!', [
                 { text: 'OK', onPress: () => navigation.goBack() }
@@ -55,7 +66,11 @@ export default function WriteReviewScreen({ navigation, route }: any) {
             >
                 <View style={styles.content}>
                     <View style={styles.productCard}>
-                        <View style={styles.imgMock}><Text style={{ fontSize: 24 }}>💻</Text></View>
+                        {productImage ? (
+                            <Image source={{ uri: productImage }} style={styles.prodImg} />
+                        ) : (
+                            <View style={styles.imgMock}><Ionicons name="cube-outline" size={24} color={colors.textMuted} /></View>
+                        )}
                         <Text style={styles.productTitle} numberOfLines={2}>{productName}</Text>
                     </View>
 
@@ -116,6 +131,7 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
     content: { padding: spacing.md },
     productCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, padding: 12, borderRadius: borderRadius.md, ...shadow.sm, marginBottom: 20 },
+    prodImg: { width: 48, height: 48, borderRadius: 8, marginRight: 12 },
     imgMock: { width: 48, height: 48, backgroundColor: colors.borderLight, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     productTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text, lineHeight: 20 },
 
