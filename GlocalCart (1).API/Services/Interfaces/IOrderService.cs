@@ -9,7 +9,7 @@ namespace GlocalCart.API.Services.Interfaces
         Task<OrderResponseDto> CreateOrderAsync(int buyerId, CreateOrderDto dto);
         Task<PagedResult<OrderResponseDto>> GetBuyerOrdersAsync(int buyerId, int page, int pageSize);
         Task<OrderResponseDto> GetOrderByIdAsync(int userId, int orderId);
-        Task<bool> CancelOrderAsync(int buyerId, int orderId);
+        Task<bool> CancelOrderAsync(int buyerId, int orderId, string? reason = null);
         Task<List<OrderLogDto>> GetOrderLogsAsync(int userId, int orderId);
 
         // Seller

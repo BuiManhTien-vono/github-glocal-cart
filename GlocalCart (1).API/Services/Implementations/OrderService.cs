@@ -160,7 +160,7 @@ namespace GlocalCart.API.Services.Implementations
             return MapToDto(order);
         }
 
-        public async Task<bool> CancelOrderAsync(int buyerId, int orderId)
+        public async Task<bool> CancelOrderAsync(int buyerId, int orderId, string? reason = null)
         {
             var order = await _db.Orders
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Product)
@@ -176,7 +176,8 @@ namespace GlocalCart.API.Services.Implementations
             foreach (var item in order.OrderItems)
                 item.Product.AvailableItemCount += item.Quantity;
 
-            _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Canceled, Note = "Người mua hủy đơn." });
+            var logNote = string.IsNullOrEmpty(reason) ? "Người mua hủy đơn." : $"Người mua hủy đơn. Lý do: {reason}";
+            _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Canceled, Note = logNote });
 
             // Cập nhật Payment
             var payment = await _db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
@@ -570,6 +571,7 @@ namespace GlocalCart.API.Services.Implementations
             TrackingNumber = s.TrackingNumber,
             ShipperId = s.ShipperId,
             ShipperName = s.Shipper?.FullName,
+            ShipperPhone = s.Shipper?.PhoneNumber,
             AssignedAt = s.AssignedAt,
             DeliveredAt = s.DeliveredAt
         };

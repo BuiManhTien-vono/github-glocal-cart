@@ -19,10 +19,11 @@ interface ReviewItem {
 
 interface ReviewSectionProps {
   productId: number;
+  productName?: string;
   navigation?: any;
 }
 
-export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, navigation }) => {
+export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, productName, navigation }) => {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalItems, setTotalItems] = useState(0);
@@ -47,12 +48,13 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, navigat
       if (res && res.items) {
         const enhancedReviews = res.items.map((item: any, index: number) => ({
           ...item,
+          comment: item.review || item.comment || '',
           avatar: `https://i.pravatar.cc/150?u=${item.userId}`,
           variant: 'Phân loại: Mặc định',
           images: index % 2 === 0 ? ['https://via.placeholder.com/150', 'https://via.placeholder.com/150'] : []
         }));
         setReviews(enhancedReviews);
-        setTotalItems(res.totalItems || 0);
+        setTotalItems(res.totalCount || res.totalItems || 0);
       }
     } catch (error) {
       console.log('fetchReviews error:', error);
@@ -90,7 +92,7 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, navigat
         <Text style={styles.title}>Đánh giá sản phẩm</Text>
         <TouchableOpacity
           style={styles.viewAllBtn}
-          onPress={() => navigation?.navigate('AllReviews', { productId, totalItems })}
+          onPress={() => navigation?.navigate('AllReviews', { productId, totalItems, productName })}
         >
           <Text style={styles.viewAllText}>Xem tất cả ({totalItems})</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
@@ -123,7 +125,7 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, navigat
         <Text style={styles.emptyText}>Chưa có đánh giá nào cho sản phẩm này.</Text>
       ) : (
         <View style={styles.listContainer}>
-          {filteredReviews.slice(0, 3).map((item) => (
+          {filteredReviews.slice(0, 2).map((item) => (
 
             <View key={item.id} style={styles.reviewItem}>
               <Image source={{ uri: item.avatar }} style={styles.avatar} />

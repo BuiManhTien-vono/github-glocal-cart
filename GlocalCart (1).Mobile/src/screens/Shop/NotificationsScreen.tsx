@@ -10,7 +10,12 @@ import { useChatStore } from '../../store/useChatStore';
 import { useAuth } from '../../context/AuthContext';
 import { CartBadge } from '../../components/common/CartBadge';
 import { ChatBadge } from '../../components/common/ChatBadge';
+<<<<<<< Updated upstream
 import { notificationService, AppNotification } from '../../services/api/notificationService';
+=======
+import { useFocusEffect } from '@react-navigation/native';
+import { notificationHelper } from '../../utils/notificationHelper';
+>>>>>>> Stashed changes
 
 // ─── Mock Data ───
 const ORDER_UPDATES = [
@@ -161,6 +166,7 @@ export default function NotificationsScreen({ navigation }: any) {
   const [promoData, setPromoData] = useState(PROMO_NOTIFICATIONS);
   const [financeData, setFinanceData] = useState(FINANCE_NOTIFICATIONS);
 
+<<<<<<< Updated upstream
   const loadOrderNotifications = useCallback(async () => {
     try {
       const res: any = await notificationService.getNotifications(1, 50);
@@ -175,6 +181,19 @@ export default function NotificationsScreen({ navigation }: any) {
   useEffect(() => {
     if (isLoggedIn) loadOrderNotifications();
   }, [isLoggedIn, loadOrderNotifications]);
+=======
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadNotifications = async () => {
+        const notifs = await notificationHelper.getNotifications();
+        setOrderData(notifs);
+      };
+      if (isLoggedIn) {
+        loadNotifications();
+      }
+    }, [isLoggedIn])
+  );
+>>>>>>> Stashed changes
 
   if (!isLoggedIn) {
     return (
@@ -198,6 +217,7 @@ export default function NotificationsScreen({ navigation }: any) {
 
   const markRead = async (id: string) => {
     if (activeTab === 'orders') {
+<<<<<<< Updated upstream
       try {
         await notificationService.markAsRead(Number(id));
       } catch (e) {
@@ -209,10 +229,22 @@ export default function NotificationsScreen({ navigation }: any) {
     else if (activeTab === 'highlights') setHighlightData(prev => updater(prev));
     else if (activeTab === 'promo') setPromoData(prev => updater(prev));
     else setFinanceData(prev => updater(prev));
+=======
+      const updated = orderData.map(x => x.id === id ? { ...x, isRead: true } : x);
+      setOrderData(updated);
+      await notificationHelper.saveNotifications(updated);
+    } else {
+      const updater = (list: any[]) => list.map(x => x.id === id ? { ...x, isRead: true } : x);
+      if (activeTab === 'highlights') setHighlightData(prev => updater(prev));
+      else if (activeTab === 'promo') setPromoData(prev => updater(prev));
+      else setFinanceData(prev => updater(prev));
+    }
+>>>>>>> Stashed changes
   };
 
   const handleNotificationPress = (item: any) => {
     markRead(item.id);
+<<<<<<< Updated upstream
     if (item.isOrder && item.orderId) {
       if (item.action === 'OrderArrived') {
         navigation.navigate('Profile', {
@@ -237,6 +269,11 @@ export default function NotificationsScreen({ navigation }: any) {
         navigation.navigate('OrderTracking', { notification: item, orderUpdate: item });
       }
     } else if (!item.isOrder) {
+=======
+    if (item.isOrder) {
+      navigation.navigate('OrderTracking', { orderId: item.orderId, notification: item, orderUpdate: item });
+    } else {
+>>>>>>> Stashed changes
       navigation.navigate('NotificationContent', { notification: item });
     }
   };

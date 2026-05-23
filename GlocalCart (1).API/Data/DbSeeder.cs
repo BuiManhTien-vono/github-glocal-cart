@@ -257,7 +257,40 @@ namespace GlocalCart.API.Data
                 var hasBankAccount = await context.BankAccounts.AnyAsync(b => b.UserId == shipperUser.Id);
                 if (!hasBankAccount)
                 {
+<<<<<<< Updated upstream
                     context.BankAccounts.Add(new BankAccount
+=======
+                    OrderNumber = $"ORD2026{(1000 + i)}",
+                    BuyerId = buyer.Id,
+                    ShippingAddressId = address.Id,
+                    TotalAmount = 0, 
+                    Status = isPaid ? OrderStatus.Shipped : OrderStatus.Pending,
+                    OrderDate = DateTime.UtcNow,
+                    Note = "Giao cho tôi"
+                });
+            }
+            await context.Orders.AddRangeAsync(orders);
+            await context.SaveChangesAsync();
+
+            var orderItems = new List<OrderItem>();
+            var orderLogs = new List<OrderLog>();
+            var payments = new List<Payment>();
+            var shipments = new List<Shipment>();
+            var shipmentLogs = new List<ShipmentLog>();
+            var productReviews = new List<ProductReview>();
+
+            var shipperUser = context.Users.FirstOrDefault(u => u.UserName == "shipper");
+            var shipperId = shipperUser?.Id;
+
+            foreach (var order in orders)
+            {
+                var numItems = rand.Next(1, 4);
+                decimal orderTotal = 0;
+                for (int j = 0; j < numItems; j++)
+                {
+                    var product = products[rand.Next(0, products.Count)];
+                    if (!orderItems.Any(oi => oi.OrderId == order.Id && oi.ProductId == product.Id))
+>>>>>>> Stashed changes
                     {
                         UserId = shipperUser.Id,
                         BankName = "Vietcombank (Shipper)",
@@ -266,7 +299,23 @@ namespace GlocalCart.API.Data
                         Balance = 0,
                         CreatedAt = DateTime.UtcNow
                     });
+<<<<<<< Updated upstream
                     await context.SaveChangesAsync();
+=======
+                    
+                    var shipment = new Shipment
+                    {
+                        OrderId = order.Id,
+                        Status = ShipmentStatus.Shipped,
+                        ShipperId = shipperId,
+                        AssignedAt = DateTime.UtcNow,
+                        TrackingNumber = $"VNPOST{123123 + order.Id}",
+                        ShipmentMethod = "Giao Hàng Nhanh",
+                        EstimatedArrival = DateTime.UtcNow.AddDays(3),
+                        ShipmentDate = DateTime.UtcNow
+                    };
+                    shipments.Add(shipment);
+>>>>>>> Stashed changes
                 }
             }
 

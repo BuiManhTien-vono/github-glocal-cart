@@ -5,6 +5,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { Shipment, shipperService } from '../../services/api/shipperService';
+<<<<<<< Updated upstream
 import { MapView, Marker } from '../../components/Map/MapComponent';
 import { getShipmentBadgeLabel } from '../../utils/orderDisplayStatus';
 
@@ -29,6 +30,10 @@ function getFooterAction(shipment: Shipment): { label: string; type: string; dis
   }
   return null;
 }
+=======
+import { useAuth } from '../../context/AuthContext';
+import { notificationHelper } from '../../utils/notificationHelper';
+>>>>>>> Stashed changes
 
 export default function ShipperShipmentDetailScreen() {
   const route = useRoute<any>();
@@ -68,6 +73,7 @@ export default function ShipperShipmentDetailScreen() {
   const footerAction = getFooterAction(shipment);
 
   const handleAction = async () => {
+<<<<<<< Updated upstream
     if (!footerAction || footerAction.disabled) return;
     try {
       switch (footerAction.type) {
@@ -105,6 +111,49 @@ export default function ShipperShipmentDetailScreen() {
       if (data) setShipment(data);
     } catch (error: any) {
       Alert.alert('Lỗi', error.message || 'Thao tác thất bại');
+=======
+    // If not assigned to me yet
+    if (!shipment.shipperId) {
+      Alert.alert('Nhận đơn', 'Bạn muốn nhận giao đơn hàng này?', [
+        { text: 'Hủy', style: 'cancel' },
+        { 
+          text: 'Nhận đơn', 
+          onPress: async () => {
+            try {
+              await shipperService.acceptShipment(shipment.shipmentId);
+              await notificationHelper.updateOrderNotification(
+                shipment.orderNumber,
+                'Shipped'
+              );
+              Alert.alert('Thành công', 'Đã nhận đơn hàng!');
+              navigation.goBack();
+            } catch (error: any) {
+              Alert.alert('Lỗi', error.message || 'Không thể nhận đơn.');
+            }
+          } 
+        }
+      ]);
+    } else if (shipment.shipmentStatus !== 'Delivered') {
+      Alert.alert('Xác nhận đã giao', 'Bạn xác nhận đã giao đơn hàng này thành công?', [
+        { text: 'Hủy', style: 'cancel' },
+        { 
+          text: 'Xác nhận', 
+          onPress: async () => {
+            try {
+              await shipperService.deliverShipment(shipment.shipmentId);
+              await notificationHelper.updateOrderNotification(
+                shipment.orderNumber,
+                'Complete'
+              );
+              Alert.alert('Thành công', 'Đơn hàng đã được đánh dấu hoàn thành!');
+              navigation.goBack();
+            } catch (error: any) {
+              Alert.alert('Lỗi', error.message || 'Lỗi khi xác nhận giao hàng.');
+            }
+          } 
+        }
+      ]);
+>>>>>>> Stashed changes
     }
   };
 

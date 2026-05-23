@@ -8,7 +8,12 @@ import apiClient from '../../services/api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { Loading } from '../../components/common/Loading';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+<<<<<<< Updated upstream
 import { paymentApi, PaymentInitiateResponse } from '../../services/api/paymentApi';
+=======
+import { resolveProductImageUrl } from '../../utils/imageUtils';
+import { notificationHelper } from '../../utils/notificationHelper';
+>>>>>>> Stashed changes
 
 const BANK_STORAGE_KEY = '@glocal_bank_accounts';
 const isWeb = Platform.OS === 'web';
@@ -24,6 +29,7 @@ function showAlert(title: string, message: string) {
 export default function CheckoutScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+<<<<<<< Updated upstream
   const { items, clearCart, fetchCart } = useCartStore();
 
   const checkoutItems = useMemo(() => {
@@ -36,6 +42,12 @@ export default function CheckoutScreen({ navigation, route }: any) {
     () => checkoutItems.reduce((sum: number, i: any) => sum + i.priceSnapshot * i.quantity, 0),
     [checkoutItems]
   );
+=======
+  const { items, clearCart, removeFromCart } = useCartStore();
+
+  const checkoutItems = route.params?.selectedItems || items;
+  const checkoutTotalAmount = checkoutItems.reduce((sum: number, item: any) => sum + (item.priceSnapshot || 0) * (item.quantity || 1), 0);
+>>>>>>> Stashed changes
 
   const [selectedPayment, setSelectedPayment] = useState('cod');
   const [addressMode, setAddressMode] = useState('default');
@@ -67,18 +79,22 @@ export default function CheckoutScreen({ navigation, route }: any) {
       const def = data?.find((a: any) => a.isDefault);
       if (def) setSelectedAddress(def);
       else if (data?.length > 0) setSelectedAddress(data[0]);
-    } catch {}
+    } catch { }
   };
 
   const loadBankAccounts = async () => {
     try {
       const stored = await AsyncStorage.getItem(BANK_STORAGE_KEY);
       if (stored) setBankAccounts(JSON.parse(stored));
-    } catch {}
+    } catch { }
   };
 
   const shippingFee = 30000;
+<<<<<<< Updated upstream
   const total = checkoutSubtotal + shippingFee;
+=======
+  const total = checkoutTotalAmount + shippingFee;
+>>>>>>> Stashed changes
 
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
@@ -98,12 +114,58 @@ export default function CheckoutScreen({ navigation, route }: any) {
         shippingAddressId: selectedAddress.id,
         paymentMethod: paymentMethodCode,
         note: `Giao hàng đến ${selectedAddress.fullName || user?.fullName}`,
+<<<<<<< Updated upstream
       };
 
       let createdOrder: any = null;
       createdOrder = await apiClient.post('/orders', orderData);
+=======
+        items: checkoutItems.map((item: any) => ({ productId: item.productId || item.id, quantity: item.quantity })),
+      };
 
-      clearCart();
+      let createdOrder: any = null;
+      try {
+        createdOrder = await apiClient.post('/orders', orderData);
+      } catch { }
+
+      // Tạo đơn hàng local nếu API fail
+      if (!createdOrder) {
+        createdOrder = {
+          id: Date.now(),
+          orderNumber: `GLC${Date.now().toString().slice(-8)}`,
+          status: 0,
+          totalAmount: total,
+          createdAt: new Date().toISOString(),
+          orderItems: checkoutItems.map((item: any) => ({
+            productId: item.productId || item.id,
+            productName: item.productName,
+            productImage: item.productImage,
+            quantity: item.quantity,
+            price: item.priceSnapshot,
+          })),
+          shippingAddress: selectedAddress,
+          paymentMethod: selectedPayment,
+        };
+      }
+>>>>>>> Stashed changes
+
+      if (route.params?.isBuyNow) {
+        // Không xóa giỏ hàng nếu mua ngay
+      } else if (route.params?.selectedItems) {
+        checkoutItems.forEach((item: any) => removeFromCart(item.id));
+      } else {
+        clearCart();
+      }
+
+      // Trigger notification for new order placed!
+      if (createdOrder) {
+        await notificationHelper.updateOrderNotification(
+          createdOrder.orderNumber || `GLC${createdOrder.id}`,
+          'Pending',
+          checkoutItems[0]?.productName || 'Sản phẩm',
+          checkoutItems[0]?.productImage
+        );
+      }
 
       if (paymentMethodCode === 1) {
         if (isWeb) {
@@ -227,7 +289,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
             <View key={item.id} style={[s.productRow, idx < checkoutItems.length - 1 && s.borderBottom]}>
               <View style={s.productImgWrap}>
                 {item.productImage
-                  ? <Image source={{ uri: item.productImage }} style={s.productImg} />
+                  ? <Image source={{ uri: resolveProductImageUrl(item.productImage) || undefined }} style={s.productImg} />
                   : <Ionicons name="cube-outline" size={24} color={colors.textMuted} />}
               </View>
               <View style={s.productInfo}>
@@ -248,7 +310,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
             <TouchableOpacity
               key={pm.key}
               style={[s.paymentRow, selectedPayment === pm.key && s.paymentRowActive,
-                idx === paymentMethods.length - 1 && { borderBottomWidth: 0 }]}
+              idx === paymentMethods.length - 1 && { borderBottomWidth: 0 }]}
               onPress={() => setSelectedPayment(pm.key)}
             >
               <Ionicons name={pm.icon as any} size={22} color={selectedPayment === pm.key ? pm.color : '#999'} />
@@ -273,7 +335,11 @@ export default function CheckoutScreen({ navigation, route }: any) {
         {/* Tổng tiền */}
         <View style={s.card}>
           {[
+<<<<<<< Updated upstream
             { label: 'Tổng tiền hàng', value: checkoutSubtotal },
+=======
+            { label: 'Tổng tiền hàng', value: checkoutTotalAmount },
+>>>>>>> Stashed changes
             { label: 'Phí vận chuyển', value: shippingFee },
           ].map(row => (
             <View key={row.label} style={s.summaryRow}>

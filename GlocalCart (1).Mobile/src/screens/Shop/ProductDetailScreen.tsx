@@ -79,8 +79,17 @@ export default function ProductDetailScreen() {
     if (!product) return;
     if (product.stock <= 0) { Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.'); return; }
     try {
-      await addToCart(product, 1);
-      navigation.navigate('Checkout', { cartItems: [product.id] });
+      navigation.navigate('Checkout', { 
+        selectedItems: [{
+          id: Date.now(),
+          productId: product.id,
+          productName: product.name,
+          productImage: product.images?.[0]?.imageUrl || product.mediaUrl,
+          priceSnapshot: product.price,
+          quantity: 1,
+        }],
+        isBuyNow: true
+      });
     } catch {
       Alert.alert('Lỗi', 'Đã xảy ra lỗi.');
     }
@@ -309,7 +318,7 @@ export default function ProductDetailScreen() {
         </View>
 
         {/* ─── Reviews ─── */}
-        <ReviewSection productId={product.id} navigation={navigation} />
+        <ReviewSection productId={product.id} productName={product.name} navigation={navigation} />
 
         {/* ─── Daily Discover ─── */}
         <DailyDiscover data={discoveryProducts} />
