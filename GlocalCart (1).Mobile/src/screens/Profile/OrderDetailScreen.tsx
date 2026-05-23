@@ -54,7 +54,6 @@ export default function OrderDetailScreen({ navigation, route }: any) {
             loadReviewedKeys();
         }, [])
     );
-
     const initialOrder = route?.params?.newOrder;
 
     useEffect(() => {
@@ -103,7 +102,6 @@ export default function OrderDetailScreen({ navigation, route }: any) {
     const handleBack = () => {
         navigation.goBack();
     };
-
     const handleCancelOrder = () => {
         setCancelReason(cancelReasons[0]);
         setCancelModalVisible(true);

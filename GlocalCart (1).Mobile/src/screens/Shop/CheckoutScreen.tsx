@@ -122,7 +122,6 @@ export default function CheckoutScreen({ navigation, route }: any) {
           checkoutItems[0]?.productImage
         );
       }
-
       if (paymentMethodCode === 1) {
         if (isWeb) {
           const qr = await paymentApi.initiate(createdOrder.id);
