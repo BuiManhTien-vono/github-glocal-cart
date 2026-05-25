@@ -20,9 +20,11 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
       'Đang giao': 'Chờ giao hàng',
       'Hoàn tất': 'Đã giao',
     };
-    const rawTab = route.params?.activeTab;
-    const mappedTab = rawTab ? (legacyTabMap[rawTab] ?? rawTab) : 'Chờ xác nhận';
-    const initialTab = tabs.includes(mappedTab) ? mappedTab : 'Chờ xác nhận';
+    const normalizeTab = (rawTab?: string) => {
+        const mappedTab = rawTab ? (legacyTabMap[rawTab] ?? rawTab) : 'Chờ xác nhận';
+        return tabs.includes(mappedTab) ? mappedTab : 'Chờ xác nhận';
+    };
+    const initialTab = normalizeTab(route.params?.activeTab);
     const [activeTab, setActiveTab] = useState(initialTab);
 
     const [orders, setOrders] = useState<any[]>([]);
@@ -47,6 +49,10 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
             fetchOrders();
         }, [])
     );
+
+    useEffect(() => {
+        setActiveTab(normalizeTab(route.params?.activeTab));
+    }, [route.params?.activeTab]);
 
     const onRefresh = () => {
         setRefreshing(true);

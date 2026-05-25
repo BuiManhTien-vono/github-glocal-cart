@@ -39,6 +39,7 @@ import SellerAddProductScreen from '../screens/Seller/SellerAddProductScreen';
 import SellerEditProductScreen from '../screens/Seller/SellerEditProductScreen';
 import SellerShopScreen from '../screens/Seller/SellerShopScreen';
 import SellerReviewScreen from '../screens/Seller/SellerReviewScreen';
+import SellerRevenueScreen from '../screens/Seller/SellerRevenueScreen';
 
 // Admin Screens
 import AdminDashboardScreen from '../screens/Admin/AdminDashboardScreen';
@@ -63,12 +64,9 @@ import ChatListScreen from '../screens/Shop/ChatListScreen';
 import ChatDetailScreen from '../screens/Shop/ChatDetailScreen';
 import ReportProductScreen from '../screens/Shop/ReportProductScreen';
 import OrderTrackingScreen from '../screens/Shop/OrderTrackingScreen';
-<<<<<<< Updated upstream
 import VietQRScreen from '../screens/Shop/VietQRScreen';
 import PaymentWaitingScreen from '../screens/Shop/PaymentWaitingScreen';
-=======
 import AllReviewsScreen from '../screens/Shop/AllReviewsScreen';
->>>>>>> Stashed changes
 
 // Shipper Screens
 import ShipperAvailableScreen from '../screens/Shipper/ShipperAvailableScreen';
@@ -91,6 +89,26 @@ function HomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="HomeMain" component={HomeScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function SellerManagementStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="SellerShop" component={SellerShopScreen} />
+      <Stack.Screen name="SellerProducts" component={SellerProductScreen} />
+      <Stack.Screen name="SellerOrders" component={SellerOrdersScreen} />
+      <Stack.Screen name="SellerCreateShipment" component={SellerCreateShipmentScreen} />
+      <Stack.Screen name="SellerShopInfo" component={SellerShopInfoScreen} />
+      <Stack.Screen name="SellerCategories" component={SellerCategoriesScreen} />
+      <Stack.Screen name="SellerAddCategory" component={SellerAddCategoryScreen} />
+      <Stack.Screen name="SellerEditCategory" component={SellerEditCategoryScreen} />
+      <Stack.Screen name="SellerFlashSale" component={SellerFlashSaleScreen} />
+      <Stack.Screen name="SellerAddProduct" component={SellerAddProductScreen} />
+      <Stack.Screen name="SellerEditProduct" component={SellerEditProductScreen} />
+      <Stack.Screen name="SellerReview" component={SellerReviewScreen} />
+      <Stack.Screen name="SellerRevenue" component={SellerRevenueScreen} />
     </Stack.Navigator>
   );
 }
@@ -136,6 +154,7 @@ function ProfileStack() {
       <Stack.Screen name="SellerEditProduct" component={SellerEditProductScreen} />
       <Stack.Screen name="SellerShop" component={SellerShopScreen} />
       <Stack.Screen name="SellerReview" component={SellerReviewScreen} />
+      <Stack.Screen name="SellerRevenue" component={SellerRevenueScreen} />
       <Stack.Screen name="MyOrders" component={MyOrdersScreen} />
       <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
       <Stack.Screen name="CancelOrderDetailScreen" component={CancelOrderDetailScreen} />
@@ -146,6 +165,9 @@ function ProfileStack() {
 // ─── Main Bottom Tabs (dùng cho cả logged-in và guest) ───
 function MainTabs() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const isSeller = user?.isSeller || user?.role === 'Seller';
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -168,8 +190,11 @@ function MainTabs() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarIcon: ({ focused, color }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'home';
-          if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
+          if (route.name === 'Home') {
+            iconName = isSeller ? (focused ? 'storefront' : 'storefront-outline') : (focused ? 'home' : 'home-outline');
+          }
           else if (route.name === 'Cart') iconName = focused ? 'cart' : 'cart-outline';
+          else if (route.name === 'Orders') iconName = focused ? 'receipt' : 'receipt-outline';
           else if (route.name === 'Notifications') iconName = focused ? 'notifications' : 'notifications-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={22} color={color} />;
@@ -177,8 +202,12 @@ function MainTabs() {
         tabBarHideOnKeyboard: true,
       })}
     >
-      <Tab.Screen name="Home" component={HomeStack} options={{ tabBarLabel: 'Trang chủ' }} />
-      <Tab.Screen name="Cart" component={CartScreen} options={{ tabBarLabel: 'Giỏ hàng' }} />
+      <Tab.Screen name="Home" component={isSeller ? SellerManagementStack : HomeStack} options={{ tabBarLabel: 'Trang chủ' }} />
+      {isSeller ? (
+        <Tab.Screen name="Orders" component={SellerOrdersScreen} options={{ tabBarLabel: 'Đơn hàng' }} />
+      ) : (
+        <Tab.Screen name="Cart" component={CartScreen} options={{ tabBarLabel: 'Giỏ hàng' }} />
+      )}
       <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ tabBarLabel: 'Thông báo' }} />
       <Tab.Screen name="Profile" component={ProfileStack} options={{ tabBarLabel: 'Tôi' }} />
     </Tab.Navigator>

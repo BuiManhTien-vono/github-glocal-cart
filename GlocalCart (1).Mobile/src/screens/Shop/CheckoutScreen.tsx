@@ -1,5 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert, Image, Modal, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
@@ -7,165 +19,119 @@ import { useCartStore } from '../../store/useCartStore';
 import apiClient from '../../services/api/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { Loading } from '../../components/common/Loading';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-<<<<<<< Updated upstream
 import { paymentApi, PaymentInitiateResponse } from '../../services/api/paymentApi';
-=======
 import { resolveProductImageUrl } from '../../utils/imageUtils';
 import { notificationHelper } from '../../utils/notificationHelper';
->>>>>>> Stashed changes
 
-const BANK_STORAGE_KEY = '@glocal_bank_accounts';
 const isWeb = Platform.OS === 'web';
 
 function showAlert(title: string, message: string) {
-  if (isWeb) {
-    window.alert(`${title}\n\n${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
+  if (isWeb) window.alert(`${title}\n\n${message}`);
+  else Alert.alert(title, message);
 }
 
-export default function CheckoutScreen({ navigation, route }: any) {
+const getItemPrice = (item: any) => Number(item.priceSnapshot ?? item.currentPrice ?? item.price ?? 0);
+const getItemProductId = (item: any) => item.productId || item.id;
+
+export default function CheckoutScreen({ navigation, route }: any): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-<<<<<<< Updated upstream
-  const { items, clearCart, fetchCart } = useCartStore();
+  const { items, clearCart, fetchCart, removeFromCart } = useCartStore();
 
   const checkoutItems = useMemo(() => {
     const selected = route.params?.selectedItems;
-    if (selected?.length) return selected;
-    return items;
+    return selected?.length ? selected : items;
   }, [items, route.params?.selectedItems]);
 
   const checkoutSubtotal = useMemo(
-    () => checkoutItems.reduce((sum: number, i: any) => sum + i.priceSnapshot * i.quantity, 0),
+    () => checkoutItems.reduce((sum: number, item: any) => sum + getItemPrice(item) * Number(item.quantity || 1), 0),
     [checkoutItems]
   );
-=======
-  const { items, clearCart, removeFromCart } = useCartStore();
 
-  const checkoutItems = route.params?.selectedItems || items;
-  const checkoutTotalAmount = checkoutItems.reduce((sum: number, item: any) => sum + (item.priceSnapshot || 0) * (item.quantity || 1), 0);
->>>>>>> Stashed changes
-
-  const [selectedPayment, setSelectedPayment] = useState('cod');
-  const [addressMode, setAddressMode] = useState('default');
+  const [selectedPayment, setSelectedPayment] = useState<'cod' | 'bank'>('cod');
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<any>(null);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [selectedBank, setSelectedBank] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-
-  // Web QR Modal states
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrData, setQrData] = useState<PaymentInitiateResponse | null>(null);
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [isConfirmingQr, setIsConfirmingQr] = useState(false);
 
+  const shippingFee = 30000;
+  const total = checkoutSubtotal + shippingFee;
+
+  const fetchAddresses = async () => {
+    try {
+      const data: any = await apiClient.get('/users/addresses');
+      const list = Array.isArray(data) ? data : [];
+      setAddresses(list);
+      const selected = route.params?.selectedAddress;
+      const def = list.find((address: any) => address.isDefault);
+      setSelectedAddress(selected || def || list[0] || null);
+    } catch (error) {
+      console.log('Checkout fetch addresses error:', error);
+    }
+  };
+
   useEffect(() => {
-    Promise.all([fetchCart(), fetchAddresses(), loadBankAccounts()]).finally(() => setIsLoading(false));
+    Promise.all([fetchCart(), fetchAddresses()]).finally(() => setIsLoading(false));
   }, []);
 
   useEffect(() => {
     if (route.params?.selectedAddress) setSelectedAddress(route.params.selectedAddress);
   }, [route.params?.selectedAddress]);
 
-  const fetchAddresses = async () => {
-    try {
-      const data: any = await apiClient.get('/users/addresses');
-      setAddresses(data || []);
-      const def = data?.find((a: any) => a.isDefault);
-      if (def) setSelectedAddress(def);
-      else if (data?.length > 0) setSelectedAddress(data[0]);
-    } catch { }
+  const navigateToOrderDetail = (orderId: number) => {
+    navigation.navigate('MainTabs', {
+      screen: 'Profile',
+      params: { screen: 'OrderDetail', params: { orderId, fromPayment: true } },
+    });
   };
 
-  const loadBankAccounts = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(BANK_STORAGE_KEY);
-      if (stored) setBankAccounts(JSON.parse(stored));
-    } catch { }
+  const clearPurchasedItems = async () => {
+    if (route.params?.isBuyNow) return;
+    if (route.params?.selectedItems?.length) {
+      await Promise.all(route.params.selectedItems.map((item: any) => removeFromCart(item.id)));
+      return;
+    }
+    await clearCart();
   };
-
-  const shippingFee = 30000;
-<<<<<<< Updated upstream
-  const total = checkoutSubtotal + shippingFee;
-=======
-  const total = checkoutTotalAmount + shippingFee;
->>>>>>> Stashed changes
 
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
-      showAlert('Thông báo', 'Vui lòng chọn địa chỉ giao hàng');
+      showAlert('Thông báo', 'Vui lòng chọn địa chỉ giao hàng.');
       return;
     }
-    if (!checkoutItems || checkoutItems.length === 0) {
+    if (!checkoutItems.length) {
       showAlert('Thông báo', 'Giỏ hàng của bạn đang trống.');
       return;
     }
 
     setIsPlacingOrder(true);
     try {
-      await fetchCart();
       const paymentMethodCode = selectedPayment === 'bank' ? 1 : 0;
       const orderData = {
         shippingAddressId: selectedAddress.id,
         paymentMethod: paymentMethodCode,
-        note: `Giao hàng đến ${selectedAddress.fullName || user?.fullName}`,
-<<<<<<< Updated upstream
+        note: `Giao hàng đến ${selectedAddress.fullName || user?.fullName || 'người nhận'}`,
+        items: checkoutItems.map((item: any) => ({
+          productId: getItemProductId(item),
+          quantity: Number(item.quantity || 1),
+        })),
       };
 
-      let createdOrder: any = null;
-      createdOrder = await apiClient.post('/orders', orderData);
-=======
-        items: checkoutItems.map((item: any) => ({ productId: item.productId || item.id, quantity: item.quantity })),
-      };
+      const createdOrder: any = await apiClient.post('/orders', orderData);
 
-      let createdOrder: any = null;
-      try {
-        createdOrder = await apiClient.post('/orders', orderData);
-      } catch { }
+      await notificationHelper.updateOrderNotification(
+        createdOrder.orderNumber || `GC-${createdOrder.id}`,
+        'Pending',
+        checkoutItems[0]?.productName || checkoutItems[0]?.name || 'Sản phẩm',
+        checkoutItems[0]?.productImage
+      );
 
-      // Tạo đơn hàng local nếu API fail
-      if (!createdOrder) {
-        createdOrder = {
-          id: Date.now(),
-          orderNumber: `GLC${Date.now().toString().slice(-8)}`,
-          status: 0,
-          totalAmount: total,
-          createdAt: new Date().toISOString(),
-          orderItems: checkoutItems.map((item: any) => ({
-            productId: item.productId || item.id,
-            productName: item.productName,
-            productImage: item.productImage,
-            quantity: item.quantity,
-            price: item.priceSnapshot,
-          })),
-          shippingAddress: selectedAddress,
-          paymentMethod: selectedPayment,
-        };
-      }
->>>>>>> Stashed changes
-
-      if (route.params?.isBuyNow) {
-        // Không xóa giỏ hàng nếu mua ngay
-      } else if (route.params?.selectedItems) {
-        checkoutItems.forEach((item: any) => removeFromCart(item.id));
-      } else {
-        clearCart();
-      }
-
-      // Trigger notification for new order placed!
-      if (createdOrder) {
-        await notificationHelper.updateOrderNotification(
-          createdOrder.orderNumber || `GLC${createdOrder.id}`,
-          'Pending',
-          checkoutItems[0]?.productName || 'Sản phẩm',
-          checkoutItems[0]?.productImage
-        );
-      }
+      await clearPurchasedItems();
+      await fetchCart();
 
       if (paymentMethodCode === 1) {
         if (isWeb) {
@@ -175,45 +141,25 @@ export default function CheckoutScreen({ navigation, route }: any) {
           setShowQrModal(true);
         } else {
           Alert.alert(
-            '🎉 Đặt hàng thành công!',
-            `Đơn hàng ${createdOrder.orderNumber || '#' + createdOrder.id} đã được tạo. Vui lòng tiến hành thanh toán để người bán xác nhận đơn.`,
-            [{
-              text: 'Thanh toán ngay',
-              onPress: () => navigation.replace('VietQR', { orderId: createdOrder.id }),
-            }],
+            'Đặt hàng thành công',
+            `Đơn hàng ${createdOrder.orderNumber || '#' + createdOrder.id} đã được tạo. Vui lòng thanh toán để người bán xác nhận đơn.`,
+            [{ text: 'Thanh toán ngay', onPress: () => navigation.replace('VietQR', { orderId: createdOrder.id }) }],
             { cancelable: false }
           );
         }
+      } else if (isWeb) {
+        window.alert(`Đặt hàng thành công!\nĐơn hàng ${createdOrder.orderNumber || '#' + createdOrder.id} đã được đặt.`);
+        navigateToOrderDetail(createdOrder.id);
       } else {
-        const successMsg = `Đơn hàng ${createdOrder.orderNumber || '#' + createdOrder.id} đã được đặt.`;
-        if (isWeb) {
-          window.alert(`🎉 Đặt hàng thành công!\n${successMsg}`);
-          navigation.navigate('MainTabs', {
-            screen: 'Profile',
-            params: { screen: 'OrderDetail', params: { orderId: createdOrder.id, fromPayment: true } },
-          });
-        } else {
-          Alert.alert(
-            '🎉 Đặt hàng thành công!',
-            `${successMsg} Chúng tôi sẽ xác nhận trong thời gian sớm nhất!`,
-            [{
-              text: 'Xem đơn hàng',
-              onPress: () => {
-                navigation.navigate('MainTabs', {
-                  screen: 'Profile',
-                  params: {
-                    screen: 'OrderDetail',
-                    params: { orderId: createdOrder.id, fromPayment: true },
-                  },
-                });
-              },
-            }],
-            { cancelable: false }
-          );
-        }
+        Alert.alert(
+          'Đặt hàng thành công',
+          `Đơn hàng ${createdOrder.orderNumber || '#' + createdOrder.id} đã được đặt.`,
+          [{ text: 'Xem đơn hàng', onPress: () => navigateToOrderDetail(createdOrder.id) }],
+          { cancelable: false }
+        );
       }
     } catch (error: any) {
-      showAlert('Lỗi', error.message || 'Không thể đặt hàng. Vui lòng thử lại.');
+      showAlert('Lỗi', error?.message || 'Không thể đặt hàng. Vui lòng thử lại.');
     } finally {
       setIsPlacingOrder(false);
     }
@@ -225,13 +171,10 @@ export default function CheckoutScreen({ navigation, route }: any) {
     try {
       await paymentApi.confirmTransfer(createdOrderId);
       setShowQrModal(false);
-      window.alert('Thanh toán thành công! Hệ thống đang chờ người bán xác nhận.');
-      navigation.navigate('MainTabs', {
-        screen: 'Profile',
-        params: { screen: 'OrderDetail', params: { orderId: createdOrderId, fromPayment: true } }
-      });
+      window.alert('Thanh toán thành công. Hệ thống đang chờ người bán xác nhận.');
+      navigateToOrderDetail(createdOrderId);
     } catch (error: any) {
-      window.alert(error.message || 'Có lỗi xảy ra khi xác nhận. Vui lòng thử lại.');
+      window.alert(error?.message || 'Có lỗi xảy ra khi xác nhận thanh toán.');
     } finally {
       setIsConfirmingQr(false);
     }
@@ -240,9 +183,8 @@ export default function CheckoutScreen({ navigation, route }: any) {
   if (isLoading) return <Loading />;
 
   const paymentMethods = [
-    { key: 'cod', icon: 'cash-outline', label: 'Thanh toán khi nhận hàng (COD)', color: colors.success },
-    { key: 'card', icon: 'card-outline', label: 'Thẻ Tín Dụng / Ghi Nợ', color: '#2563EB' },
-    { key: 'bank', icon: 'business-outline', label: 'Tài khoản Ngân hàng', color: '#7C3AED' },
+    { key: 'cod' as const, icon: 'cash-outline', label: 'Thanh toán khi nhận hàng (COD)', color: colors.success },
+    { key: 'bank' as const, icon: 'qr-code-outline', label: 'Chuyển khoản qua VietQR', color: colors.secondary },
   ];
 
   return (
@@ -251,28 +193,33 @@ export default function CheckoutScreen({ navigation, route }: any) {
         <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Thanh Toán</Text>
+        <Text style={s.headerTitle}>Thanh toán</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        style={s.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={s.scrollContent}
-      >
-        {/* Địa chỉ */}
-        <TouchableOpacity style={s.card} activeOpacity={0.7}
-          onPress={() => navigation.navigate('Addresses', { isSelecting: true })}>
+      <ScrollView style={s.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollContent}>
+        <TouchableOpacity
+          style={s.card}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('Addresses', { isSelecting: true })}
+        >
           <View style={s.cardHeaderRow}>
             <Ionicons name="location" size={20} color={colors.primary} />
             <Text style={s.cardTitle}>Địa chỉ nhận hàng</Text>
-            <Ionicons name="chevron-forward" size={18} color="#ccc" style={{ marginLeft: 'auto' }} />
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
           </View>
           {selectedAddress ? (
             <View style={s.addressBox}>
-              <Text style={s.addressName}>{selectedAddress.fullName || user?.fullName} | {selectedAddress.phone || user?.phone}</Text>
+              <Text style={s.addressName}>
+                {selectedAddress.fullName || user?.fullName} | {selectedAddress.phone || user?.phone}
+              </Text>
               <Text style={s.addressText}>
-                {[selectedAddress.street, selectedAddress.ward, selectedAddress.district, selectedAddress.city].filter(Boolean).join(', ')}
+                {[
+                  selectedAddress.streetAddress || selectedAddress.street,
+                  selectedAddress.ward,
+                  selectedAddress.district || selectedAddress.state,
+                  selectedAddress.city,
+                ].filter(Boolean).join(', ')}
               </Text>
             </View>
           ) : (
@@ -280,73 +227,66 @@ export default function CheckoutScreen({ navigation, route }: any) {
           )}
         </TouchableOpacity>
 
-        <View style={s.stripe} />
-
-        {/* Sản phẩm */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Sản phẩm ({checkoutItems.length})</Text>
-          {checkoutItems.map((item: any, idx: number) => (
-            <View key={item.id} style={[s.productRow, idx < checkoutItems.length - 1 && s.borderBottom]}>
-              <View style={s.productImgWrap}>
-                {item.productImage
-                  ? <Image source={{ uri: resolveProductImageUrl(item.productImage) || undefined }} style={s.productImg} />
-                  : <Ionicons name="cube-outline" size={24} color={colors.textMuted} />}
-              </View>
-              <View style={s.productInfo}>
-                <Text style={s.productName} numberOfLines={2}>{item.productName}</Text>
-                <View style={s.priceRow}>
-                  <Text style={s.productPrice}>{item.priceSnapshot.toLocaleString('vi-VN')}đ</Text>
-                  <Text style={s.productQty}>x{item.quantity}</Text>
+          {checkoutItems.map((item: any, idx: number) => {
+            const image = item.productImage ? resolveProductImageUrl(item.productImage) : null;
+            return (
+              <View key={`${item.id}_${idx}`} style={[s.productRow, idx < checkoutItems.length - 1 && s.borderBottom]}>
+                <View style={s.productImgWrap}>
+                  {image ? (
+                    <Image source={{ uri: image }} style={s.productImg} />
+                  ) : (
+                    <Ionicons name="cube-outline" size={24} color={colors.textMuted} />
+                  )}
+                </View>
+                <View style={s.productInfo}>
+                  <Text style={s.productName} numberOfLines={2}>{item.productName || item.name}</Text>
+                  <View style={s.priceRow}>
+                    <Text style={s.productPrice}>{getItemPrice(item).toLocaleString('vi-VN')}đ</Text>
+                    <Text style={s.productQty}>x{item.quantity}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
-        {/* Phương thức thanh toán */}
         <View style={s.card}>
           <Text style={s.cardTitle}>Phương thức thanh toán</Text>
           {paymentMethods.map((pm, idx) => (
             <TouchableOpacity
               key={pm.key}
-              style={[s.paymentRow, selectedPayment === pm.key && s.paymentRowActive,
-              idx === paymentMethods.length - 1 && { borderBottomWidth: 0 }]}
+              style={[s.paymentRow, selectedPayment === pm.key && s.paymentRowActive, idx === paymentMethods.length - 1 && { borderBottomWidth: 0 }]}
               onPress={() => setSelectedPayment(pm.key)}
             >
-              <Ionicons name={pm.icon as any} size={22} color={selectedPayment === pm.key ? pm.color : '#999'} />
+              <Ionicons name={pm.icon as any} size={22} color={selectedPayment === pm.key ? pm.color : colors.textMuted} />
               <Text style={[s.paymentText, selectedPayment === pm.key && { color: pm.color, fontWeight: '700' }]}>
                 {pm.label}
               </Text>
-              {selectedPayment === pm.key
-                ? <Ionicons name="checkmark-circle" size={22} color={pm.color} />
-                : <Ionicons name="radio-button-off" size={22} color="#ddd" />}
+              {selectedPayment === pm.key ? (
+                <Ionicons name="checkmark-circle" size={22} color={pm.color} />
+              ) : (
+                <Ionicons name="radio-button-off" size={22} color={colors.border} />
+              )}
             </TouchableOpacity>
           ))}
-
           {selectedPayment === 'bank' && (
-            <View style={s.bankPicker}>
-              <Text style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 20 }}>
-                Hệ thống sẽ tạo mã VietQR tự động để bạn quét thanh toán bằng ứng dụng ngân hàng.
-              </Text>
+            <View style={s.bankHint}>
+              <Text style={s.bankHintText}>Hệ thống sẽ tạo mã VietQR để bạn thanh toán bằng ứng dụng ngân hàng.</Text>
             </View>
           )}
         </View>
 
-        {/* Tổng tiền */}
         <View style={s.card}>
-          {[
-<<<<<<< Updated upstream
-            { label: 'Tổng tiền hàng', value: checkoutSubtotal },
-=======
-            { label: 'Tổng tiền hàng', value: checkoutTotalAmount },
->>>>>>> Stashed changes
-            { label: 'Phí vận chuyển', value: shippingFee },
-          ].map(row => (
-            <View key={row.label} style={s.summaryRow}>
-              <Text style={s.summaryLabel}>{row.label}</Text>
-              <Text style={s.summaryValue}>{row.value.toLocaleString('vi-VN')}đ</Text>
-            </View>
-          ))}
+          <View style={s.summaryRow}>
+            <Text style={s.summaryLabel}>Tổng tiền hàng</Text>
+            <Text style={s.summaryValue}>{checkoutSubtotal.toLocaleString('vi-VN')}đ</Text>
+          </View>
+          <View style={s.summaryRow}>
+            <Text style={s.summaryLabel}>Phí vận chuyển</Text>
+            <Text style={s.summaryValue}>{shippingFee.toLocaleString('vi-VN')}đ</Text>
+          </View>
           <View style={[s.summaryRow, s.totalRow]}>
             <Text style={s.totalLabel}>Tổng thanh toán</Text>
             <Text style={s.totalValue}>{total.toLocaleString('vi-VN')}đ</Text>
@@ -354,79 +294,33 @@ export default function CheckoutScreen({ navigation, route }: any) {
         </View>
       </ScrollView>
 
-      {/* Bottom bar — luôn hiển thị trên web */}
-      <View
-        style={[
-          s.bottomBar,
-          isWeb && ({
-            position: 'sticky',
-            bottom: 0,
-            zIndex: 100,
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.08)',
-          } as object),
-          {
-            paddingBottom: isWeb ? 16 : Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : insets.bottom + 12,
-          },
-        ]}
-      >
+      <View style={[s.bottomBar, { paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : insets.bottom + 12 }]}>
         <View style={s.bottomLeft}>
           <Text style={s.bottomLabel}>Tổng thanh toán</Text>
           <Text style={s.bottomPrice}>{total.toLocaleString('vi-VN')}đ</Text>
         </View>
         <Pressable
-          style={({ pressed }) => [
-            s.orderBtn,
-            isWeb && ({ cursor: 'pointer' } as object),
-            isPlacingOrder && s.orderBtnDisabled,
-            pressed && !isPlacingOrder && s.orderBtnPressed,
-          ]}
+          style={({ pressed }) => [s.orderBtn, isPlacingOrder && s.orderBtnDisabled, pressed && !isPlacingOrder && s.orderBtnPressed]}
           onPress={handlePlaceOrder}
           disabled={isPlacingOrder}
-          accessibilityRole="button"
-          accessibilityLabel="Đặt hàng"
         >
-          <Text style={s.orderBtnText}>{isPlacingOrder ? 'Đang đặt...' : 'Đặt Hàng'}</Text>
+          {isPlacingOrder ? <ActivityIndicator color={colors.white} /> : <Text style={s.orderBtnText}>Đặt hàng</Text>}
         </Pressable>
       </View>
 
-      {/* Web QR Modal */}
       {Platform.OS === 'web' && qrData && (
         <Modal visible={showQrModal} transparent animationType="fade">
           <View style={s.modalOverlay}>
-            <View style={s.modalContent}>
-              <View style={s.modalHeader}>
-                <Text style={s.modalTitle}>Thanh toán VietQR</Text>
-                <TouchableOpacity onPress={() => setShowQrModal(false)}>
-                  <Ionicons name="close" size={24} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-              
-              <Text style={s.instructionTitle}>Quét mã QR để thanh toán</Text>
-              <Text style={s.instructionText}>Sử dụng ứng dụng ngân hàng của bạn để quét mã QR bên dưới.</Text>
-              
-              <View style={s.qrContainer}>
-                <Image source={{ uri: qrData.vietQrUrl }} style={s.qrImage} resizeMode="contain" />
-              </View>
-
-              <View style={s.infoBox}>
-                <View style={s.infoRow}>
-                  <Text style={s.infoLabel}>Số tiền:</Text>
-                  <Text style={s.infoValueHighlight}>{qrData.amount.toLocaleString('vi-VN')}đ</Text>
-                </View>
-                <View style={s.infoRow}>
-                  <Text style={s.infoLabel}>Nội dung CK:</Text>
-                  <Text style={s.infoValue}>Thanh toan {qrData.orderId}</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity 
-                  style={[s.primaryBtn, isConfirmingQr && { opacity: 0.7 }]} 
-                  onPress={handleConfirmWebQr}
-                  disabled={isConfirmingQr}
-              >
-                  <Text style={s.primaryBtnText}>
-                      {isConfirmingQr ? 'Đang xử lý...' : 'Tôi đã chuyển khoản'}
-                  </Text>
+            <View style={s.modalCard}>
+              <Text style={s.modalTitle}>Quét mã VietQR</Text>
+              <Image source={{ uri: qrData.vietQrUrl }} style={s.qrImage} resizeMode="contain" />
+              <Text style={s.modalAmount}>{Number(qrData.amount || total).toLocaleString('vi-VN')}đ</Text>
+              <Text style={s.modalHint}>Sau khi chuyển khoản, bấm xác nhận để cập nhật trạng thái thanh toán.</Text>
+              <TouchableOpacity style={s.confirmBtn} onPress={handleConfirmWebQr} disabled={isConfirmingQr}>
+                <Text style={s.confirmBtnText}>{isConfirmingQr ? 'Đang xác nhận...' : 'Tôi đã chuyển khoản'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowQrModal(false)}>
+                <Text style={s.cancelBtnText}>Để sau</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -437,107 +331,73 @@ export default function CheckoutScreen({ navigation, route }: any) {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff',
-    borderBottomWidth: 0.5, borderBottomColor: '#eee',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    backgroundColor: colors.white,
+    ...shadow.sm,
   },
-  backBtn: { padding: 8, marginLeft: -4 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+  backBtn: { padding: 8, marginLeft: -8 },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
   scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: isWeb ? 24 : 40, flexGrow: 1 },
-
-  card: { backgroundColor: '#fff', padding: 16, marginBottom: 8 },
-  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 12 },
-  stripe: { height: 4, backgroundColor: colors.primary + '20', marginBottom: 8 },
-
+  scrollContent: { padding: spacing.sm, paddingBottom: 120 },
+  card: { backgroundColor: colors.white, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  cardTitle: { fontSize: 15, fontWeight: '800', color: colors.text, marginLeft: 8 },
   addressBox: { paddingLeft: 28 },
   addressName: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 4 },
   addressText: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
-
   productRow: { flexDirection: 'row', paddingVertical: 12 },
-  borderBottom: { borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' },
-  productImgWrap: {
-    width: 60, height: 60, backgroundColor: '#f5f5f5', borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center', marginRight: 12, overflow: 'hidden',
-  },
+  borderBottom: { borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+  productImgWrap: { width: 64, height: 64, borderRadius: 8, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginRight: 12 },
   productImg: { width: '100%', height: '100%' },
   productInfo: { flex: 1, justifyContent: 'space-between' },
-  productName: { fontSize: 14, color: colors.text, fontWeight: '500' },
+  productName: { fontSize: 14, color: colors.text, fontWeight: '600', lineHeight: 19 },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  productPrice: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  productPrice: { fontSize: 14, color: colors.primary, fontWeight: '800' },
   productQty: { fontSize: 13, color: colors.textSecondary },
-
-  paymentRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0',
-  },
-  paymentRowActive: { backgroundColor: '#FFFAF9' },
-  paymentText: { flex: 1, fontSize: 15, color: colors.text },
-
-  bankPicker: { marginTop: 12, paddingTop: 12, borderTopWidth: 0.5, borderTopColor: '#f0f0f0' },
-  addBankBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
-  bankItem: {
-    flexDirection: 'row', alignItems: 'center',
-    padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#eee',
-    marginBottom: 8, backgroundColor: '#fafafa',
-  },
-  bankItemActive: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
-  bankName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  bankNumber: { fontSize: 12, color: '#999', marginTop: 2 },
-
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  paymentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+  paymentRowActive: { backgroundColor: colors.primaryBg, marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 8 },
+  paymentText: { flex: 1, fontSize: 14, color: colors.text },
+  bankHint: { backgroundColor: '#EFF6FF', borderRadius: 8, padding: 10, marginTop: 8 },
+  bankHintText: { fontSize: 12, color: colors.secondary, lineHeight: 18 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
   summaryLabel: { fontSize: 14, color: colors.textSecondary },
   summaryValue: { fontSize: 14, color: colors.text, fontWeight: '600' },
-  totalRow: { marginTop: 12, paddingTop: 12, borderTopWidth: 0.5, borderTopColor: '#eee' },
-  totalLabel: { fontSize: 16, color: colors.text, fontWeight: '700' },
-  totalValue: { fontSize: 18, color: colors.primary, fontWeight: '800' },
-
+  totalRow: { marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.borderLight },
+  totalLabel: { fontSize: 15, color: colors.text, fontWeight: '800' },
+  totalValue: { fontSize: 18, color: colors.primary, fontWeight: '900' },
   bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.white,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    minHeight: 72,
+    paddingHorizontal: spacing.md,
+    paddingTop: 12,
+    ...shadow.lg,
   },
-  bottomLeft: {
-    flex: 1,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingRight: 16,
-  },
+  bottomLeft: { flex: 1 },
   bottomLabel: { fontSize: 12, color: colors.textSecondary },
-  bottomPrice: { fontSize: 18, fontWeight: '800', color: colors.primary },
-  orderBtn: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 28,
-    paddingVertical: 16,
-    minWidth: 140,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  orderBtnPressed: { opacity: 0.85 },
-  orderBtnDisabled: { opacity: 0.6 },
-  orderBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-
-  // Web Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '100%', maxWidth: 400, ...shadow.sm },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  instructionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 8, textAlign: 'center' },
-  instructionText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
-  qrContainer: { width: 200, height: 200, alignSelf: 'center', backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 24, padding: 10, borderWidth: 1, borderColor: '#eee', borderRadius: 12 },
-  qrImage: { width: '100%', height: '100%' },
-  infoBox: { backgroundColor: colors.background, padding: 16, borderRadius: 8, gap: 12, marginBottom: 20 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoLabel: { fontSize: 14, color: colors.textSecondary },
-  infoValue: { fontSize: 14, fontWeight: '600', color: colors.text },
-  infoValueHighlight: { fontSize: 18, fontWeight: '700', color: colors.primary },
-  primaryBtn: { backgroundColor: colors.primary, borderRadius: 8, alignItems: 'center', paddingVertical: 16 },
-  primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  bottomPrice: { fontSize: 18, color: colors.primary, fontWeight: '900', marginTop: 2 },
+  orderBtn: { minWidth: 130, height: 44, borderRadius: 8, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  orderBtnDisabled: { opacity: 0.7 },
+  orderBtnPressed: { transform: [{ scale: 0.98 }] },
+  orderBtnText: { color: colors.white, fontSize: 15, fontWeight: '800', textTransform: 'uppercase' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  modalCard: { width: '100%', maxWidth: 380, backgroundColor: colors.white, borderRadius: 16, padding: 20, alignItems: 'center' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 14 },
+  qrImage: { width: 240, height: 240, marginBottom: 10 },
+  modalAmount: { fontSize: 22, fontWeight: '900', color: colors.primary },
+  modalHint: { marginTop: 8, fontSize: 13, color: colors.textSecondary, textAlign: 'center', lineHeight: 19 },
+  confirmBtn: { marginTop: 16, backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 12, alignSelf: 'stretch', alignItems: 'center' },
+  confirmBtnText: { color: colors.white, fontWeight: '800' },
+  cancelBtn: { marginTop: 12 },
+  cancelBtnText: { color: colors.textSecondary, fontWeight: '600' },
 });
