@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, Animated, Modal, TextInput, Dimensions, Platform,
+  Alert, Animated, Modal, Dimensions, Platform, Pressable, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,12 +12,42 @@ import { DailyDiscover } from '../../components/shop/DailyDiscover';
 
 const { width } = Dimensions.get('window');
 
+type SupportModalType = 'help' | 'cskh' | 'blog' | null;
+
+const SUPPORT_ITEMS = [
+  {
+    id: 'help' as const,
+    icon: 'help-circle-outline',
+    label: 'Trung tâm trợ giúp',
+    subtitle: 'Hướng dẫn mua hàng, thanh toán & đổi trả',
+    color: colors.primary,
+    bg: colors.primaryBg,
+  },
+  {
+    id: 'cskh' as const,
+    icon: 'headset-outline',
+    label: 'Chăm sóc khách hàng',
+    subtitle: 'Hotline, email & chat trực tuyến',
+    color: colors.secondary,
+    bg: '#EFF6FF',
+  },
+  {
+    id: 'blog' as const,
+    icon: 'newspaper-outline',
+    label: 'GlocalCart Blog',
+    subtitle: 'Mẹo săn deal & đặc sản địa phương',
+    color: '#8B5CF6',
+    bg: '#F5F3FF',
+  },
+];
+
 export default function ProfileScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { user, updateUser, logout, isLoggedIn, setGuestMode } = useAuth();
 
   const [saving, setSaving] = useState(false);
   const [products, setProducts] = useState([]);
+  const [activeSupport, setActiveSupport] = useState<SupportModalType>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -71,55 +101,6 @@ export default function ProfileScreen({ navigation }: any) {
         },
       ]
     );
-  };
-
-  const handleSupportPress = (label: string) => {
-    switch (label) {
-      case 'Trung tâm trợ giúp':
-        Alert.alert(
-          'Trung tâm trợ giúp GlocalCart',
-          '💡 1. Làm thế nào để mua hàng?\nChọn sản phẩm, thêm vào giỏ hàng và tiến hành thanh toán.\n\n' +
-          '📦 2. Thời gian giao hàng bao lâu?\nThông thường từ 1-3 ngày làm việc tùy thuộc vào địa chỉ nhận hàng.\n\n' +
-          '💳 3. Phương thức thanh toán?\nHỗ trợ chuyển khoản ngân hàng qua mã QR hoặc thanh toán khi nhận hàng (COD).\n\n' +
-          '🔄 4. Chính sách đổi trả?\nHỗ trợ đổi trả miễn phí trong vòng 7 ngày kể từ khi nhận hàng nếu có lỗi từ nhà sản xuất.',
-          [{ text: 'Đã hiểu' }]
-        );
-        break;
-      case 'Chăm sóc khách hàng':
-        Alert.alert(
-          'Chăm sóc khách hàng',
-          'Tổng đài CSKH GlocalCart luôn sẵn sàng phục vụ bạn 24/7.\n\n📞 Hotline: 1900 8888 (1000đ/phút)\n📧 Email: support@glocalcart.vn\n⏰ Giờ làm việc: 08:00 - 22:00 hàng ngày',
-          [
-            { text: 'Gửi Email', onPress: () => Alert.alert('Gửi Email', 'Vui lòng gửi email hỗ trợ tới: support@glocalcart.vn') },
-            { text: 'Chat CSKH', onPress: () => {
-                if (!isLoggedIn) {
-                  Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để chat với CSKH.');
-                  return;
-                }
-                navigation.navigate('ChatList');
-              }
-            },
-            { text: 'Đóng', style: 'cancel' }
-          ]
-        );
-        break;
-      case 'GlocalCart Blog':
-        Alert.alert(
-          'GlocalCart Blog - Góc chia sẻ',
-          '🔥 Các bài viết nổi bật hôm nay:\n\n' +
-          '🍵 1. Bí quyết chọn đặc sản chè Thái Nguyên chính gốc.\n' +
-          '🛍️ 2. Mẹo săn voucher giảm giá cực hời tại GlocalCart.\n' +
-          '🍲 3. Khám phá ẩm thực 3 miền cùng cộng đồng địa phương.\n' +
-          '🏪 4. Cẩm nang khởi nghiệp kinh doanh nông sản online hiệu quả.',
-          [
-            { text: 'Xem sau', style: 'cancel' },
-            { text: 'Đọc ngay', onPress: () => Alert.alert('Thông báo', 'Tính năng đọc trực tiếp trên ứng dụng đang được phát triển. Vui lòng quay lại sau!') }
-          ]
-        );
-        break;
-      default:
-        break;
-    }
   };
 
   const initial = (user?.fullName || user?.userName || '?')[0].toUpperCase();
@@ -348,22 +329,15 @@ export default function ProfileScreen({ navigation }: any) {
         {/* ===== SUPPORT MENU ===== */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Hỗ trợ</Text>
-          {[
-            { icon: 'help-circle-outline', label: 'Trung tâm trợ giúp', color: '#555' },
-            { icon: 'headset-outline', label: 'Chăm sóc khách hàng', color: '#555' },
-            { icon: 'newspaper-outline', label: 'GlocalCart Blog', color: '#555' },
-          ].map((item, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[styles.menuItem, i === 0 && { borderTopWidth: 0 }]}
-              activeOpacity={0.6}
-              onPress={() => handleSupportPress(item.label)}
-            >
-              <Ionicons name={item.icon as any} size={22} color={item.color} />
-              <Text style={styles.menuLabel}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color="#ccc" />
-            </TouchableOpacity>
-          ))}
+          <View style={styles.supportList}>
+            {SUPPORT_ITEMS.map((item) => (
+              <SupportMenuCard
+                key={item.id}
+                item={item}
+                onPress={() => setActiveSupport(item.id)}
+              />
+            ))}
+          </View>
         </View>
 
         {/* ===== RECOMMENDATION HEADER ===== */}
@@ -381,7 +355,230 @@ export default function ProfileScreen({ navigation }: any) {
 
       </Animated.ScrollView>
 
+      <ProfileSupportModal
+        type={activeSupport}
+        visible={activeSupport !== null}
+        onClose={() => setActiveSupport(null)}
+        isLoggedIn={isLoggedIn}
+        onRequireLogin={() => {
+          setActiveSupport(null);
+          Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để sử dụng tính năng này.', [
+            { text: 'Để sau', style: 'cancel' },
+            { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+          ]);
+        }}
+        onOpenChat={() => {
+          setActiveSupport(null);
+          navigation.navigate('ChatList');
+        }}
+      />
     </View>
+  );
+}
+
+function SupportMenuCard({
+  item,
+  onPress,
+}: {
+  item: (typeof SUPPORT_ITEMS)[number];
+  onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const animatePress = (toValue: number) => {
+    Animated.spring(scale, {
+      toValue,
+      useNativeDriver: true,
+      speed: 28,
+      bounciness: toValue === 1 ? 6 : 0,
+    }).start();
+  };
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => animatePress(0.97)}
+      onPressOut={() => animatePress(1)}
+    >
+      <Animated.View style={[styles.supportCard, { transform: [{ scale }] }]}>
+        <View style={[styles.supportIconWrap, { backgroundColor: item.bg }]}>
+          <Ionicons name={item.icon as any} size={22} color={item.color} />
+        </View>
+        <View style={styles.supportTextWrap}>
+          <Text style={styles.supportLabel}>{item.label}</Text>
+          <Text style={styles.supportSubtitle}>{item.subtitle}</Text>
+        </View>
+        <View style={[styles.supportChevron, { backgroundColor: item.bg }]}>
+          <Ionicons name="chevron-forward" size={14} color={item.color} />
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function ProfileSupportModal({
+  type,
+  visible,
+  onClose,
+  isLoggedIn,
+  onRequireLogin,
+  onOpenChat,
+}: {
+  type: SupportModalType;
+  visible: boolean;
+  onClose: () => void;
+  isLoggedIn: boolean;
+  onRequireLogin: () => void;
+  onOpenChat: () => void;
+}) {
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(0);
+
+  useEffect(() => {
+    if (visible) setExpandedFaq(type === 'help' ? 0 : null);
+  }, [visible, type]);
+
+  const helpFaqs = [
+    { icon: 'cart-outline', q: 'Làm thế nào để mua hàng?', a: 'Chọn sản phẩm → Thêm vào giỏ → Thanh toán và chọn địa chỉ giao hàng.' },
+    { icon: 'time-outline', q: 'Thời gian giao hàng bao lâu?', a: 'Thường 1–3 ngày làm việc (nội tỉnh) hoặc 3–5 ngày (liên tỉnh), tùy khu vực.' },
+    { icon: 'card-outline', q: 'Phương thức thanh toán?', a: 'Chuyển khoản qua mã QR VietQR hoặc thanh toán khi nhận hàng (COD).' },
+    { icon: 'refresh-outline', q: 'Chính sách đổi trả?', a: 'Đổi trả miễn phí trong 7 ngày nếu sản phẩm lỗi từ nhà sản xuất.' },
+  ];
+
+  const blogPosts = [
+    { icon: 'leaf-outline', title: 'Chọn chè Thái Nguyên chính gốc', tag: 'Đặc sản' },
+    { icon: 'pricetag-outline', title: 'Mẹo săn voucher giảm giá', tag: 'Mua sắm' },
+    { icon: 'restaurant-outline', title: 'Ẩm thực 3 miền cộng đồng', tag: 'Khám phá' },
+    { icon: 'storefront-outline', title: 'Kinh doanh nông sản online', tag: 'Người bán' },
+  ];
+
+  const titles: Record<Exclude<SupportModalType, null>, string> = {
+    help: 'Trung tâm trợ giúp',
+    cskh: 'Chăm sóc khách hàng',
+    blog: 'GlocalCart Blog',
+  };
+
+  if (!type) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.supportOverlay} onPress={onClose}>
+        <Pressable style={styles.supportSheet} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.supportHandle} />
+          <View style={styles.supportSheetHeader}>
+            <View>
+              <Text style={styles.supportSheetTitle}>{titles[type]}</Text>
+              <Text style={styles.supportSheetSub}>
+                {type === 'help' && 'Giải đáp nhanh các thắc mắc thường gặp'}
+                {type === 'cskh' && 'Chúng tôi luôn sẵn sàng hỗ trợ bạn'}
+                {type === 'blog' && 'Góc chia sẻ từ cộng đồng GlocalCart'}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.supportCloseBtn} onPress={onClose}>
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+            {type === 'help' && helpFaqs.map((faq, idx) => (
+              <View key={idx} style={styles.faqCard}>
+                <TouchableOpacity
+                  style={styles.faqHeader}
+                  activeOpacity={0.75}
+                  onPress={() => setExpandedFaq(expandedFaq === idx ? null : idx)}
+                >
+                  <View style={styles.faqIconCircle}>
+                    <Ionicons name={faq.icon as any} size={18} color={colors.primary} />
+                  </View>
+                  <Text style={styles.faqQuestion}>{faq.q}</Text>
+                  <Ionicons
+                    name={expandedFaq === idx ? 'chevron-up-circle' : 'chevron-down-circle-outline'}
+                    size={22}
+                    color={expandedFaq === idx ? colors.primary : colors.textMuted}
+                  />
+                </TouchableOpacity>
+                {expandedFaq === idx && (
+                  <Text style={styles.faqAnswer}>{faq.a}</Text>
+                )}
+              </View>
+            ))}
+
+            {type === 'cskh' && (
+              <>
+                <TouchableOpacity
+                  style={styles.contactActionCard}
+                  onPress={() => Linking.openURL('tel:19008888')}
+                >
+                  <View style={[styles.contactActionIcon, { backgroundColor: '#ECFDF5' }]}>
+                    <Ionicons name="call" size={20} color={colors.success} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.contactActionTitle}>Hotline 24/7</Text>
+                    <Text style={styles.contactActionVal}>1900 8888</Text>
+                  </View>
+                  <Text style={styles.contactActionLink}>Gọi ngay</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.contactActionCard}
+                  onPress={() => Linking.openURL('mailto:support@glocalcart.vn')}
+                >
+                  <View style={[styles.contactActionIcon, { backgroundColor: '#EFF6FF' }]}>
+                    <Ionicons name="mail" size={20} color={colors.secondary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.contactActionTitle}>Email hỗ trợ</Text>
+                    <Text style={styles.contactActionVal}>support@glocalcart.vn</Text>
+                  </View>
+                  <Text style={styles.contactActionLink}>Gửi mail</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.contactActionCard, styles.contactActionPrimary]}
+                  onPress={() => (isLoggedIn ? onOpenChat() : onRequireLogin())}
+                >
+                  <View style={[styles.contactActionIcon, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+                    <Ionicons name="chatbubbles" size={20} color="#FFF" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.contactActionTitle, { color: '#FFF' }]}>Chat với CSKH</Text>
+                    <Text style={[styles.contactActionVal, { color: 'rgba(255,255,255,0.85)' }]}>
+                      Phản hồi trực tuyến
+                    </Text>
+                  </View>
+                  <Ionicons name="arrow-forward-circle" size={26} color="#FFF" />
+                </TouchableOpacity>
+
+                <View style={styles.cskhHours}>
+                  <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+                  <Text style={styles.cskhHoursText}>Giờ làm việc: 08:00 – 22:00 hàng ngày</Text>
+                </View>
+              </>
+            )}
+
+            {type === 'blog' && blogPosts.map((post, idx) => (
+              <View key={idx} style={styles.blogCard}>
+                <View style={styles.blogIconWrap}>
+                  <Ionicons name={post.icon as any} size={20} color="#8B5CF6" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.blogTag}>
+                    <Text style={styles.blogTagText}>{post.tag}</Text>
+                  </View>
+                  <Text style={styles.blogTitle}>{post.title}</Text>
+                </View>
+                <Ionicons name="bookmark-outline" size={18} color={colors.textMuted} />
+              </View>
+            ))}
+          </ScrollView>
+
+          <TouchableOpacity style={styles.supportDoneBtn} onPress={onClose}>
+            <Text style={styles.supportDoneText}>
+              {type === 'blog' ? 'Khám phá thêm sau' : 'Đã hiểu'}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -645,27 +842,231 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  // ── Menu List ──
-  menuItem: {
+  // ── Support menu ──
+  supportList: {
+    gap: 10,
+    marginTop: 8,
+  },
+  supportCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
+    gap: 12,
+    padding: 14,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  menuIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  supportIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuLabel: {
+  supportTextWrap: {
+    flex: 1,
+  },
+  supportLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  supportSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  supportChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supportOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  supportSheet: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    maxHeight: '82%',
+  },
+  supportHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  supportSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  supportSheetTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  supportSheetSub: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  supportCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  faqCard: {
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  faqHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  faqIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  faqQuestion: {
     flex: 1,
     fontSize: 14,
+    fontWeight: '600',
     color: colors.text,
-    fontWeight: '500',
+  },
+  faqAnswer: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginTop: 12,
+    marginLeft: 46,
+    paddingRight: 8,
+  },
+  contactActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: 10,
+  },
+  contactActionPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    marginTop: 4,
+  },
+  contactActionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactActionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  contactActionVal: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  contactActionLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  cskhHours: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 8,
+    paddingVertical: 10,
+  },
+  cskhHoursText: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  blogCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginBottom: 10,
+  },
+  blogIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F5F3FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  blogTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  blogTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+  },
+  blogTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    lineHeight: 20,
+  },
+  supportDoneBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  supportDoneText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
   // ── Logout ──
 
