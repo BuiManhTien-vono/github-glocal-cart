@@ -1,25 +1,42 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../theme/colors';
-import { Shipment, shipperService } from '../../services/api/shipperService';
-<<<<<<< Updated upstream
+import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import { MapView, Marker } from '../../components/Map/MapComponent';
+import { Shipment, shipperService } from '../../services/api/shipperService';
 import { getShipmentBadgeLabel } from '../../utils/orderDisplayStatus';
+import { notificationHelper } from '../../utils/notificationHelper';
 
-function getFooterAction(shipment: Shipment): { label: string; type: string; disabled?: boolean } | null {
-  if (shipment.shipmentStatus === 'Delivered') return null;
+type FooterAction = { label: string; type: string; disabled?: boolean };
+
+const formatCurrency = (amount?: number) =>
+  Number(amount || 0).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
+
+function getFooterAction(shipment?: Shipment | null): FooterAction | null {
+  if (!shipment || shipment.shipmentStatus === 'Delivered') return null;
   if (!shipment.shipperId) return { label: 'Nhận đơn', type: 'accept' };
+
   if (shipment.shipmentStatus === 'Accepted') {
     if (shipment.canConfirmPickup) return { label: 'Đã lấy hàng', type: 'pickup' };
     return { label: `Chờ lấy hàng (${shipment.pickupCountdownSeconds ?? 0}s)`, type: 'wait', disabled: true };
   }
+
   if (shipment.shipmentStatus === 'Shipped') {
     if (shipment.canConfirmArrival) return { label: 'Đã đến nơi', type: 'arrival' };
     return { label: `Đang giao (${shipment.arrivalCountdownSeconds ?? 0}s)`, type: 'wait', disabled: true };
   }
+
   if (shipment.shipmentStatus === 'Arrived') {
     if (shipment.awaitingCash) return { label: 'Đã nhận tiền', type: 'cash' };
     if (shipment.awaitingTransferConfirm) return { label: 'Đã nhận chuyển khoản', type: 'transfer' };
@@ -28,138 +45,111 @@ function getFooterAction(shipment: Shipment): { label: string; type: string; dis
     }
     return { label: 'Chờ người mua xác nhận', type: 'wait', disabled: true };
   }
+
   return null;
 }
-=======
-import { useAuth } from '../../context/AuthContext';
-import { notificationHelper } from '../../utils/notificationHelper';
->>>>>>> Stashed changes
 
-export default function ShipperShipmentDetailScreen() {
+export default function ShipperShipmentDetailScreen(): React.JSX.Element {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
-  const [shipment, setShipment] = useState<Shipment>(route.params?.shipment);
+  const [shipment, setShipment] = useState<Shipment | null>(route.params?.shipment || null);
+  const [loading, setLoading] = useState(!route.params?.shipment);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    const refresh = async () => {
-      try {
-        const data: any = await shipperService.getShipmentDetail(route.params.shipmentId);
-        if (data) setShipment(data);
-      } catch (e) {
-        console.log('refresh shipment', e);
-      }
-    };
-    refresh();
-    const timer = setInterval(refresh, 2000);
-    return () => clearInterval(timer);
-  }, [route.params?.shipmentId]);
+  const shipmentId = route.params?.shipmentId || route.params?.shipment?.shipmentId;
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
-  };
-
-  const handleCall = () => {
-    if (shipment.buyerPhone) {
-      Linking.openURL(`tel:${shipment.buyerPhone}`);
+  const refresh = async () => {
+    if (!shipmentId) return;
+    try {
+      const data: any = await shipperService.getShipmentDetail(shipmentId);
+      if (data) setShipment(data);
+    } catch (error) {
+      console.log('refresh shipment error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    refresh();
+    const timer = setInterval(refresh, 2000);
+    return () => clearInterval(timer);
+  }, [shipmentId]);
+
+  const footerAction = useMemo(() => getFooterAction(shipment), [shipment]);
+
+  const handleCall = () => {
+    if (shipment?.buyerPhone) Linking.openURL(`tel:${shipment.buyerPhone}`);
+  };
+
   const handleOpenMap = () => {
-    // Fallback if they want to open in external maps app
+    if (!shipment?.deliveryAddress) return;
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shipment.deliveryAddress)}`;
     Linking.openURL(url);
   };
 
-  const footerAction = getFooterAction(shipment);
+  const performAction = async () => {
+    if (!shipment || !footerAction || footerAction.disabled || submitting) return;
 
-  const handleAction = async () => {
-<<<<<<< Updated upstream
-    if (!footerAction || footerAction.disabled) return;
+    setSubmitting(true);
     try {
       switch (footerAction.type) {
         case 'accept':
           await shipperService.acceptShipment(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã nhận đơn! Vui lòng chờ để lấy hàng.');
-          // Navigate về tab Chờ lấy hàng (Available)
+          await notificationHelper.updateOrderNotification(shipment.orderNumber, 'Shipped');
+          Alert.alert('Thành công', 'Đã nhận đơn. Vui lòng chờ đến thời điểm lấy hàng.');
           navigation.navigate('ShipperTabs', { screen: 'Available' });
           break;
         case 'pickup':
           await shipperService.confirmPickup(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã lấy hàng.');
+          Alert.alert('Thành công', 'Đã xác nhận lấy hàng.');
           break;
         case 'arrival':
           await shipperService.confirmArrival(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã đến nơi.');
+          Alert.alert('Thành công', 'Đã xác nhận đến nơi giao.');
           break;
         case 'cash':
           await shipperService.confirmCashReceived(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã nhận tiền mặt.');
-          navigation.goBack();
+          Alert.alert('Thành công', 'Đã xác nhận nhận tiền mặt.');
           break;
         case 'transfer':
           await shipperService.confirmTransferReceived(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã nhận chuyển khoản.');
-          navigation.goBack();
+          Alert.alert('Thành công', 'Đã xác nhận nhận chuyển khoản.');
           break;
         case 'deliver':
           await shipperService.deliverShipment(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đơn hoàn tất.');
+          await notificationHelper.updateOrderNotification(shipment.orderNumber, 'Complete');
+          Alert.alert('Thành công', 'Đơn hàng đã hoàn tất.');
           navigation.goBack();
           break;
       }
-      const data: any = await shipperService.getShipmentDetail(shipment.shipmentId);
-      if (data) setShipment(data);
+      await refresh();
     } catch (error: any) {
-      Alert.alert('Lỗi', error.message || 'Thao tác thất bại');
-=======
-    // If not assigned to me yet
-    if (!shipment.shipperId) {
-      Alert.alert('Nhận đơn', 'Bạn muốn nhận giao đơn hàng này?', [
-        { text: 'Hủy', style: 'cancel' },
-        { 
-          text: 'Nhận đơn', 
-          onPress: async () => {
-            try {
-              await shipperService.acceptShipment(shipment.shipmentId);
-              await notificationHelper.updateOrderNotification(
-                shipment.orderNumber,
-                'Shipped'
-              );
-              Alert.alert('Thành công', 'Đã nhận đơn hàng!');
-              navigation.goBack();
-            } catch (error: any) {
-              Alert.alert('Lỗi', error.message || 'Không thể nhận đơn.');
-            }
-          } 
-        }
-      ]);
-    } else if (shipment.shipmentStatus !== 'Delivered') {
-      Alert.alert('Xác nhận đã giao', 'Bạn xác nhận đã giao đơn hàng này thành công?', [
-        { text: 'Hủy', style: 'cancel' },
-        { 
-          text: 'Xác nhận', 
-          onPress: async () => {
-            try {
-              await shipperService.deliverShipment(shipment.shipmentId);
-              await notificationHelper.updateOrderNotification(
-                shipment.orderNumber,
-                'Complete'
-              );
-              Alert.alert('Thành công', 'Đơn hàng đã được đánh dấu hoàn thành!');
-              navigation.goBack();
-            } catch (error: any) {
-              Alert.alert('Lỗi', error.message || 'Lỗi khi xác nhận giao hàng.');
-            }
-          } 
-        }
-      ]);
->>>>>>> Stashed changes
+      Alert.alert('Lỗi', error?.message || 'Thao tác thất bại.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const isCOD = shipment.paymentStatus !== 'Completed';
+  const confirmAction = () => {
+    if (!footerAction || footerAction.disabled) return;
+    const title = footerAction.type === 'accept' ? 'Nhận đơn' : 'Xác nhận thao tác';
+    Alert.alert(title, `Bạn muốn thực hiện: ${footerAction.label}?`, [
+      { text: 'Hủy', style: 'cancel' },
+      { text: 'Đồng ý', onPress: performAction },
+    ]);
+  };
 
-  // Toàn độ mẫu cho bản đồ (nên dùng Geocoding API từ deliveryAddress trong thực tế)
+  if (loading || !shipment) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Đang tải vận đơn...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const isCOD = shipment.paymentMethod === 'CreditCard' || shipment.paymentStatus !== 'Completed';
   const mockLocation = {
     latitude: 16.0544,
     longitude: 108.2022,
@@ -169,32 +159,25 @@ export default function ShipperShipmentDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Chi tiết đơn hàng</Text>
+        <Text style={styles.headerTitle}>Chi tiết vận đơn</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        
-        {/* Map View */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.mapContainer}>
-          <MapView 
-            style={styles.map} 
-            initialRegion={mockLocation}
-          >
+          <MapView style={styles.map} initialRegion={mockLocation}>
             <Marker coordinate={mockLocation} title="Điểm giao hàng" description={shipment.deliveryAddress} />
           </MapView>
           <TouchableOpacity style={styles.openMapBtn} onPress={handleOpenMap}>
-            <Ionicons name="map" size={20} color="#FFF" />
-            <Text style={styles.openMapText}>Mở ứng dụng Bản đồ</Text>
+            <Ionicons name="map" size={18} color={colors.white} />
+            <Text style={styles.openMapText}>Mở bản đồ</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Order ID & Status */}
         <View style={styles.section}>
           <View style={styles.rowBetween}>
             <Text style={styles.label}>Mã đơn hàng</Text>
@@ -203,345 +186,145 @@ export default function ShipperShipmentDetailScreen() {
           <View style={styles.divider} />
           <View style={styles.rowBetween}>
             <Text style={styles.label}>Mã vận đơn</Text>
-            <Text style={styles.valueBold}>{shipment.trackingNumber}</Text>
+            <Text style={styles.valueBold}>{shipment.trackingNumber || 'Chưa có'}</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>Trạng thái</Text>
+            <View style={styles.statusPill}>
+              <Text style={styles.statusText}>{getShipmentBadgeLabel(shipment.shipmentStatus)}</Text>
+            </View>
           </View>
         </View>
 
-        {/* Shipper Info (If assigned) */}
-        {shipment.shipperName && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Thông tin vận chuyển</Text>
-            <View style={styles.buyerRow}>
-              <View style={[styles.buyerIconBg, { backgroundColor: colors.primaryBg }]}>
-                <Ionicons name="bicycle" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.buyerDetails}>
-                <Text style={styles.buyerName}>{shipment.shipperName}</Text>
-                <Text style={styles.buyerPhone}>Shipper của GlocalCart</Text>
-              </View>
-              <View style={styles.badgePaid}>
-                <Text style={styles.badgePaidText}>{getShipmentBadgeLabel(shipment.shipmentStatus)}</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Buyer Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thông tin người nhận</Text>
-          <View style={styles.buyerRow}>
-            <View style={styles.buyerIconBg}>
+          <Text style={styles.sectionTitle}>Người nhận</Text>
+          <View style={styles.personRow}>
+            <View style={styles.iconCircle}>
               <Ionicons name="person" size={20} color={colors.primary} />
             </View>
-            <View style={styles.buyerDetails}>
-              <Text style={styles.buyerName}>{shipment.buyerName}</Text>
-              <Text style={styles.buyerPhone}>{shipment.buyerPhone}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.personName}>{shipment.buyerName || 'Người nhận'}</Text>
+              <Text style={styles.personPhone}>{shipment.buyerPhone || 'Chưa có số điện thoại'}</Text>
             </View>
             <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
-              <Ionicons name="call" size={20} color="#FFF" />
+              <Ionicons name="call" size={18} color={colors.white} />
             </TouchableOpacity>
           </View>
-
-          <View style={styles.divider} />
-          
           <View style={styles.addressRow}>
-            <Ionicons name="location-outline" size={20} color={colors.textSecondary} />
+            <Ionicons name="location-outline" size={19} color={colors.textSecondary} />
             <Text style={styles.addressText}>{shipment.deliveryAddress}</Text>
           </View>
         </View>
 
-        {/* Payment Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thông tin thanh toán</Text>
+          <Text style={styles.sectionTitle}>Sản phẩm</Text>
+          {(shipment.orderItems || []).map((item, index) => (
+            <View key={`${item.productId}_${index}`} style={styles.itemRow}>
+              <View style={styles.productIcon}>
+                <Ionicons name="cube-outline" size={22} color={colors.textMuted} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.productName} numberOfLines={2}>{item.productName}</Text>
+                <Text style={styles.productMeta}>x{item.quantity}</Text>
+              </View>
+              <Text style={styles.itemPrice}>{formatCurrency(item.unitPrice * item.quantity)}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Thanh toán</Text>
           <View style={styles.rowBetween}>
             <Text style={styles.label}>Phương thức</Text>
-            <View style={[styles.badge, isCOD ? styles.badgeCOD : styles.badgePaid]}>
-              <Text style={[styles.badgeText, isCOD ? styles.badgeCODText : styles.badgePaidText]}>
-                {isCOD ? 'Thu hộ COD' : 'Chuyển khoản'}
-              </Text>
-            </View>
+            <Text style={styles.valueBold}>{isCOD ? 'Thu hộ COD' : 'Chuyển khoản'}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.rowBetween}>
             <Text style={styles.label}>Tổng tiền</Text>
-            <Text style={styles.totalAmount}>{formatCurrency(shipment.totalAmount)}</Text>
+            <Text style={styles.amount}>{formatCurrency(shipment.totalAmount)}</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.rowBetween}>
+            <Text style={styles.label}>Phí vận chuyển</Text>
+            <Text style={styles.valueBold}>{formatCurrency(shipment.shippingFee)}</Text>
           </View>
         </View>
-
-        {/* Danh sách sản phẩm */}
-        {shipment.orderItems && shipment.orderItems.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Sản phẩm trong đơn</Text>
-            {shipment.orderItems.map((item: any, idx: number) => (
-              <View key={idx}>
-                <View style={styles.productRow}>
-                  <View style={styles.productIconBg}>
-                    <Ionicons name="cube-outline" size={20} color={colors.primary} />
-                  </View>
-                  <View style={styles.productDetails}>
-                    <Text style={styles.productName} numberOfLines={2}>{item.productName}</Text>
-                    <Text style={styles.productMeta}>
-                      {item.unitPrice?.toLocaleString('vi-VN')}đ × {item.quantity}
-                      {'  '}
-                      <Text style={styles.productSubtotal}>= {(item.unitPrice * item.quantity).toLocaleString('vi-VN')}đ</Text>
-                    </Text>
-                  </View>
-                </View>
-                {idx < shipment.orderItems.length - 1 && <View style={styles.divider} />}
-              </View>
-            ))}
-          </View>
-        )}
-
       </ScrollView>
 
-      {/* Action Footer */}
-      <View style={styles.footer}>
-        {footerAction ? (
+      {footerAction && (
+        <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.mainActionBtn, footerAction.disabled && { backgroundColor: colors.border }]}
-            onPress={handleAction}
-            disabled={footerAction.disabled}
+            style={[styles.footerBtn, footerAction.disabled && styles.footerBtnDisabled]}
+            disabled={footerAction.disabled || submitting}
+            onPress={confirmAction}
           >
-            <Text style={styles.mainActionText}>{footerAction.label}</Text>
+            {submitting ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.footerBtnText}>{footerAction.label}</Text>
+            )}
           </TouchableOpacity>
-        ) : (
-          <View style={styles.completedBtn}>
-            <Ionicons name="checkmark-circle" size={20} color="#FFF" />
-            <Text style={styles.completedBtnText}>Đơn Hàng Đã Hoàn Thành</Text>
-          </View>
-        )}
-      </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+  loadingText: { marginTop: 12, color: colors.textSecondary },
   header: {
+    height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.white,
+    ...shadow.sm,
   },
-  backBtn: {
-    padding: 8,
-    marginLeft: -8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  scrollContent: {
-    paddingBottom: 24,
-  },
-  mapContainer: {
-    height: 250,
-    width: '100%',
-    position: 'relative',
-    marginBottom: 16,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
+  backBtn: { padding: 8, marginLeft: -8 },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  scrollContent: { paddingBottom: 110 },
+  mapContainer: { height: 220, backgroundColor: colors.borderLight },
+  map: { flex: 1 },
   openMapBtn: {
     position: 'absolute',
-    bottom: 16,
-    right: 16,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    right: 14,
+    bottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  openMapText: {
-    color: '#FFF',
-    marginLeft: 6,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  section: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  label: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  valueBold: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.borderLight,
-    marginVertical: 12,
-  },
-  buyerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  buyerIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E3F2FD',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buyerDetails: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  buyerName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  buyerPhone: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  callBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4CAF50',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  addressText: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.text,
-    marginLeft: 8,
-    lineHeight: 20,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  badgeCOD: {
-    backgroundColor: '#FFF3E0',
-  },
-  badgeCODText: {
-    color: '#E65100',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  badgePaid: {
-    backgroundColor: '#E8F5E9',
-  },
-  badgePaidText: {
-    color: '#2E7D32',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  totalAmount: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  footer: {
-    backgroundColor: '#FFF',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    paddingBottom: 24, // extra padding for bottom safe area
-  },
-  mainActionBtn: {
+    gap: 6,
     backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
-  mainActionText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  completedBtn: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  completedBtnText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  productRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  productIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#E8F5E9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  productDetails: {
-    flex: 1,
-  },
-  productName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  productMeta: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  productSubtotal: {
-    fontWeight: '700',
-    color: colors.primary,
-  },
+  openMapText: { color: colors.white, fontWeight: '700', fontSize: 12 },
+  section: { backgroundColor: colors.white, marginTop: 10, padding: spacing.md },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.text, marginBottom: 12 },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  label: { color: colors.textSecondary, fontSize: 13 },
+  valueBold: { color: colors.text, fontWeight: '700', fontSize: 13 },
+  divider: { height: 1, backgroundColor: colors.borderLight, marginVertical: 12 },
+  statusPill: { backgroundColor: colors.primaryBg, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  statusText: { color: colors.primary, fontSize: 12, fontWeight: '800' },
+  personRow: { flexDirection: 'row', alignItems: 'center' },
+  iconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  personName: { color: colors.text, fontWeight: '800', fontSize: 15 },
+  personPhone: { color: colors.textSecondary, marginTop: 2 },
+  callBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center' },
+  addressRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  addressText: { flex: 1, color: colors.text, lineHeight: 20 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.borderLight },
+  productIcon: { width: 46, height: 46, borderRadius: 8, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  productName: { color: colors.text, fontWeight: '600', fontSize: 13 },
+  productMeta: { color: colors.textSecondary, marginTop: 3, fontSize: 12 },
+  itemPrice: { color: colors.primary, fontWeight: '800', fontSize: 12 },
+  amount: { color: colors.primary, fontWeight: '900', fontSize: 16 },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white, padding: spacing.md, ...shadow.lg },
+  footerBtn: { height: 48, borderRadius: borderRadius.md, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  footerBtnDisabled: { backgroundColor: colors.disabled },
+  footerBtnText: { color: colors.white, fontWeight: '800', fontSize: 15 },
 });

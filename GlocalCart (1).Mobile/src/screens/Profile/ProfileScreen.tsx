@@ -8,7 +8,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../services/api/apiClient';
 import { colors, spacing, fontSize, borderRadius, shadow } from '../../theme/colors';
-import { DailyDiscover } from '../../components/shop/DailyDiscover';
 
 const { width } = Dimensions.get('window');
 
@@ -16,23 +15,11 @@ export default function ProfileScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { user, updateUser, logout, isLoggedIn, setGuestMode } = useAuth();
 
-  const [saving, setSaving] = useState(false);
-  const [products, setProducts] = useState([]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-    fetchProducts();
   }, []);
-
-  const fetchProducts = async () => {
-    try {
-      const res = await apiClient.get('/products') as any;
-      setProducts(res?.items || res || []);
-    } catch (err) {
-      console.warn("Profile fetch products error:", err);
-    }
-  };
 
   const handleEditProfile = () => {
     navigation.navigate('EditProfile');
@@ -136,7 +123,15 @@ export default function ProfileScreen({ navigation }: any) {
   const utilityItems = [
     { icon: 'heart-outline', label: 'Yêu Thích', screen: 'Favorites', color: colors.danger, bg: '#FEF2F2', requireAuth: true },
     { icon: 'storefront-outline', label: 'Theo Dõi Shop', screen: 'FollowedShops', color: colors.warning, bg: '#FFFBEB', requireAuth: true },
-    { icon: 'briefcase-outline', label: user?.isSeller ? 'Kênh Người Bán' : 'Bán Hàng', action: 'seller', screen: user?.isSeller ? 'SellerShop' : 'ActivateSeller', color: colors.success, bg: '#ECFDF5', requireAuth: true },
+    ...(!user?.isSeller ? [{
+      icon: 'briefcase-outline',
+      label: 'Bán Hàng',
+      action: 'seller',
+      screen: 'ActivateSeller',
+      color: colors.success,
+      bg: '#ECFDF5',
+      requireAuth: true,
+    }] : []),
     { icon: 'chatbubble-ellipses-outline', label: 'Hỗ Trợ', screen: 'ChatList', color: '#8B5CF6', bg: '#F5F3FF', requireAuth: true },
   ];
 
@@ -241,57 +236,52 @@ export default function ProfileScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* ===== ORDER STATUS BAR ===== */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{user?.isSeller ? 'Quản Lý Đơn' : 'Đơn Mua'}</Text>
-            <TouchableOpacity
-              style={styles.viewAllBtn}
-              onPress={() => {
-                if (!isLoggedIn) {
-                  Alert.alert(
-                    'Yêu cầu đăng nhập',
-                    'Vui lòng đăng nhập để tiếp tục.',
-                    [
+        {!user?.isSeller && (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Đơn Mua</Text>
+              <TouchableOpacity
+                style={styles.viewAllBtn}
+                onPress={() => {
+                  if (!isLoggedIn) {
+                    Alert.alert(
+                      'Yêu cầu đăng nhập',
+                      'Vui lòng đăng nhập để tiếp tục.',
+                      [
+                        { text: 'Để sau', style: 'cancel' },
+                        { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+                      ]
+                    );
+                    return;
+                  }
+                  navigation.navigate('MyOrders', { activeTab: 'Tất cả' });
+                }}
+              >
+                <Text style={styles.viewAllText}>Xem lịch sử mua hàng</Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.orderStatusRow}>
+              {orderStatusItems.map((item, i) => (
+                <TouchableOpacity key={i} style={styles.orderStatusItem} onPress={() => {
+                  if (!isLoggedIn) {
+                    Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để xem đơn hàng.', [
                       { text: 'Để sau', style: 'cancel' },
                       { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-                    ]
-                  );
-                  return;
-                }
-                navigation.navigate(user?.isSeller ? 'SellerOrders' : 'MyOrders', { activeTab: user?.isSeller ? 'Chờ xác nhận' : 'Tất cả' });
-              }}
-            >
-              <Text style={styles.viewAllText}>{user?.isSeller ? 'Xem tất cả đơn' : 'Xem lịch sử mua hàng'}</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
-            </TouchableOpacity>
+                    ]);
+                    return;
+                  }
+                  navigation.navigate('MyOrders', { activeTab: item.label });
+                }}>
+                  <View style={[styles.orderStatusIcon, { backgroundColor: item.color + '12' }]}>
+                    <Ionicons name={item.icon as any} size={24} color={item.color} />
+                  </View>
+                  <Text style={styles.orderStatusLabel}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-          <View style={styles.orderStatusRow}>
-            {(user?.isSeller ? [
-              { icon: 'wallet-outline', label: 'Chờ xác nhận', color: colors.primary },
-              { icon: 'cube-outline', label: 'Chờ lấy hàng', color: colors.info },
-              { icon: 'car-outline', label: 'Chờ giao hàng', color: colors.secondary },
-              { icon: 'checkmark-circle-outline', label: 'Đã giao', color: colors.success },
-              { icon: 'close-circle-outline', label: 'Đã hủy', color: colors.danger },
-            ] : orderStatusItems).map((item, i) => (
-              <TouchableOpacity key={i} style={styles.orderStatusItem} onPress={() => {
-                if (!isLoggedIn) {
-                  Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để xem đơn hàng.', [
-                    { text: 'Để sau', style: 'cancel' },
-                    { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-                  ]);
-                  return;
-                }
-                navigation.navigate(user?.isSeller ? 'SellerOrders' : 'MyOrders', { activeTab: item.label });
-              }}>
-                <View style={[styles.orderStatusIcon, { backgroundColor: item.color + '12' }]}>
-                  <Ionicons name={item.icon as any} size={24} color={item.color} />
-                </View>
-                <Text style={styles.orderStatusLabel}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        )}
 
         {/* ===== UTILITIES GRID ===== */}
         <View style={styles.sectionCard}>
@@ -371,19 +361,6 @@ export default function ProfileScreen({ navigation }: any) {
             </TouchableOpacity>
           ))}
         </View>
-
-        {/* ===== RECOMMENDATION HEADER ===== */}
-        <View style={styles.recommendHeader}>
-          <View style={styles.recommendLine} />
-          <Text style={styles.recommendTitle}>CÓ THỂ BẠN CŨNG THÍCH</Text>
-          <View style={styles.recommendLine} />
-        </View>
-
-        {/* ===== PRODUCT GRID ===== */}
-        <DailyDiscover data={products} />
-
-
-
 
       </Animated.ScrollView>
 
@@ -675,25 +652,6 @@ const styles = StyleSheet.create({
   },
   // ── Logout ──
 
-  // ── Recommendations ──
-  recommendHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-    gap: 12,
-  },
-  recommendLine: {
-    height: 1,
-    width: 60,
-    backgroundColor: '#ddd',
-  },
-  recommendTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#EE4D2D',
-    letterSpacing: 0.5,
-  },
   versionText: {
     textAlign: 'center',
     color: colors.textMuted,

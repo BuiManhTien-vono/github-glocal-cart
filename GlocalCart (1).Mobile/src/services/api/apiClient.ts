@@ -1,16 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSecureItem } from '../../utils/secureStore';
-<<<<<<< Updated upstream
-
-import { Platform } from 'react-native';
-
-const BASE_URL = Platform.OS === 'web'
-  ? 'http://localhost:5100/api'
-  : 'http://192.168.1.6:5100/api';
-=======
 import { API_URL } from './config';
->>>>>>> Stashed changes
 
 const apiClient = axios.create({
   baseURL: API_URL,

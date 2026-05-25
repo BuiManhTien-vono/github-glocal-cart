@@ -1,655 +1,1162 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    View, Text, StyleSheet, TouchableOpacity, ScrollView,
-    Dimensions, Animated, Platform, ActivityIndicator,
-    RefreshControl, StatusBar
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { resolveProductImage } from '../../utils/imageUtils';
-import { ProductCard } from '../../components/shop/ProductCard';
+import { getCategoryIcon } from '../../utils/categoryIcon';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BASE_BANNER_HEIGHT = 220;
+const COVER_HEIGHT = 208;
+const PRODUCT_GAP = 10;
+const GRID_ITEM_WIDTH = (SCREEN_WIDTH - 32 - PRODUCT_GAP) / 2;
 
-const TABS = [
-    { id: 'shop', label: 'Shop' },
-    { id: 'products', label: 'Sản phẩm' },
-    { id: 'categories', label: 'Danh mục' }
+const PREVIEW_TABS = [
+  { id: 'shop', label: 'Shop' },
+  { id: 'products', label: 'Sản phẩm' },
+  { id: 'categories', label: 'Danh mục hàng' },
 ];
 
-const SELLER_CATEGORIES = [
-    { id: 'sc1', name: 'Điện thoại', icon: 'phone-portrait-outline' },
-    { id: 'sc2', name: 'Laptop', icon: 'laptop-outline' },
-    { id: 'sc3', name: 'Thời trang', icon: 'shirt-outline' },
-    { id: 'sc4', name: 'Gia dụng', icon: 'home-outline' },
-    { id: 'sc5', name: 'Làm đẹp', icon: 'color-palette-outline' },
-    { id: 'sc6', name: 'Sách', icon: 'book-outline' },
-    { id: 'sc7', name: 'Thể thao', icon: 'football-outline' },
-];
+const currency = (value: any) => `${Number(value || 0).toLocaleString('vi-VN')}đ`;
 
-export default function SellerShopScreen({ navigation }: any) {
-    const insets = useSafeAreaInsets();
+const shortNumber = (value: number) => {
+  if (value >= 1000000000) return `${(value / 1000000000).toFixed(1)}B`;
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return String(value);
+};
 
-    // States
-    const [isPreviewMode, setIsPreviewMode] = useState(false);
-    const [activeTab, setActiveTab] = useState('shop');
-    const [isLoading, setIsLoading] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
-    const [products, setProducts] = useState<any[]>([]);
+const getOrderItems = (order: any) => order?.items || order?.orderItems || [];
 
-    // Real seller categories fetched from API
-    const [sellerCategories, setSellerCategories] = useState<any[]>([]);
+export default function SellerShopScreen({ navigation }: any): React.JSX.Element {
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<any>(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const topButtonOpacity = useRef(new Animated.Value(0)).current;
 
-    const loadSellerCategories = async () => {
-        try {
-            const res = await apiClient.get('/categories');
-            const cats = Array.isArray(res) ? res : (res as any)?.data ?? [];
-            const flat: any[] = [];
-            const flatten = (list: any[], prefix = '') => {
-                list.forEach(c => {
-                    flat.push({ ...c, name: prefix + c.name, icon: c.icon || 'list-outline' });
-                    if (c.subCategories?.length) flatten(c.subCategories, prefix + '  ');
-                });
-            };
-            flatten(cats);
-            setSellerCategories(flat);
-        } catch {
-            setSellerCategories([]);
-        }
-    };
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [activeTab, setActiveTab] = useState('shop');
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showTopButton, setShowTopButton] = useState(false);
+  const [isHeaderAtTop, setIsHeaderAtTop] = useState(true);
+  const [query, setQuery] = useState('');
+  const [products, setProducts] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
 
-    // Animation
-    const fadeAnim = useRef(new Animated.Value(0)).current;
+  const shopData = {
+    name: 'Glocal Cart Official Store',
+    logo: 'https://ui-avatars.com/api/?name=GC&background=FF6B35&color=fff&size=120&bold=true',
+    banner: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=900&h=380&fit=crop',
+    rating: 4.8,
+    followerCount: '15.2k',
+  };
 
-    // Mock Data
-    const shopData = {
-        name: 'Glocal Cart Official Store',
-        logo: 'https://ui-avatars.com/api/?name=GC&background=FF6B35&color=fff&size=120&bold=true',
-        banner: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&h=300&fit=crop',
-        rating: 4.8,
-        reviewCount: 1240,
-        followerCount: '15.2k',
-    };
+  const headerHeight = insets.top + 58;
+  const compactTrigger = COVER_HEIGHT - headerHeight - 6;
 
-    const stats = {
-        newOrders: 12,
-        pendingReviews: 5,
-        totalRevenue: '45.8M',
-    };
+  const headerWhiteOpacity = scrollY.interpolate({
+    inputRange: [0, 1, 88],
+    outputRange: [0, 0.18, 1],
+    extrapolate: 'clamp',
+  });
 
-    const fetchProducts = async () => {
-        try {
-            const res = await apiClient.get('/products') as any;
-            setProducts(res?.items || (Array.isArray(res) ? res : []));
-        } catch (error) {
-            console.warn('SellerShop fetch error:', error);
-        } finally {
-            setIsLoading(false);
-            setRefreshing(false);
-        }
-    };
+  const compactOpacity = scrollY.interpolate({
+    inputRange: [compactTrigger - 24, compactTrigger],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
 
-    useFocusEffect(
-        useCallback(() => {
-            fetchProducts();
-        }, [])
+  const topTextColor = scrollY.interpolate({
+    inputRange: [0, 90],
+    outputRange: ['#FFFFFF', colors.text],
+    extrapolate: 'clamp',
+  });
+  const topHeaderSearchOpacity = scrollY.interpolate({
+    inputRange: [0, 55],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const loadData = useCallback(async () => {
+    try {
+      const [productsRes, ordersRes, categoriesRes]: any[] = await Promise.all([
+        apiClient.get('/products/my-products?pageSize=100'),
+        apiClient.get('/orders/seller'),
+        apiClient.get('/categories'),
+      ]);
+
+      const productItems = productsRes?.items || (Array.isArray(productsRes) ? productsRes : []);
+      const orderItems = ordersRes?.items || (Array.isArray(ordersRes) ? ordersRes : []);
+      const categoryItems = categoriesRes?.items || categoriesRes?.data || (Array.isArray(categoriesRes) ? categoriesRes : []);
+      const rootCategories = categoryItems.filter((cat: any) => !cat.parentCategoryId && !cat.parentId);
+
+      setProducts(productItems);
+      setOrders(orderItems);
+      setCategories((rootCategories.length ? rootCategories : categoryItems).map((cat: any) => ({
+        ...cat,
+        icon: getCategoryIcon(cat.name, cat.icon),
+      })));
+    } catch (error) {
+      console.warn('SellerShop fetch error:', error);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsLoading(true);
+      loadData();
+    }, [loadData])
+  );
+
+  useEffect(() => {
+    Animated.timing(topButtonOpacity, {
+      toValue: showTopButton ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [showTopButton, topButtonOpacity]);
+
+  const filteredProducts = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) return products;
+    return products.filter(product => String(product.name || '').toLowerCase().includes(keyword));
+  }, [products, query]);
+
+  const completedOrders = useMemo(
+    () => orders.filter(order =>
+      order.status === 'Complete' ||
+      order.status === 'Delivered' ||
+      order.shipment?.status === 'Delivered'
+    ),
+    [orders]
+  );
+
+  const stats = useMemo(() => {
+    const revenue = completedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+    const soldItems = completedOrders.reduce(
+      (sum, order) => sum + getOrderItems(order).reduce((total: number, item: any) => total + Number(item.quantity || 0), 0),
+      0
     );
 
-    useEffect(() => {
-        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    }, []);
+    return {
+      newOrders: orders.filter(order => order.status === 'Pending').length,
+      activeProducts: products.filter(product => product.isActive !== false && product.isLocked !== true).length,
+      outOfStock: products.filter(product => Number(product.availableItemCount ?? product.stock ?? 0) <= 0).length,
+      hiddenProducts: products.filter(product => product.isActive === false || product.isLocked === true).length,
+      revenue,
+      soldItems,
+      rating: shopData.rating,
+    };
+  }, [completedOrders, orders, products, shopData.rating]);
 
-    // Load seller categories on mount
-    useEffect(() => {
-        loadSellerCategories();
-    }, []);
+  const flashProducts = filteredProducts.slice(0, 8);
+  const bestProducts = [...filteredProducts]
+    .sort((a, b) => Number(b.soldCount || b.sales || 0) - Number(a.soldCount || a.sales || 0))
+    .slice(0, 8);
 
-    const onRefresh = () => { setRefreshing(true); fetchProducts(); };
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData();
+  };
 
-    // ─── Render Shop Tab Content ───
-    const renderShopTab = () => (
-        <View>
-            {/* 1. Seller Stats Overview (Only in non-guest mode) */}
-            {!isPreviewMode && (
-                <View style={styles.overviewSection}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsScroll}>
-                        <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerOrders')}>
-                            <Text style={[styles.statValue, { color: colors.primary }]}>{stats.newOrders}</Text>
-                            <Text style={styles.statLabel}>Đơn mới</Text>
-                        </TouchableOpacity>
-                        <View style={styles.statDivider} />
-                        <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerReview')}>
-                            <Text style={[styles.statValue, { color: colors.secondary }]}>{stats.pendingReviews}</Text>
-                            <Text style={styles.statLabel}>Đánh giá</Text>
-                        </TouchableOpacity>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statBox}>
-                            <Text style={[styles.statValue, { color: colors.success }]}>{stats.totalRevenue}</Text>
-                            <Text style={styles.statLabel}>Doanh thu</Text>
-                        </View>
-                    </ScrollView>
-                </View>
-            )}
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    {
+      useNativeDriver: false,
+      listener: (event: any) => {
+        const y = event.nativeEvent.contentOffset.y;
+        setShowTopButton(y > 320);
+        setIsHeaderAtTop(y < 55);
+      },
+    }
+  );
 
-            {/* 2. Flash Sale Section */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <View style={styles.flashTitleRow}>
-                        <Ionicons name="flash" size={20} color="#ee4d2d" />
-                        <Text style={styles.flashTitle}>FLASH SALE</Text>
-                    </View>
-                    {!isPreviewMode && (
-                        <TouchableOpacity
-                            style={styles.manageSmallBtn}
-                            onPress={() => navigation.navigate('SellerFlashSale')}
-                        >
-                            <Ionicons name="settings-outline" size={14} color={colors.primary} />
-                            <Text style={styles.manageSmallBtnText}>Cài đặt</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-                    {products.slice(0, 5).map((item, idx) => (
-                        <View key={item.id} style={styles.flashCard}>
-                            <Image source={{ uri: resolveProductImage(item) ?? undefined }} style={styles.flashImg} />
-                            <Text style={styles.flashPrice}>₫{item.price.toLocaleString('vi-VN')}</Text>
-                        </View>
-                    ))}
-                </ScrollView>
-            </View>
+  const scrollToTop = () => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
 
-            {/* 3. Best Sellers */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Sản phẩm bán chạy</Text>
-                    <TouchableOpacity onPress={() => setActiveTab('products')}>
-                        <Text style={styles.seeAllText}>Xem tất cả ›</Text>
-                    </TouchableOpacity>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-                    {products.slice(0, 8).map((item) => (
-                        <View key={item.id} style={styles.bestCard}>
-                            <Image source={{ uri: resolveProductImage(item) ?? undefined }} style={styles.bestImg} />
-                            <Text style={styles.bestName} numberOfLines={2}>{item.name}</Text>
-                            <Text style={styles.bestPrice}>₫{item.price.toLocaleString('vi-VN')}</Text>
-                        </View>
-                    ))}
-                </ScrollView>
-            </View>
+  const reloadSellerHome = () => {
+    setActiveTab('shop');
+    setQuery('');
+    setIsPreviewMode(false);
+    scrollToTop();
+    setRefreshing(true);
+    loadData();
+  };
 
-            {/* 4. Recommendation Grid */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Gợi ý cho bạn</Text>
-                </View>
-                <View style={styles.productGrid}>
-                    {products.slice(0, 10).map(item => (
-                        <ProductCard key={item.id} item={item} />
-                    ))}
-                </View>
-            </View>
+  const goOrders = (activeTab?: string) => {
+    const parent = navigation.getParent?.();
+    if (parent) {
+      parent.navigate('Orders', activeTab ? { activeTab } : undefined);
+      return;
+    }
+    navigation.navigate('SellerOrders', activeTab ? { activeTab } : undefined);
+  };
 
-            {/* 5. Additional Tools (Finance, Marketing) */}
-            {!isPreviewMode && (
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Công cụ quản lý khác</Text>
-                    </View>
-                    <View style={styles.toolsRow}>
-                        <TouchableOpacity style={styles.toolItem}>
-                            <View style={[styles.toolIconWrap, { backgroundColor: colors.success + '15' }]}>
-                                <Ionicons name="pie-chart-outline" size={24} color={colors.success} />
-                            </View>
-                            <Text style={styles.toolLabel}>Tài chính</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.toolItem}>
-                            <View style={[styles.toolIconWrap, { backgroundColor: colors.secondary + '15' }]}>
-                                <Ionicons name="megaphone-outline" size={24} color={colors.secondary} />
-                            </View>
-                            <Text style={styles.toolLabel}>Marketing</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.toolItem}>
-                            <View style={[styles.toolIconWrap, { backgroundColor: '#8B5CF6' + '15' }]}>
-                                <Ionicons name="analytics-outline" size={24} color="#8B5CF6" />
-                            </View>
-                            <Text style={styles.toolLabel}>Phân tích</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            )}
-        </View>
-    );
+  const openShopDecoration = () => navigation.navigate('SellerShopInfo');
 
-    // ─── Render Products Tab Content ───
-    const renderProductsTab = () => (
-        <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Tất cả sản phẩm ({products.length})</Text>
-                {!isPreviewMode && (
-                    <TouchableOpacity
-                        style={styles.manageSmallBtn}
-                        onPress={() => navigation.navigate('SellerProducts')}
-                    >
-                        <Ionicons name="shirt-outline" size={14} color={colors.primary} />
-                        <Text style={styles.manageSmallBtnText}>Quản lý</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
-            <View style={styles.productGrid}>
-                {products.map(item => (
-                    <ProductCard key={item.id} item={item} />
+  const renderCollapsedHeader = () => (
+    <Animated.View pointerEvents="box-none" style={[styles.floatingHeader, { height: headerHeight }]}>
+      <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.white, opacity: headerWhiteOpacity }]} />
+      <View style={[styles.headerRow, { paddingTop: insets.top }]}>
+        <Animated.View
+          pointerEvents={isHeaderAtTop ? 'auto' : 'none'}
+          style={[
+            styles.absoluteTopHeaderSearch,
+            { opacity: topHeaderSearchOpacity, left: 10, right: 52, top: insets.top + 10 },
+          ]}
+        >
+          <Ionicons name="search-outline" size={17} color="rgba(255,255,255,0.9)" />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Tìm sản phẩm trong shop"
+            placeholderTextColor="rgba(255,255,255,0.78)"
+            style={styles.topHeaderSearchInput}
+          />
+        </Animated.View>
+        {isPreviewMode ? (
+          <>
+            <TouchableOpacity style={styles.headerIconBtn} onPress={reloadSellerHome}>
+              <Animated.Text style={{ color: topTextColor }}>
+                <Ionicons name="storefront-outline" size={23} />
+              </Animated.Text>
+            </TouchableOpacity>
+            <Animated.View style={[styles.previewTabsInHeader, { opacity: compactOpacity }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {PREVIEW_TABS.map(tab => (
+                  <TouchableOpacity key={tab.id} style={styles.headerTab} onPress={() => setActiveTab(tab.id)}>
+                    <Text style={[styles.headerTabText, activeTab === tab.id && styles.headerTabTextActive]} numberOfLines={1}>
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
+              </ScrollView>
+            </Animated.View>
+            <View style={styles.headerActions}>
+              <Animated.View style={{ opacity: compactOpacity }}>
+                <TouchableOpacity style={styles.headerIconBtn}>
+                  <Ionicons name="search-outline" size={23} color={colors.primary} />
+                </TouchableOpacity>
+              </Animated.View>
+              <Animated.View style={{ opacity: compactOpacity }}>
+                <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('ChatList')}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={23} color={colors.primary} />
+                </TouchableOpacity>
+              </Animated.View>
+              <TouchableOpacity style={styles.topVisibleIconBtn} onPress={() => setIsPreviewMode(false)}>
+                <Animated.Text style={{ color: topTextColor }}>
+                  <Ionicons name="eye-off-outline" size={23} />
+                </Animated.Text>
+              </TouchableOpacity>
             </View>
-        </View>
-    );
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.headerIconBtn} onPress={reloadSellerHome}>
+              <Animated.Text style={{ color: topTextColor }}>
+                <Ionicons name="storefront-outline" size={23} />
+              </Animated.Text>
+            </TouchableOpacity>
+            <Animated.View style={[styles.collapsedSearchBox, { opacity: compactOpacity }]}>
+              <Ionicons name="search-outline" size={17} color={colors.textMuted} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Tìm sản phẩm trong shop"
+                placeholderTextColor={colors.textMuted}
+                style={styles.collapsedSearchInput}
+              />
+            </Animated.View>
+            <View style={styles.headerActions}>
+              <Animated.View style={{ opacity: compactOpacity }}>
+                <TouchableOpacity style={styles.headerIconBtn} onPress={openShopDecoration}>
+                  <Ionicons name="brush-outline" size={22} color={colors.primary} />
+                </TouchableOpacity>
+              </Animated.View>
+              <Animated.View style={{ opacity: compactOpacity }}>
+                <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('ChatList')}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primary} />
+                </TouchableOpacity>
+              </Animated.View>
+              <TouchableOpacity style={styles.topVisibleIconBtn} onPress={() => setIsPreviewMode(true)}>
+                <Animated.Text style={{ color: topTextColor }}>
+                  <Ionicons name="eye-outline" size={22} />
+                </Animated.Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </View>
+      {!isPreviewMode && (
+        <Animated.View style={[styles.compactStatsRow, { top: headerHeight, opacity: compactOpacity }]}>
+          <Text style={styles.compactStatText}>Đơn mới <Text style={styles.compactStatValue}>{stats.newOrders}</Text></Text>
+          <Text style={styles.compactStatText}>SP <Text style={styles.compactStatValue}>{stats.activeProducts}</Text></Text>
+          <Text style={styles.compactStatText}>DT <Text style={styles.compactStatValue}>{shortNumber(stats.revenue)}</Text></Text>
+        </Animated.View>
+      )}
+    </Animated.View>
+  );
 
-    // ─── Render Categories Tab Content ───
-    const renderCategoriesTab = () => (
-        <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Danh mục của Shop</Text>
-                {!isPreviewMode && (
-                    <TouchableOpacity
-                        style={styles.manageSmallBtn}
-                        onPress={() => navigation.navigate('SellerCategories')}
-                    >
-                        <Ionicons name="folder-outline" size={14} color={colors.primary} />
-                        <Text style={styles.manageSmallBtnText}>Quản lý</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
-            <View style={styles.catList}>
-                {['Điện thoại', 'Laptop', 'Thời trang', 'Đồ gia dụng'].map((cat, idx) => (
-                    <TouchableOpacity key={idx} style={styles.catRow}>
-                        <View style={styles.catIconCircle}>
-                            <Ionicons name="layers-outline" size={20} color={colors.primary} />
-                        </View>
-                        <Text style={styles.catName}>{cat}</Text>
-                        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                    </TouchableOpacity>
-                ))}
-            </View>
-        </View>
-    );
+  const renderSearchBox = () => (
+    <View style={styles.coverSearch}>
+      <Ionicons name="search-outline" size={18} color="rgba(255,255,255,0.9)" />
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Tìm kiếm sản phẩm trong Shop"
+        placeholderTextColor="rgba(255,255,255,0.78)"
+        style={styles.coverSearchInput}
+      />
+    </View>
+  );
 
-    // ─── Render Seller Dashboard View (Unified) ───
-    const renderSellerView = () => (
-        <View>
-            {/* 1. Seller Stats Overview */}
-            <View style={styles.overviewSection}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsScroll}>
-                    <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerOrders')}>
-                        <Text style={[styles.statValue, { color: colors.primary }]}>{stats.newOrders}</Text>
-                        <Text style={styles.statLabel}>Đơn mới</Text>
-                    </TouchableOpacity>
-                    <View style={styles.statDivider} />
-                    <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerReview')}>
-                        <Text style={[styles.statValue, { color: colors.secondary }]}>{stats.pendingReviews}</Text>
-                        <Text style={styles.statLabel}>Đánh giá</Text>
-                    </TouchableOpacity>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statBox}>
-                        <Text style={[styles.statValue, { color: colors.success }]}>{stats.totalRevenue}</Text>
-                        <Text style={styles.statLabel}>Doanh thu</Text>
-                    </View>
-                </ScrollView>
-            </View>
+  const renderCover = () => (
+    <View style={[styles.cover, { paddingTop: insets.top + 54 }]}>
+      <Image source={{ uri: shopData.banner }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+      <View style={styles.coverOverlay} />
 
-            {/* 2. Categories Horizontal Bar */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>DANH MỤC</Text>
-                    <View style={styles.headerActions}>
-                        <TouchableOpacity
-                            style={styles.manageSmallBtn}
-                            onPress={() => navigation.navigate('SellerAddCategory')}
-                        >
-                            <Ionicons name="add" size={14} color={colors.primary} />
-                            <Text style={styles.manageSmallBtnText}>Thêm mới</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.manageSmallBtn, { marginLeft: 8 }]}
-                            onPress={() => navigation.navigate('SellerCategories')}
-                        >
-                            <Ionicons name="settings-outline" size={14} color={colors.primary} />
-                            <Text style={styles.manageSmallBtnText}>Quản lý</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-                    {sellerCategories.map((cat) => (
-                        <TouchableOpacity
-                            key={cat.id}
-                            style={styles.sellerCatItem}
-                            onPress={() => navigation.navigate('SellerEditCategory', { category: cat })}
-                        >
-                            <View style={styles.sellerCatIconWrap}>
-                                <Ionicons name={cat.icon as any} size={24} color={colors.primary} />
-                            </View>
-                            <Text style={styles.sellerCatName} numberOfLines={2}>{cat.name}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
+      <View style={styles.shopInfoLine}>
+        <TouchableOpacity style={styles.logoWrap} onPress={openShopDecoration}>
+          <Image source={{ uri: shopData.logo }} style={styles.shopLogo} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.shopMeta} onPress={openShopDecoration} activeOpacity={0.8}>
+          <Text style={styles.shopName} numberOfLines={1}>{shopData.name}</Text>
+          <View style={styles.shopStatsLine}>
+            <Ionicons name="star" size={12} color="#FACC15" />
+            <Text style={styles.shopStatsText}>{shopData.rating}</Text>
+            <Text style={styles.shopStatsText}>|</Text>
+            <Text style={styles.shopStatsText}>{shopData.followerCount} người theo dõi</Text>
+          </View>
+        </TouchableOpacity>
 
-            {/* 3. Flash Sale Section */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <View style={styles.flashTitleRow}>
-                        <Ionicons name="flash" size={20} color="#ee4d2d" />
-                        <Text style={styles.flashTitle}>FLASH SALE</Text>
-                    </View>
-                    <TouchableOpacity
-                        style={styles.manageSmallBtn}
-                        onPress={() => navigation.navigate('SellerFlashSale')}
-                    >
-                        <Ionicons name="settings-outline" size={14} color={colors.primary} />
-                        <Text style={styles.manageSmallBtnText}>Quản lý</Text>
-                    </TouchableOpacity>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
-                    {products.slice(0, 5).map((item, idx) => (
-                        <View key={item.id} style={styles.flashCard}>
-                            <Image source={{ uri: resolveProductImage(item) ?? undefined }} style={styles.flashImg} />
-                            <Text style={styles.flashPrice}>₫{item.price.toLocaleString('vi-VN')}</Text>
-                        </View>
-                    ))}
-                </ScrollView>
-            </View>
+        {isPreviewMode ? (
+          <View style={styles.previewShopActions}>
+            <TouchableOpacity style={styles.followBtn}>
+              <Ionicons name="add" size={15} color={colors.white} />
+              <Text style={styles.followText}>Theo dõi</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chatCoverBtn} onPress={() => navigation.navigate('ChatList')}>
+              <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.white} />
+              <Text style={styles.followText}>Chat</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.chatInlineBtn} onPress={() => navigation.navigate('ChatList')}>
+            <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.white} />
+            <Text style={styles.followText}>Chat</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
 
-            {/* 4. Products Section */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>SẢN PHẨM</Text>
-                    <View style={styles.headerActions}>
-                        <TouchableOpacity
-                            style={styles.manageSmallBtn}
-                            onPress={() => navigation.navigate('SellerAddProduct')}
-                        >
-                            <Ionicons name="add" size={14} color={colors.primary} />
-                            <Text style={styles.manageSmallBtnText}>Thêm mới</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.manageSmallBtn, { marginLeft: 8 }]}
-                            onPress={() => navigation.navigate('SellerProducts')}
-                        >
-                            <Ionicons name="settings-outline" size={14} color={colors.primary} />
-                            <Text style={styles.manageSmallBtnText}>Quản lý</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-                <View style={styles.productGrid}>
-                    {products.map(item => (
-                        <ProductCard key={item.id} item={item} />
-                    ))}
-                </View>
-            </View>
+  const renderManagementStats = () => (
+    <View style={styles.overlapWrap}>
+      <View style={styles.statsPanel}>
+        <TouchableOpacity style={styles.statBox} onPress={() => goOrders('Chờ xác nhận')}>
+          <Text style={[styles.statValue, { color: colors.primary }]}>{stats.newOrders}</Text>
+          <Text style={styles.statLabel}>Đơn mới</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerProducts')}>
+          <Text style={[styles.statValue, { color: colors.secondary }]}>{stats.activeProducts}</Text>
+          <Text style={styles.statLabel}>Đang bán</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerProducts')}>
+          <Text style={[styles.statValue, { color: colors.warning }]}>{stats.outOfStock}</Text>
+          <Text style={styles.statLabel}>Hết hàng</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerRevenue')}>
+          <Text style={[styles.statValue, { color: colors.success }]}>{shortNumber(stats.revenue)}</Text>
+          <Text style={styles.statLabel}>Doanh thu</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
-            {/* 5. Additional Tools */}
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Công cụ quản lý khác</Text>
-                </View>
-                <View style={styles.toolsRow}>
-                    <TouchableOpacity style={styles.toolItem}>
-                        <View style={[styles.toolIconWrap, { backgroundColor: colors.success + '15' }]}>
-                            <Ionicons name="pie-chart-outline" size={24} color={colors.success} />
-                        </View>
-                        <Text style={styles.toolLabel}>Tài chính</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.toolItem}>
-                        <View style={[styles.toolIconWrap, { backgroundColor: colors.secondary + '15' }]}>
-                            <Ionicons name="megaphone-outline" size={24} color={colors.secondary} />
-                        </View>
-                        <Text style={styles.toolLabel}>Marketing</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.toolItem}>
-                        <View style={[styles.toolIconWrap, { backgroundColor: '#8B5CF6' + '15' }]}>
-                            <Ionicons name="analytics-outline" size={24} color="#8B5CF6" />
-                        </View>
-                        <Text style={styles.toolLabel}>Phân tích</Text>
-                    </TouchableOpacity>
-                </View>
+  const renderPreviewTabs = () => (
+    <View style={styles.overlapWrap}>
+      <View style={styles.previewTabPanel}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewTabScroll}>
+          {PREVIEW_TABS.map(tab => (
+            <TouchableOpacity
+              key={tab.id}
+              style={[styles.previewTabItem, activeTab === tab.id && styles.previewTabItemActive]}
+              onPress={() => setActiveTab(tab.id)}
+            >
+              <Text style={[styles.previewTabText, activeTab === tab.id && styles.previewTabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  );
+
+  const renderCategoryStrip = () => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Danh mục</Text>
+        {!isPreviewMode && (
+          <TouchableOpacity style={styles.smallLinkBtn} onPress={() => navigation.navigate('SellerCategories')}>
+            <Ionicons name="settings-outline" size={14} color={colors.primary} />
+            <Text style={styles.smallLinkText}>Quản lý</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+        {categories.map(cat => (
+          <TouchableOpacity
+            key={cat.id}
+            style={styles.categoryItem}
+            onPress={() => navigation.navigate('SellerCategories', { categoryId: cat.id })}
+          >
+            <View style={styles.categoryIcon}>
+              <Ionicons name={getCategoryIcon(cat.name, cat.icon)} size={24} color={colors.primary} />
             </View>
-        </View>
-    );
+            <Text style={styles.categoryName} numberOfLines={2}>{cat.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderProductTile = (item: any, mode: 'manage' | 'preview' = 'preview', layout: 'grid' | 'compact' = 'grid') => {
+    const imageUri = resolveProductImage(item) || undefined;
+    const stock = Number(item.availableItemCount ?? item.stock ?? 0);
+    const hidden = item.isActive === false || item.isLocked === true;
 
     return (
-        <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-            <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-            <ScrollView
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
-                showsVerticalScrollIndicator={false}
-                stickyHeaderIndices={[1]}
-            >
-                {/* ═══ Header Group (Index 0) ═══ */}
-                <View style={styles.bannerArea}>
-                    <Image source={{ uri: shopData.banner }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-                    <View style={styles.bannerOverlay} />
-
-                    {/* Floating Nav */}
-                    <View style={[styles.floatNav, { paddingTop: insets.top + 10, paddingBottom: 10 }]}>
-                        <TouchableOpacity style={styles.circleBtn} onPress={() => navigation.goBack()}>
-                            <Ionicons name="arrow-back" size={22} color="#fff" />
-                        </TouchableOpacity>
-                        <View style={styles.floatNavRight}>
-                            <TouchableOpacity style={styles.circleBtn}>
-                                <Ionicons name="search" size={22} color="#fff" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.circleBtn, { marginLeft: 10 }]}
-                                onPress={() => setIsPreviewMode(!isPreviewMode)}
-                            >
-                                <Ionicons name={isPreviewMode ? "eye-off-outline" : "eye-outline"} size={22} color="#fff" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-
-                    {/* Shop Info Card */}
-                    <View style={styles.shopInfoCard}>
-                        <View style={styles.shopInfoMain}>
-                            <View style={styles.logoWrap}>
-                                <Image source={{ uri: shopData.logo }} style={styles.shopLogo} />
-                                {!isPreviewMode && (
-                                    <TouchableOpacity
-                                        style={styles.editShopBadge}
-                                        onPress={() => navigation.navigate('SellerShopInfo')}
-                                    >
-                                        <Ionicons name="camera" size={12} color="#fff" />
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                            <View style={styles.shopMeta}>
-                                <View style={styles.nameRow}>
-                                    <Text style={styles.shopName}>{shopData.name}</Text>
-                                    <Ionicons name="checkmark-circle" size={16} color="#4ade80" />
-                                </View>
-                                <View style={styles.statLine}>
-                                    <Ionicons name="star" size={12} color="#F59E0B" />
-                                    <Text style={styles.statText}> {shopData.rating}</Text>
-                                    <Text style={styles.statText}>  |  </Text>
-                                    <Text style={styles.statText}>{shopData.followerCount} Theo dõi</Text>
-                                </View>
-                            </View>
-                        </View>
-                        <View style={styles.shopActions}>
-                            {isPreviewMode ? (
-                                <>
-                                    <TouchableOpacity style={styles.followBtn}>
-                                        <Ionicons name="add" size={14} color="#fff" />
-                                        <Text style={styles.followText}>Theo dõi</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.chatBtn}>
-                                        <Ionicons name="chatbubble-ellipses-outline" size={14} color="#fff" />
-                                        <Text style={styles.chatText}>Chat</Text>
-                                    </TouchableOpacity>
-                                </>
-                            ) : (
-                                <TouchableOpacity
-                                    style={styles.decorateBtn}
-                                    onPress={() => navigation.navigate('SellerShopInfo')}
-                                >
-                                    <Ionicons name="brush-outline" size={16} color="#fff" />
-                                    <Text style={styles.decorateBtnText}>Trang trí</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </View>
-                </View>
-
-                {/* ═══ Sticky Tab Bar (Only in Preview Mode) ═══ */}
-                {isPreviewMode && (
-                    <View style={styles.tabBarContainer}>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.tabBarScrollContent}
-                        >
-                            {TABS.map(tab => (
-                                <TouchableOpacity
-                                    key={tab.id}
-                                    style={[styles.tabItem, activeTab === tab.id && styles.tabItemActive]}
-                                    onPress={() => setActiveTab(tab.id)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>
-                                        {tab.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                )}
-
-                {/* ═══ Content Area ═══ */}
-                <View style={styles.content}>
-                    {isPreviewMode ? (
-                        <>
-                            {activeTab === 'shop' && renderShopTab()}
-                            {activeTab === 'products' && renderProductsTab()}
-                            {activeTab === 'categories' && renderCategoriesTab()}
-                        </>
-                    ) : (
-                        renderSellerView()
-                    )}
-                </View>
-
-                {/* Exit Preview Toggle (Floating at bottom when in preview) */}
-                {isPreviewMode && (
-                    <TouchableOpacity
-                        style={[styles.exitPreviewBtn, { bottom: insets.bottom + 20 }]}
-                        onPress={() => setIsPreviewMode(false)}
-                    >
-                        <Ionicons name="close-circle" size={20} color="#fff" />
-                        <Text style={styles.exitPreviewText}>Thoát xem trước</Text>
-                    </TouchableOpacity>
-                )}
-
-                <View style={{ height: 100 }} />
-            </ScrollView>
-        </Animated.View>
+      <TouchableOpacity
+        key={item.id}
+        style={layout === 'compact' ? styles.compactProductCard : styles.productTile}
+        activeOpacity={0.85}
+        onPress={() => mode === 'manage'
+          ? navigation.navigate('SellerEditProduct', { productId: item.id, product: item })
+          : navigation.navigate('ProductDetail', { productId: item.id, product: item })}
+      >
+        <Image source={{ uri: imageUri }} style={layout === 'compact' ? styles.compactProductImage : styles.productImage} contentFit="cover" />
+        {hidden && <Text style={styles.hiddenBadge}>Ẩn</Text>}
+        {layout === 'compact' && <Text style={styles.flashBadge}>SALE</Text>}
+        <View style={styles.productBody}>
+          <Text style={styles.productName} numberOfLines={2}>{item.name || 'Sản phẩm'}</Text>
+          <Text style={styles.productPrice}>{currency(item.price)}</Text>
+          {mode === 'manage' ? (
+            <View style={styles.manageMetaRow}>
+              <Text style={[styles.stockText, stock <= 0 && { color: colors.danger }]}>Kho: {stock}</Text>
+              <TouchableOpacity style={styles.editMiniBtn} onPress={() => navigation.navigate('SellerEditProduct', { productId: item.id, product: item })}>
+                <Text style={styles.editMiniText}>Sửa</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={styles.soldText}>Đã bán {item.soldCount || item.sales || 0}</Text>
+          )}
+        </View>
+      </TouchableOpacity>
     );
+  };
+
+  const renderFlashSale = () => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.flashTitleRow}>
+          <Ionicons name="flash" size={19} color="#EE4D2D" />
+          <Text style={styles.flashTitle}>FLASH SALE</Text>
+        </View>
+        {!isPreviewMode && (
+          <TouchableOpacity style={styles.smallLinkBtn} onPress={() => navigation.navigate('SellerFlashSale')}>
+            <Ionicons name="settings-outline" size={14} color={colors.primary} />
+            <Text style={styles.smallLinkText}>Cài đặt</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalProductScroll}>
+        {flashProducts.map(item => renderProductTile(item, 'preview', 'compact'))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderBestSellers = () => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Sản phẩm bán chạy</Text>
+        <TouchableOpacity onPress={() => setActiveTab('products')}>
+          <Text style={styles.seeAllText}>Xem tất cả</Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalProductScroll}>
+        {bestProducts.map(item => renderProductTile(item, 'preview', 'compact'))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderProductGrid = (mode: 'manage' | 'preview') => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{mode === 'manage' ? `Sản phẩm có quyền quản lý (${filteredProducts.length})` : `Tất cả sản phẩm (${filteredProducts.length})`}</Text>
+        {mode === 'manage' && (
+          <TouchableOpacity style={styles.smallLinkBtn} onPress={() => navigation.navigate('SellerProducts')}>
+            <Ionicons name="albums-outline" size={14} color={colors.primary} />
+            <Text style={styles.smallLinkText}>Quản lý</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <View style={styles.productGrid}>
+        {filteredProducts.map(item => renderProductTile(item, mode))}
+      </View>
+    </View>
+  );
+
+  const renderTools = () => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Công cụ quản lý</Text>
+      </View>
+      <View style={styles.toolsGrid}>
+        <ToolButton icon="receipt-outline" label="Đơn hàng" color={colors.primary} onPress={() => goOrders()} />
+        <ToolButton icon="cube-outline" label="Sản phẩm" color={colors.secondary} onPress={() => navigation.navigate('SellerProducts')} />
+        <ToolButton icon="folder-open-outline" label="Danh mục" color="#8B5CF6" onPress={() => navigation.navigate('SellerCategories')} />
+        <ToolButton icon="pie-chart-outline" label="Doanh thu" color={colors.success} onPress={() => navigation.navigate('SellerRevenue')} />
+        <ToolButton icon="star-outline" label="Đánh giá" color={colors.warning} onPress={() => navigation.navigate('SellerReview')} />
+        <ToolButton icon="brush-outline" label="Trang trí" color="#EC4899" onPress={openShopDecoration} />
+      </View>
+    </View>
+  );
+
+  const renderManagementContent = () => (
+    <>
+      {renderManagementStats()}
+      {renderCategoryStrip()}
+      {renderFlashSale()}
+      {renderProductGrid('manage')}
+      {renderTools()}
+    </>
+  );
+
+  const renderPreviewContent = () => (
+    <>
+      {renderPreviewTabs()}
+      {activeTab === 'shop' && (
+        <>
+          {renderFlashSale()}
+          {renderBestSellers()}
+          {renderCategoryStrip()}
+          {renderProductGrid('preview')}
+        </>
+      )}
+      {activeTab === 'products' && renderProductGrid('preview')}
+      {activeTab === 'categories' && renderCategoryStrip()}
+    </>
+  );
+
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingWrap, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Đang tải trang quản lý shop...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+      {renderCollapsedHeader()}
+
+      <Animated.ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} progressViewOffset={headerHeight} />}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {renderCover()}
+        <View style={styles.content}>
+          {isPreviewMode ? renderPreviewContent() : renderManagementContent()}
+        </View>
+      </Animated.ScrollView>
+
+      {showTopButton && (
+        <Animated.View style={[styles.scrollTopWrap, { opacity: topButtonOpacity, bottom: Math.max(insets.bottom, 12) + 12 }]}>
+          <TouchableOpacity style={styles.scrollTopBtn} onPress={scrollToTop}>
+            <Ionicons name="arrow-up" size={22} color={colors.white} />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
+function ToolButton({
+  icon,
+  label,
+  color,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  color: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.toolButton} onPress={onPress}>
+      <View style={[styles.toolIconWrap, { backgroundColor: color + '14' }]}>
+        <Ionicons name={icon} size={22} color={color} />
+      </View>
+      <Text style={styles.toolLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-
-    // Header
-    bannerArea: { position: 'relative', overflow: 'hidden', minHeight: 220 },
-    bannerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-    floatNav: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, zIndex: 10 },
-    floatNavRight: { flexDirection: 'row' },
-    circleBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
-
-    shopInfoCard: {
-        marginHorizontal: 16, marginTop: 20, marginBottom: 20,
-        backgroundColor: 'transparent', paddingVertical: 12,
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    },
-    shopInfoMain: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    logoWrap: { position: 'relative' },
-    shopLogo: { width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: '#fff' },
-    editShopBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: colors.primary, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#fff' },
-    shopMeta: { marginLeft: 12 },
-    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-    shopName: { fontSize: 16, fontWeight: '700', color: '#fff', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-    statLine: { flexDirection: 'row', alignItems: 'center' },
-    statText: { fontSize: 12, color: '#f0f0f0', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-
-    shopActions: { alignItems: 'flex-end', gap: 8 },
-    followBtn: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, gap: 4 },
-    followText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-    chatBtn: { borderWidth: 1, borderColor: '#fff', backgroundColor: 'rgba(255,255,255,0.2)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, gap: 4 },
-    chatText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-    decorateBtn: { backgroundColor: 'rgba(255,255,255,0.2)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, gap: 4, borderWidth: 1, borderColor: '#fff' },
-    decorateBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-
-    // Tabs (Scrollable Style)
-    tabBarContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: colors.borderLight, elevation: 3 },
-    tabBarScrollContent: { paddingHorizontal: 16 },
-    tabItem: { paddingVertical: 14, paddingHorizontal: 16, marginRight: 8, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-    tabItemActive: { borderBottomColor: colors.primary },
-    tabLabel: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
-    tabLabelActive: { color: colors.primary, fontWeight: '700' },
-
-    // Sections
-    content: { paddingBottom: 20 },
-    overviewSection: { backgroundColor: '#fff', marginTop: 10, paddingVertical: 16 },
-    section: { backgroundColor: '#fff', marginTop: 10, paddingVertical: 14 },
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 },
-    sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
-    seeAllText: { fontSize: 12, color: colors.textSecondary },
-
-    statsScroll: { paddingHorizontal: 16, alignItems: 'center' },
-    statBox: { minWidth: 100, alignItems: 'center', justifyContent: 'center' },
-    statDivider: { width: 1, height: 40, backgroundColor: colors.borderLight, marginHorizontal: 12 },
-    statValue: { fontSize: 20, fontWeight: '800' },
-    statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 4, fontWeight: '500' },
-
-    manageSmallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primaryBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: colors.primary },
-    manageSmallBtnText: { color: colors.primary, fontSize: 11, fontWeight: '700' },
-
-    headerActions: { flexDirection: 'row', alignItems: 'center' },
-
-    // Seller Categories
-    sellerCatItem: { width: 70, alignItems: 'center', marginRight: 15 },
-    sellerCatIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: colors.primary + '20' },
-    sellerCatName: { fontSize: 12, color: colors.text, textAlign: 'center', fontWeight: '500' },
-
-    // Horizontal Scroll
-    horizontalScroll: { paddingHorizontal: 16, paddingBottom: 4 },
-    flashTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    flashTitle: { fontSize: 16, fontWeight: '900', color: '#ee4d2d', fontStyle: 'italic' },
-    flashCard: { width: 100 },
-    flashImg: { width: 100, height: 100, borderRadius: 6, backgroundColor: colors.background, marginBottom: 4 },
-    flashPrice: { fontSize: 13, fontWeight: '700', color: '#ee4d2d', textAlign: 'center' },
-
-    bestCard: { width: 130, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: colors.borderLight, overflow: 'hidden' },
-    bestImg: { width: 130, height: 130 },
-    bestName: { fontSize: 12, color: colors.text, padding: 6, height: 36 },
-    bestPrice: { fontSize: 13, fontWeight: '700', color: colors.primary, paddingHorizontal: 6, paddingBottom: 6 },
-
-    // Grid
-    productGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 6 },
-
-    // Categories
-    catList: { paddingHorizontal: 16 },
-    catRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
-    catIconCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primaryBg, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-    catName: { flex: 1, fontSize: 14, color: colors.text, fontWeight: '500' },
-
-    // Tools
-    toolsRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 20, gap: 15 },
-    toolItem: { flex: 1, alignItems: 'center', gap: 8 },
-    toolIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-    toolLabel: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
-
-    // Exit Button
-    exitPreviewBtn: { position: 'absolute', alignSelf: 'center', backgroundColor: colors.danger, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 25, gap: 8, ...shadow.lg },
-    exitPreviewText: { color: '#fff', fontSize: 14, fontWeight: '700' }
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+    gap: spacing.sm,
+  },
+  loadingText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+  },
+  headerRow: {
+    height: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  absoluteTopHeaderSearch: {
+    position: 'absolute',
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    zIndex: 4,
+  },
+  topHeaderSearchInput: {
+    flex: 1,
+    height: 38,
+    marginLeft: 7,
+    color: colors.white,
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+  topVisibleIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.26)',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  collapsedSearchBox: {
+    flex: 1,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  collapsedSearchInput: {
+    flex: 1,
+    height: 36,
+    marginLeft: 6,
+    color: colors.text,
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+  previewTabsInHeader: {
+    flex: 1,
+    minWidth: 0,
+  },
+  headerTab: {
+    height: 38,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  headerTabText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  headerTabTextActive: {
+    color: colors.primary,
+  },
+  compactStatsRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    minHeight: 30,
+    backgroundColor: colors.white,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: spacing.md,
+    ...shadow.sm,
+  },
+  compactStatText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  compactStatValue: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  scrollContent: {
+    paddingBottom: 8,
+  },
+  cover: {
+    height: COVER_HEIGHT,
+    overflow: 'hidden',
+    justifyContent: 'flex-start',
+  },
+  coverOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.34)',
+  },
+  coverTopSearch: {
+    paddingHorizontal: spacing.md,
+  },
+  coverSearch: {
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.26)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 13,
+  },
+  coverSearchInput: {
+    flex: 1,
+    height: 40,
+    marginLeft: 8,
+    color: colors.white,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  shopInfoLine: {
+    marginTop: 6,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 58,
+  },
+  logoWrap: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: colors.white,
+    backgroundColor: colors.white,
+  },
+  shopLogo: {
+    width: '100%',
+    height: '100%',
+  },
+  shopMeta: {
+    flex: 1,
+    marginLeft: 10,
+    justifyContent: 'center',
+  },
+  shopName: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '900',
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowRadius: 3,
+  },
+  shopStatsLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 5,
+  },
+  shopStatsText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  previewShopActions: {
+    width: 92,
+    gap: 7,
+  },
+  followBtn: {
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  chatCoverBtn: {
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  chatInlineBtn: {
+    width: 92,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  followText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  content: {
+    backgroundColor: colors.background,
+  },
+  overlapWrap: {
+    marginTop: 6,
+    paddingHorizontal: spacing.md,
+    marginBottom: 8,
+    zIndex: 4,
+  },
+  statsPanel: {
+    minHeight: 64,
+    borderRadius: 10,
+    backgroundColor: colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 9,
+    ...shadow.md,
+  },
+  statBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  statLabel: {
+    marginTop: 3,
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  previewTabPanel: {
+    minHeight: 58,
+    borderRadius: 10,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    ...shadow.md,
+  },
+  previewTabScroll: {
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  previewTabItem: {
+    height: 56,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  previewTabItemActive: {
+    borderBottomColor: colors.primary,
+  },
+  previewTabText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  previewTabTextActive: {
+    color: colors.primary,
+  },
+  section: {
+    backgroundColor: colors.white,
+    marginBottom: 8,
+    paddingVertical: 13,
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing.md,
+    marginBottom: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  seeAllText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  smallLinkBtn: {
+    height: 30,
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    backgroundColor: colors.primaryBg,
+    borderWidth: 1,
+    borderColor: colors.primary + '33',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  smallLinkText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  categoryScroll: {
+    paddingHorizontal: spacing.md,
+    gap: 12,
+  },
+  categoryItem: {
+    width: 72,
+    alignItems: 'center',
+  },
+  categoryIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 7,
+  },
+  categoryName: {
+    color: colors.text,
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
+  flashTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  flashTitle: {
+    color: '#EE4D2D',
+    fontSize: 16,
+    fontWeight: '900',
+    fontStyle: 'italic',
+  },
+  horizontalProductScroll: {
+    paddingHorizontal: spacing.md,
+    gap: 10,
+  },
+  compactProductCard: {
+    width: 118,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    overflow: 'hidden',
+  },
+  compactProductImage: {
+    width: '100%',
+    height: 118,
+    backgroundColor: colors.background,
+  },
+  productGrid: {
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: PRODUCT_GAP,
+  },
+  productTile: {
+    width: GRID_ITEM_WIDTH,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    overflow: 'hidden',
+    marginBottom: 2,
+  },
+  productImage: {
+    width: '100%',
+    height: GRID_ITEM_WIDTH,
+    backgroundColor: colors.background,
+  },
+  productBody: {
+    padding: 8,
+  },
+  productName: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    minHeight: 36,
+  },
+  productPrice: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 5,
+  },
+  soldText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  manageMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 7,
+  },
+  stockText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  editMiniBtn: {
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    backgroundColor: colors.primaryBg,
+  },
+  editMiniText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  hiddenBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    color: colors.white,
+    backgroundColor: colors.textSecondary,
+    borderRadius: 4,
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  flashBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    color: colors.white,
+    backgroundColor: '#EE4D2D',
+    borderRadius: 4,
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  toolsGrid: {
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  toolButton: {
+    width: (SCREEN_WIDTH - 32 - 20) / 3,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  toolIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 7,
+  },
+  toolLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  scrollTopWrap: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 40,
+  },
+  scrollTopBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.lg,
+  },
 });

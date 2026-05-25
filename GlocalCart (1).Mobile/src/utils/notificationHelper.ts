@@ -90,7 +90,7 @@ export const notificationHelper = {
       // Resolve product image url
       let imgUrl = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200'; // Default sneaker placeholder
       if (productImage) {
-        imgUrl = resolveProductImageUrl(productImage);
+        imgUrl = resolveProductImageUrl(productImage) || imgUrl;
       }
 
       // Check if there is already a notification for this orderId
