@@ -12,15 +12,23 @@ import { useNavigation } from "@react-navigation/native";
 import { colors } from "../../theme/colors";
 import { ShipmentCard } from "../../components/Shipper/ShipmentCard";
 import { Shipment, shipperService } from "../../services/api/shipperService";
-
-const POLL_INTERVAL_MS = 15000;
+import {
+  onDeliveryRealtime,
+  startDeliveryRealtime,
+} from "../../services/realtime/deliveryRealtime";
 const PAGE_SIZE = 20;
 
 function getCountdownLabel(shipment: Shipment) {
-  if (shipment.shipmentStatus === "Accepted" && shipment.pickupCountdownSeconds) {
+  if (
+    shipment.shipmentStatus === "Accepted" &&
+    shipment.pickupCountdownSeconds
+  ) {
     return `Có thể xác nhận lấy hàng sau ${shipment.pickupCountdownSeconds}s`;
   }
-  if (shipment.shipmentStatus === "Shipped" && shipment.arrivalCountdownSeconds) {
+  if (
+    shipment.shipmentStatus === "Shipped" &&
+    shipment.arrivalCountdownSeconds
+  ) {
     return `Có thể xác nhận đến nơi sau ${shipment.arrivalCountdownSeconds}s`;
   }
   return undefined;
@@ -48,38 +56,60 @@ function getShipperActions(shipment: Shipment) {
       return { actionText: "Đã nhận tiền", onAction: "cash" as const };
     }
     if (shipment.awaitingTransferConfirm) {
-      return { actionText: "Đã nhận chuyển khoản", onAction: "transfer" as const };
+      return {
+        actionText: "Đã nhận chuyển khoản",
+        onAction: "transfer" as const,
+      };
     }
-    if (shipment.paymentStatus === "Completed" && shipment.buyerConfirmedReceipt) {
+    if (
+      shipment.paymentStatus === "Completed" &&
+      shipment.buyerConfirmedReceipt
+    ) {
       return { actionText: "Hoàn thành đơn", onAction: "deliver" as const };
     }
-    return { actionText: "Nhắc thanh toán", onAction: "requestPayment" as const };
+    return {
+      actionText: "Nhắc thanh toán",
+      onAction: "requestPayment" as const,
+    };
   }
 
   if (shipment.shipmentStatus === "OnHold") {
-    return { actionText: "Đang xử lý sự cố", onAction: "noop" as const, disabled: true };
+    return {
+      actionText: "Đang xử lý sự cố",
+      onAction: "noop" as const,
+      disabled: true,
+    };
   }
 
   return {};
 }
 
 export default function ShipperDeliveringScreen() {
-  const [deliveringShipments, setDeliveringShipments] = useState<Shipment[]>([]);
+  const [deliveringShipments, setDeliveringShipments] = useState<Shipment[]>(
+    [],
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const navigation = useNavigation<any>();
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadData = useCallback(async (nextPage = 1, replace = true) => {
     try {
-      const response: any = await shipperService.getMyShipments(nextPage, PAGE_SIZE);
+      const response: any = await shipperService.getMyShipments(
+        nextPage,
+        PAGE_SIZE,
+      );
       const items: Shipment[] = response?.items || [];
-      setDeliveringShipments((current) => (replace ? items : [...current, ...items]));
+      setDeliveringShipments((current) =>
+        replace ? items : [...current, ...items],
+      );
       setPage(nextPage);
-      setHasMore(items.length === PAGE_SIZE && (response?.totalCount || 0) > nextPage * PAGE_SIZE);
+      setHasMore(
+        items.length === PAGE_SIZE &&
+          (response?.totalCount || 0) > nextPage * PAGE_SIZE,
+      );
     } catch (e) {
       console.log("Lỗi tải danh sách", e);
     } finally {
@@ -89,28 +119,20 @@ export default function ShipperDeliveringScreen() {
   }, []);
 
   useEffect(() => {
+    startDeliveryRealtime();
+    const offUpdated = onDeliveryRealtime("ShipmentUpdated", () =>
+      loadData(1, true),
+    );
+    return offUpdated;
+  }, [loadData]);
+
+  useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       setRefreshing(true);
       loadData(1, true);
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(() => loadData(1, true), POLL_INTERVAL_MS);
     });
     return unsubscribe;
   }, [navigation, loadData]);
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("blur", () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    });
-    return unsubscribe;
-  }, [navigation]);
-
-  useEffect(() => () => {
-    if (pollRef.current) clearInterval(pollRef.current);
-  }, []);
 
   const runAction = async (shipment: Shipment, type: string) => {
     if (submittingId || type === "noop") return;
@@ -124,7 +146,8 @@ export default function ShipperDeliveringScreen() {
           break;
         case "arrival":
           await shipperService.confirmArrival(shipment.shipmentId);
-          message = "Đã đến nơi. Người mua sẽ nhận thông báo xác nhận nhận hàng.";
+          message =
+            "Đã đến nơi. Người mua sẽ nhận thông báo xác nhận nhận hàng.";
           break;
         case "cash":
           await shipperService.confirmCashReceived(shipment.shipmentId);
@@ -174,9 +197,16 @@ export default function ShipperDeliveringScreen() {
     };
 
     Alert.alert("Báo giao thất bại", "Chọn lý do không giao được đơn này.", [
-      { text: "Khách không nghe máy", onPress: () => submit("Khách không nghe máy") },
+      {
+        text: "Khách không nghe máy",
+        onPress: () => submit("Khách không nghe máy"),
+      },
       { text: "Sai địa chỉ", onPress: () => submit("Sai địa chỉ") },
-      { text: "Khách từ chối nhận", style: "destructive", onPress: () => submit("Khách từ chối nhận") },
+      {
+        text: "Khách từ chối nhận",
+        style: "destructive",
+        onPress: () => submit("Khách từ chối nhận"),
+      },
       { text: "Hủy", style: "cancel" },
     ]);
   };
@@ -191,7 +221,9 @@ export default function ShipperDeliveringScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Đang giao</Text>
-        <Text style={styles.headerSubtitle}>Đang xử lý {deliveringShipments.length} đơn</Text>
+        <Text style={styles.headerSubtitle}>
+          Đang xử lý {deliveringShipments.length} đơn
+        </Text>
       </View>
 
       <FlatList
@@ -210,12 +242,19 @@ export default function ShipperDeliveringScreen() {
                   shipment: item,
                 })
               }
-              onAction={actions.onAction ? () => runAction(item, actions.onAction!) : undefined}
+              onAction={
+                actions.onAction
+                  ? () => runAction(item, actions.onAction!)
+                  : undefined
+              }
               actionText={actions.actionText}
               actionColor={colors.success}
-              actionDisabled={actions.disabled || submittingId === item.shipmentId}
+              actionDisabled={
+                actions.disabled || submittingId === item.shipmentId
+              }
               onSecondaryAction={
-                item.shipmentStatus === "Shipped" || item.shipmentStatus === "Arrived"
+                item.shipmentStatus === "Shipped" ||
+                item.shipmentStatus === "Arrived"
                   ? () => reportFailure(item)
                   : undefined
               }
@@ -257,6 +296,11 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: "800", color: colors.text },
   headerSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
   listContent: { padding: 16, paddingBottom: 100, flexGrow: 1 },
-  emptyContainer: { flex: 1, padding: 32, alignItems: "center", justifyContent: "center" },
+  emptyContainer: {
+    flex: 1,
+    padding: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyText: { fontSize: 16, color: colors.textSecondary, textAlign: "center" },
 });

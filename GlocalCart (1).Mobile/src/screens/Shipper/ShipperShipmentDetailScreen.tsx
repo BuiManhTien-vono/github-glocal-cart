@@ -16,10 +16,12 @@ import { colors, spacing, borderRadius, shadow } from "../../theme/colors";
 import { MapView, Marker } from "../../components/Map/MapComponent";
 import { Shipment, shipperService } from "../../services/api/shipperService";
 import { getShipmentBadgeLabel } from "../../utils/orderDisplayStatus";
+import {
+  onDeliveryRealtime,
+  startDeliveryRealtime,
+} from "../../services/realtime/deliveryRealtime";
 
 type FooterAction = { label: string; type: string; disabled?: boolean };
-
-const POLL_INTERVAL_MS = 15000;
 
 const formatCurrency = (amount?: number) =>
   Number(amount || 0).toLocaleString("vi-VN", {
@@ -33,7 +35,9 @@ function getFooterAction(shipment?: Shipment | null): FooterAction | null {
 
   if (shipment.shipmentStatus === "Accepted") {
     return {
-      label: shipment.canConfirmPickup ? "Đã lấy hàng" : "Chờ tới thời điểm lấy hàng",
+      label: shipment.canConfirmPickup
+        ? "Đã lấy hàng"
+        : "Chờ tới thời điểm lấy hàng",
       type: "pickup",
       disabled: !shipment.canConfirmPickup,
     };
@@ -49,8 +53,12 @@ function getFooterAction(shipment?: Shipment | null): FooterAction | null {
 
   if (shipment.shipmentStatus === "Arrived") {
     if (shipment.awaitingCash) return { label: "Đã nhận tiền", type: "cash" };
-    if (shipment.awaitingTransferConfirm) return { label: "Đã nhận chuyển khoản", type: "transfer" };
-    if (shipment.paymentStatus === "Completed" && shipment.buyerConfirmedReceipt) {
+    if (shipment.awaitingTransferConfirm)
+      return { label: "Đã nhận chuyển khoản", type: "transfer" };
+    if (
+      shipment.paymentStatus === "Completed" &&
+      shipment.buyerConfirmedReceipt
+    ) {
       return { label: "Hoàn thành đơn", type: "deliver" };
     }
     return { label: "Nhắc người mua xác nhận", type: "requestPayment" };
@@ -66,11 +74,14 @@ function getFooterAction(shipment?: Shipment | null): FooterAction | null {
 export default function ShipperShipmentDetailScreen(): React.JSX.Element {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
-  const [shipment, setShipment] = useState<Shipment | null>(route.params?.shipment || null);
+  const [shipment, setShipment] = useState<Shipment | null>(
+    route.params?.shipment || null,
+  );
   const [loading, setLoading] = useState(!route.params?.shipment);
   const [submitting, setSubmitting] = useState(false);
 
-  const shipmentId = route.params?.shipmentId || route.params?.shipment?.shipmentId;
+  const shipmentId =
+    route.params?.shipmentId || route.params?.shipment?.shipmentId;
 
   const refresh = async () => {
     if (!shipmentId) return;
@@ -86,8 +97,16 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
 
   useEffect(() => {
     refresh();
-    const timer = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
+  }, [shipmentId]);
+
+  useEffect(() => {
+    startDeliveryRealtime();
+    const offUpdated = onDeliveryRealtime("ShipmentUpdated", (payload) => {
+      if (!payload.shipmentId || payload.shipmentId === shipmentId) {
+        refresh();
+      }
+    });
+    return offUpdated;
   }, [shipmentId]);
 
   const footerAction = useMemo(() => getFooterAction(shipment), [shipment]);
@@ -103,7 +122,8 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
   };
 
   const performAction = async () => {
-    if (!shipment || !footerAction || footerAction.disabled || submitting) return;
+    if (!shipment || !footerAction || footerAction.disabled || submitting)
+      return;
 
     setSubmitting(true);
     try {
@@ -131,7 +151,10 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
           break;
         case "requestPayment":
           await shipperService.requestPayment(shipment.shipmentId);
-          Alert.alert("Đã gửi nhắc", "Người mua sẽ nhận thông báo xác nhận nhận hàng/thanh toán.");
+          Alert.alert(
+            "Đã gửi nhắc",
+            "Người mua sẽ nhận thông báo xác nhận nhận hàng/thanh toán.",
+          );
           break;
         case "deliver":
           await shipperService.deliverShipment(shipment.shipmentId, {
@@ -169,19 +192,30 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
     };
 
     Alert.alert("Giao thất bại", "Chọn lý do để lưu vào lịch sử vận đơn.", [
-      { text: "Khách không nghe máy", onPress: () => submit("Khách không nghe máy") },
+      {
+        text: "Khách không nghe máy",
+        onPress: () => submit("Khách không nghe máy"),
+      },
       { text: "Sai địa chỉ", onPress: () => submit("Sai địa chỉ") },
-      { text: "Khách từ chối nhận", style: "destructive", onPress: () => submit("Khách từ chối nhận") },
+      {
+        text: "Khách từ chối nhận",
+        style: "destructive",
+        onPress: () => submit("Khách từ chối nhận"),
+      },
       { text: "Hủy", style: "cancel" },
     ]);
   };
 
   const confirmAction = () => {
     if (!footerAction || footerAction.disabled) return;
-    Alert.alert("Xác nhận thao tác", `Bạn muốn thực hiện: ${footerAction.label}?`, [
-      { text: "Hủy", style: "cancel" },
-      { text: "Đồng ý", onPress: performAction },
-    ]);
+    Alert.alert(
+      "Xác nhận thao tác",
+      `Bạn muốn thực hiện: ${footerAction.label}?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        { text: "Đồng ý", onPress: performAction },
+      ],
+    );
   };
 
   if (loading || !shipment) {
@@ -194,9 +228,9 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
   }
 
   const isCOD =
-    shipment.paymentMethod === "CashOnDelivery"
-    || shipment.paymentMethod === "CreditCard"
-    || shipment.paymentStatus !== "Completed";
+    shipment.paymentMethod === "CashOnDelivery" ||
+    shipment.paymentMethod === "CreditCard" ||
+    shipment.paymentStatus !== "Completed";
   const mockLocation = {
     latitude: 16.0544,
     longitude: 108.2022,
@@ -207,7 +241,10 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Chi tiết vận đơn</Text>
@@ -216,10 +253,17 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.mapContainer}>
           <MapView style={styles.map} initialRegion={mockLocation}>
-            <Marker coordinate={mockLocation} title="Điểm giao hàng" description={shipment.deliveryAddress} />
+            <Marker
+              coordinate={mockLocation}
+              title="Điểm giao hàng"
+              description={shipment.deliveryAddress}
+            />
           </MapView>
           <TouchableOpacity style={styles.openMapBtn} onPress={handleOpenMap}>
             <Ionicons name="map" size={18} color={colors.white} />
@@ -229,15 +273,32 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
 
         <View style={styles.section}>
           <InfoRow label="Mã đơn hàng" value={`#${shipment.orderNumber}`} />
-          <InfoRow label="Mã vận đơn" value={shipment.trackingNumber || "Chưa có"} />
-          <InfoRow label="Trạng thái" value={getShipmentBadgeLabel(shipment.shipmentStatus)} />
-          <InfoRow label="Khoảng cách ước tính" value={`${shipment.distanceKm?.toFixed?.(1) || "--"} km`} />
+          <InfoRow
+            label="Mã vận đơn"
+            value={shipment.trackingNumber || "Chưa có"}
+          />
+          <InfoRow
+            label="Trạng thái"
+            value={getShipmentBadgeLabel(shipment.shipmentStatus)}
+          />
+          <InfoRow
+            label="Khoảng cách ước tính"
+            value={`${shipment.distanceKm?.toFixed?.(1) || "--"} km`}
+          />
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Tuyến giao</Text>
-          <RouteRow icon="storefront-outline" title="Lấy hàng" value={shipment.pickupAddress || "Điểm lấy hàng tại shop"} />
-          <RouteRow icon="location-outline" title="Giao hàng" value={shipment.deliveryAddress} />
+          <RouteRow
+            icon="storefront-outline"
+            title="Lấy hàng"
+            value={shipment.pickupAddress || "Điểm lấy hàng tại shop"}
+          />
+          <RouteRow
+            icon="location-outline"
+            title="Giao hàng"
+            value={shipment.deliveryAddress}
+          />
         </View>
 
         <View style={styles.section}>
@@ -247,8 +308,12 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
               <Ionicons name="person" size={20} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.personName}>{shipment.buyerName || "Người nhận"}</Text>
-              <Text style={styles.personPhone}>{shipment.buyerPhone || "Chưa có số điện thoại"}</Text>
+              <Text style={styles.personName}>
+                {shipment.buyerName || "Người nhận"}
+              </Text>
+              <Text style={styles.personPhone}>
+                {shipment.buyerPhone || "Chưa có số điện thoại"}
+              </Text>
             </View>
             <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
               <Ionicons name="call" size={18} color={colors.white} />
@@ -261,26 +326,49 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
           {(shipment.orderItems || []).map((item, index) => (
             <View key={`${item.productId}_${index}`} style={styles.itemRow}>
               <View style={styles.productIcon}>
-                <Ionicons name="cube-outline" size={22} color={colors.textMuted} />
+                <Ionicons
+                  name="cube-outline"
+                  size={22}
+                  color={colors.textMuted}
+                />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.productName} numberOfLines={2}>{item.productName}</Text>
+                <Text style={styles.productName} numberOfLines={2}>
+                  {item.productName}
+                </Text>
                 <Text style={styles.productMeta}>x{item.quantity}</Text>
               </View>
-              <Text style={styles.itemPrice}>{formatCurrency(item.unitPrice * item.quantity)}</Text>
+              <Text style={styles.itemPrice}>
+                {formatCurrency(item.unitPrice * item.quantity)}
+              </Text>
             </View>
           ))}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Thanh toán</Text>
-          <InfoRow label="Phương thức" value={isCOD ? "Thu hộ COD" : "Đã thanh toán"} />
-          <InfoRow label="Tổng tiền" value={formatCurrency(shipment.totalAmount)} highlight />
-          <InfoRow label="Phí vận chuyển" value={formatCurrency(shipment.shippingFee)} />
+          <InfoRow
+            label="Phương thức"
+            value={isCOD ? "Thu hộ COD" : "Đã thanh toán"}
+          />
+          <InfoRow
+            label="Tổng tiền"
+            value={formatCurrency(shipment.totalAmount)}
+            highlight
+          />
+          <InfoRow
+            label="Phí vận chuyển"
+            value={formatCurrency(shipment.shippingFee)}
+          />
         </View>
 
-        {(shipment.shipmentStatus === "Shipped" || shipment.shipmentStatus === "Arrived") && (
-          <TouchableOpacity style={styles.failBtn} onPress={reportFailure} disabled={submitting}>
+        {(shipment.shipmentStatus === "Shipped" ||
+          shipment.shipmentStatus === "Arrived") && (
+          <TouchableOpacity
+            style={styles.failBtn}
+            onPress={reportFailure}
+            disabled={submitting}
+          >
             <Ionicons name="warning-outline" size={18} color={colors.danger} />
             <Text style={styles.failBtnText}>Báo giao thất bại</Text>
           </TouchableOpacity>
@@ -290,7 +378,10 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
       {footerAction && (
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.footerBtn, footerAction.disabled && styles.footerBtnDisabled]}
+            style={[
+              styles.footerBtn,
+              footerAction.disabled && styles.footerBtnDisabled,
+            ]}
             disabled={footerAction.disabled || submitting}
             onPress={confirmAction}
           >
@@ -306,16 +397,34 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
   );
 }
 
-function InfoRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function InfoRow({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
   return (
     <View style={styles.infoRow}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={[styles.valueBold, highlight && styles.amount]}>{value}</Text>
+      <Text style={[styles.valueBold, highlight && styles.amount]}>
+        {value}
+      </Text>
     </View>
   );
 }
 
-function RouteRow({ icon, title, value }: { icon: any; title: string; value: string }) {
+function RouteRow({
+  icon,
+  title,
+  value,
+}: {
+  icon: any;
+  title: string;
+  value: string;
+}) {
   return (
     <View style={styles.routeRow}>
       <Ionicons name={icon} size={20} color={colors.primary} />
@@ -329,7 +438,12 @@ function RouteRow({ icon, title, value }: { icon: any; title: string; value: str
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.background,
+  },
   loadingText: { marginTop: 12, color: colors.textSecondary },
   header: {
     height: 54,
@@ -358,8 +472,17 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   openMapText: { color: colors.white, fontWeight: "700", fontSize: 12 },
-  section: { backgroundColor: colors.white, marginTop: 10, padding: spacing.md },
-  sectionTitle: { fontSize: 15, fontWeight: "800", color: colors.text, marginBottom: 12 },
+  section: {
+    backgroundColor: colors.white,
+    marginTop: 10,
+    padding: spacing.md,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: 12,
+  },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -369,7 +492,13 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderLight,
   },
   label: { color: colors.textSecondary, fontSize: 13 },
-  valueBold: { color: colors.text, fontWeight: "700", fontSize: 13, flexShrink: 1, textAlign: "right" },
+  valueBold: {
+    color: colors.text,
+    fontWeight: "700",
+    fontSize: 13,
+    flexShrink: 1,
+    textAlign: "right",
+  },
   personRow: { flexDirection: "row", alignItems: "center" },
   iconCircle: {
     width: 40,

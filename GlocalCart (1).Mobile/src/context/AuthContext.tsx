@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../services/api/apiClient';
 import { getSecureItem, setSecureItem, removeSecureItem } from '../utils/secureStore';
 import { useCartStore } from '../store/useCartStore';
+import { stopDeliveryRealtime } from '../services/realtime/deliveryRealtime';
 
 // ─── Types ───
 interface User {
@@ -108,6 +109,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
+    await stopDeliveryRealtime();
     await removeSecureItem('auth_token');
     await removeSecureItem('auth_user');
     setState({ user: null, token: null, isLoading: false, isLoggedIn: false, isGuestMode: false });

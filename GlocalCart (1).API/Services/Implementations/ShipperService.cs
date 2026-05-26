@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using GlocalCart.API.Data;
 using GlocalCart.API.DTOs.Shipper;
 using GlocalCart.API.Enums;
 using GlocalCart.API.Helpers;
+using GlocalCart.API.Hubs;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
 
@@ -12,11 +14,13 @@ namespace GlocalCart.API.Services.Implementations
     {
         private readonly AppDbContext _db;
         private readonly INotificationService _notif;
+        private readonly IHubContext<DeliveryHub> _deliveryHub;
 
-        public ShipperService(AppDbContext db, INotificationService notif)
+        public ShipperService(AppDbContext db, INotificationService notif, IHubContext<DeliveryHub> deliveryHub)
         {
             _db = db;
             _notif = notif;
+            _deliveryHub = deliveryHub;
         }
 
         public async Task<PagedResult<ShipperShipmentDto>> GetAvailableShipmentsAsync(int page, int pageSize)
@@ -173,6 +177,8 @@ namespace GlocalCart.API.Services.Implementations
                     shipment.OrderId);
             }
 
+            await BroadcastShipmentChangedAsync(shipment, "ShipmentAccepted");
+
             return MapToDto(shipment);
         }
 
@@ -213,6 +219,8 @@ namespace GlocalCart.API.Services.Implementations
                 NotificationAction.General,
                 shipment.OrderId);
 
+            await BroadcastShipmentChangedAsync(shipment, "ShipmentPickedUp");
+
             return MapToDto(shipment);
         }
 
@@ -251,6 +259,8 @@ namespace GlocalCart.API.Services.Implementations
                 $"Đơn hàng #{shipment.Order.OrderNumber} đã đến nơi. Vui lòng xác nhận đã nhận hàng.",
                 NotificationAction.OrderArrived,
                 shipment.OrderId);
+
+            await BroadcastShipmentChangedAsync(shipment, "ShipmentArrived");
 
             return MapToDto(shipment);
         }
@@ -355,6 +365,8 @@ namespace GlocalCart.API.Services.Implementations
                 NotificationAction.General,
                 shipment.OrderId);
 
+            await BroadcastShipmentChangedAsync(shipment, "ShipmentDeliveryFailed");
+
             return MapToDto(shipment);
         }
 
@@ -406,6 +418,41 @@ namespace GlocalCart.API.Services.Implementations
                 $"Đơn hàng #{shipment.Order.OrderNumber} đã giao thành công!",
                 NotificationAction.OrderDelivered,
                 shipment.OrderId);
+
+            await BroadcastShipmentChangedAsync(shipment, "ShipmentDelivered");
+        }
+
+        private async Task BroadcastShipmentChangedAsync(Shipment shipment, string eventName)
+        {
+            var groups = new List<string>
+            {
+                DeliveryHub.ShipperAvailableGroup,
+                DeliveryHub.UserGroup(shipment.Order.BuyerId)
+            };
+
+            if (shipment.ShipperId.HasValue)
+            {
+                groups.Add(DeliveryHub.UserGroup(shipment.ShipperId.Value));
+            }
+
+            groups.AddRange(shipment.Order.OrderItems
+                .Select(oi => oi.SellerId)
+                .Distinct()
+                .Select(DeliveryHub.UserGroup));
+
+            var payload = new
+            {
+                shipmentId = shipment.Id,
+                orderId = shipment.OrderId,
+                orderNumber = shipment.Order.OrderNumber,
+                shipmentStatus = shipment.Status.ToString(),
+                orderStatus = shipment.Order.Status.ToString(),
+                shipperId = shipment.ShipperId
+            };
+
+            var targetGroups = groups.Distinct().ToArray();
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync(eventName, payload);
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync("ShipmentUpdated", payload);
         }
 
         private async Task CreditShipperBalanceAsync(int shipperId, decimal amount)

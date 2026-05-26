@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using GlocalCart.API.Data;
 using GlocalCart.API.Helpers;
+using GlocalCart.API.Hubs;
 using GlocalCart.API.Middleware;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
@@ -62,6 +63,21 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!))
     };
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/delivery"))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddAuthorization();
@@ -79,6 +95,7 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IShipperService, ShipperService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddHttpClient();
+builder.Services.AddSignalR();
 
 builder.Services.AddHostedService<AutoCancelOrderService>();
 
@@ -103,7 +120,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        policy.SetIsOriginAllowed(_ => true).AllowAnyMethod().AllowAnyHeader().AllowCredentials();
     });
 });
 
@@ -130,6 +147,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<DeliveryHub>("/hubs/delivery");
 
 // === AUTO MIGRATE DATABASE & SEED DATA ===
 using (var scope = app.Services.CreateScope())

@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.SignalR;
 using GlocalCart.API.Data;
 using GlocalCart.API.DTOs.Orders;
 using GlocalCart.API.Enums;
 using GlocalCart.API.Helpers;
+using GlocalCart.API.Hubs;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
 
@@ -14,12 +16,18 @@ namespace GlocalCart.API.Services.Implementations
         private readonly AppDbContext _db;
         private readonly INotificationService _notif;
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IHubContext<DeliveryHub> _deliveryHub;
 
-        public OrderService(AppDbContext db, INotificationService notif, IServiceScopeFactory scopeFactory)
+        public OrderService(
+            AppDbContext db,
+            INotificationService notif,
+            IServiceScopeFactory scopeFactory,
+            IHubContext<DeliveryHub> deliveryHub)
         {
             _db = db;
             _notif = notif;
             _scopeFactory = scopeFactory;
+            _deliveryHub = deliveryHub;
         }
 
         public async Task<OrderResponseDto> CreateOrderAsync(int buyerId, CreateOrderDto dto)
@@ -337,6 +345,14 @@ namespace GlocalCart.API.Services.Implementations
                 await _notif.CreateNotificationAsync(sId, $"Có đơn hàng mới #{order.OrderNumber} chờ nhận giao.");
             }
 
+            await _deliveryHub.Clients.Group(DeliveryHub.ShipperAvailableGroup).SendAsync("ShipmentAvailable", new
+            {
+                shipmentId = shipment.Id,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                status = shipment.Status.ToString()
+            });
+
             return new ShipmentInfoDto
             {
                 Id = shipment.Id,
@@ -446,6 +462,8 @@ namespace GlocalCart.API.Services.Implementations
                 await _db.SaveChangesAsync();
             }
 
+            await BroadcastShipmentUpdatedAsync(order, "ShipmentPaymentMethodSelected");
+
             return true;
         }
 
@@ -479,6 +497,7 @@ namespace GlocalCart.API.Services.Implementations
             }
 
             await _db.SaveChangesAsync();
+            await BroadcastShipmentUpdatedAsync(order, "ShipmentPaymentUpdated");
             return true;
         }
 
@@ -508,6 +527,7 @@ namespace GlocalCart.API.Services.Implementations
             if (order.Payment != null && order.Payment.Status == PaymentStatus.Completed)
             {
                 await _db.SaveChangesAsync();
+                await BroadcastShipmentUpdatedAsync(order, "ShipmentReceiptConfirmed");
 
                 if (order.Shipment.ShipperId.HasValue)
                 {
@@ -527,6 +547,7 @@ namespace GlocalCart.API.Services.Implementations
             }
 
             await _db.SaveChangesAsync();
+            await BroadcastShipmentUpdatedAsync(order, "ShipmentReceiptConfirmed");
 
             return new ConfirmReceiptResultDto
             {
@@ -534,6 +555,31 @@ namespace GlocalCart.API.Services.Implementations
                 RequiresPayment = true,
                 Message = "Vui lòng chọn phương thức thanh toán."
             };
+        }
+
+        private async Task BroadcastShipmentUpdatedAsync(Order order, string eventName)
+        {
+            if (order.Shipment == null) return;
+
+            var groups = new List<string> { DeliveryHub.UserGroup(order.BuyerId) };
+            if (order.Shipment.ShipperId.HasValue)
+            {
+                groups.Add(DeliveryHub.UserGroup(order.Shipment.ShipperId.Value));
+            }
+
+            var payload = new
+            {
+                shipmentId = order.Shipment.Id,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                shipmentStatus = order.Shipment.Status.ToString(),
+                orderStatus = order.Status.ToString(),
+                shipperId = order.Shipment.ShipperId
+            };
+
+            var targetGroups = groups.Distinct().ToArray();
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync(eventName, payload);
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync("ShipmentUpdated", payload);
         }
 
         private static OrderResponseDto MapToDto(Order o) => new()

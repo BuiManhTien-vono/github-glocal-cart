@@ -5,6 +5,7 @@ import { useNavigation } from "@react-navigation/native";
 import { colors } from "../../theme/colors";
 import { ShipmentCard } from "../../components/Shipper/ShipmentCard";
 import { Shipment, shipperService } from "../../services/api/shipperService";
+import { onDeliveryRealtime, startDeliveryRealtime } from "../../services/realtime/deliveryRealtime";
 
 const PAGE_SIZE = 20;
 
@@ -30,6 +31,12 @@ export default function ShipperCompletedScreen() {
       setLoadingMore(false);
     }
   }, []);
+
+  useEffect(() => {
+    startDeliveryRealtime();
+    const offUpdated = onDeliveryRealtime("ShipmentUpdated", () => loadData(1, true));
+    return offUpdated;
+  }, [loadData]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
