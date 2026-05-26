@@ -25,6 +25,11 @@ export interface Shipment {
   buyerPhone: string;
   deliveryAddress: string;
   pickupAddress?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  pickupLatitude?: number;
+  pickupLongitude?: number;
+  distanceMeters?: number;
   distanceKm?: number;
   assignedAt?: string;
   deliveredAt?: string;
@@ -57,6 +62,11 @@ export interface ShipperActionPayload {
   proofNote?: string;
 }
 
+export interface ShipperLocationPayload {
+  latitude: number;
+  longitude: number;
+}
+
 export const shipperService = {
   getAvailableShipments: async (page = 1, pageSize = 20) => {
     return apiClient.get(`/shipper/shipments/available?page=${page}&pageSize=${pageSize}`);
@@ -72,6 +82,10 @@ export const shipperService = {
 
   getStats: async (): Promise<ShipperStats> => {
     return apiClient.get('/shipper/stats');
+  },
+
+  updateLocation: async (payload: ShipperLocationPayload) => {
+    return apiClient.post('/shipper/location', payload);
   },
 
   getShipmentDetail: async (id: number) => {

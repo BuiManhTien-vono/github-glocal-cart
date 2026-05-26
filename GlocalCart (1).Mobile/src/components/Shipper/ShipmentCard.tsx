@@ -1,9 +1,15 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { Shipment } from '../../services/api/shipperService';
 import { getShipmentBadgeLabel } from '../../utils/orderDisplayStatus';
+import {
+  coordinateFromShipment,
+  fetchRoadDistanceMeters,
+  formatDistanceMeters,
+  shipmentDistanceMeters,
+} from '../../utils/shippingDistance';
 
 interface ShipmentCardProps {
   shipment: Shipment;
@@ -40,6 +46,34 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
 }) => {
   const isCOD = isCodShipment(shipment);
   const badgeLabel = getShipmentBadgeLabel(shipment.shipmentStatus);
+  const [distanceMeters, setDistanceMeters] = useState<number | null>(
+    shipmentDistanceMeters(shipment),
+  );
+
+  useEffect(() => {
+    let active = true;
+    setDistanceMeters(shipmentDistanceMeters(shipment));
+
+    const pickup = coordinateFromShipment(shipment, 'pickup');
+    const delivery = coordinateFromShipment(shipment, 'delivery');
+    if (pickup && delivery) {
+      fetchRoadDistanceMeters(pickup, delivery).then((meters) => {
+        if (active && meters != null) setDistanceMeters(meters);
+      });
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [
+    shipment.shipmentId,
+    shipment.pickupLatitude,
+    shipment.pickupLongitude,
+    shipment.deliveryLatitude,
+    shipment.deliveryLongitude,
+    shipment.distanceMeters,
+    shipment.distanceKm,
+  ]);
 
   const openMap = () => {
     if (!shipment.deliveryAddress) return;
@@ -81,7 +115,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
       <View style={styles.infoGrid}>
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>Khoảng cách</Text>
-          <Text style={styles.infoValue}>{shipment.distanceKm?.toFixed?.(1) || '--'} km</Text>
+          <Text style={styles.infoValue}>{formatDistanceMeters(distanceMeters)}</Text>
         </View>
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>Tiền ship</Text>

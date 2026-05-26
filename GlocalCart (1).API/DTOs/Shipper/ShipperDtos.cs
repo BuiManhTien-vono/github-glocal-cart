@@ -19,6 +19,11 @@ namespace GlocalCart.API.DTOs.Shipper
         public string BuyerPhone { get; set; } = string.Empty;
         public string DeliveryAddress { get; set; } = string.Empty;
         public string PickupAddress { get; set; } = string.Empty;
+        public double? DeliveryLatitude { get; set; }
+        public double? DeliveryLongitude { get; set; }
+        public double? PickupLatitude { get; set; }
+        public double? PickupLongitude { get; set; }
+        public int? DistanceMeters { get; set; }
         public decimal DistanceKm { get; set; }
         public string? ShipperName { get; set; }
         public int? ShipperId { get; set; }
@@ -38,6 +43,12 @@ namespace GlocalCart.API.DTOs.Shipper
         public string? Note { get; set; }
         public string? FailureReason { get; set; }
         public string? ProofNote { get; set; }
+    }
+
+    public class ShipperLocationUpdateDto
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
     }
 
     public class ShipperStatsDto

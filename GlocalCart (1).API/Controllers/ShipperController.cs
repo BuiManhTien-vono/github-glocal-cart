@@ -22,7 +22,11 @@ namespace GlocalCart.API.Controllers
 
         [HttpGet("shipments/available")]
         public async Task<IActionResult> GetAvailable([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
-            Ok(ApiResponse.Ok(await _shipperService.GetAvailableShipmentsAsync(page, pageSize)));
+            Ok(ApiResponse.Ok(await _shipperService.GetAvailableShipmentsAsync(UserId, page, pageSize)));
+
+        [HttpPost("location")]
+        public async Task<IActionResult> UpdateLocation([FromBody] ShipperLocationUpdateDto dto) =>
+            Ok(ApiResponse.Ok(await _shipperService.UpdateLocationAsync(UserId, dto), "Đã cập nhật vị trí shipper."));
 
         [HttpGet("shipments/mine")]
         public async Task<IActionResult> GetMine([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>

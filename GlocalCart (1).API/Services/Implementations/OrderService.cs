@@ -8,11 +8,18 @@ using GlocalCart.API.Helpers;
 using GlocalCart.API.Hubs;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
+using System.Globalization;
+using System.Text;
 
 namespace GlocalCart.API.Services.Implementations
 {
     public class OrderService : IOrderService
     {
+        private const int MaxAvailablePickupDistanceMeters = 10_000;
+        private static readonly TimeSpan ShipperLocationFreshness = TimeSpan.FromMinutes(15);
+        private static readonly GeoPoint FallbackShopCoordinate = new(10.7743, 106.7017);
+        private readonly record struct GeoPoint(double Latitude, double Longitude);
+
         private readonly AppDbContext _db;
         private readonly INotificationService _notif;
         private readonly IServiceScopeFactory _scopeFactory;
@@ -345,19 +352,30 @@ namespace GlocalCart.API.Services.Implementations
 
             await _db.SaveChangesAsync();
 
-            var shipperIds = await _db.Users.Where(u => u.Role == UserRole.Shipper).Select(u => u.Id).ToListAsync();
-            foreach (var sId in shipperIds)
+            var pickupAddress = await _db.UserAddresses
+                .OrderByDescending(a => a.IsDefault)
+                .ThenBy(a => a.Id)
+                .FirstOrDefaultAsync(a => a.UserId == sellerId);
+            var pickupCoordinate = ResolveAddressCoordinate(pickupAddress) ?? FallbackShopCoordinate;
+            var nearbyShipperIds = await GetNearbyShipperIdsAsync(pickupCoordinate);
+
+            foreach (var sId in nearbyShipperIds)
             {
                 await _notif.CreateNotificationAsync(sId, $"Có đơn hàng mới #{order.OrderNumber} chờ nhận giao.");
             }
 
-            await _deliveryHub.Clients.Group(DeliveryHub.ShipperAvailableGroup).SendAsync("ShipmentAvailable", new
+            if (nearbyShipperIds.Count > 0)
             {
-                shipmentId = shipment.Id,
-                orderId = order.Id,
-                orderNumber = order.OrderNumber,
-                status = shipment.Status.ToString()
-            });
+                await _deliveryHub.Clients
+                    .Groups(nearbyShipperIds.Select(DeliveryHub.UserGroup))
+                    .SendAsync("ShipmentAvailable", new
+                    {
+                        shipmentId = shipment.Id,
+                        orderId = order.Id,
+                        orderNumber = order.OrderNumber,
+                        status = shipment.Status.ToString()
+                    });
+            }
 
             order.Shipment = shipment;
             await BroadcastOrderUpdatedAsync(order, "OrderShipmentCreated");
@@ -597,6 +615,131 @@ namespace GlocalCart.API.Services.Implementations
             await _deliveryHub.Clients.Groups(targetGroups).SendAsync("ShipmentUpdated", payload);
             await _deliveryHub.Clients.Groups(targetGroups).SendAsync("OrderUpdated", payload);
         }
+
+        private async Task<List<int>> GetNearbyShipperIdsAsync(GeoPoint pickupCoordinate)
+        {
+            var cutoff = DateTime.UtcNow.Subtract(ShipperLocationFreshness);
+            var locations = await _db.ShipperLocations
+                .Include(l => l.Shipper)
+                .Where(l => l.UpdatedAt >= cutoff && l.Shipper.Role == UserRole.Shipper)
+                .ToListAsync();
+
+            return locations
+                .Where(location =>
+                {
+                    var shipperCoordinate = new GeoPoint(location.Latitude, location.Longitude);
+                    var distanceMeters = CalculateDistanceMeters(shipperCoordinate, pickupCoordinate);
+                    return distanceMeters.HasValue && distanceMeters.Value <= MaxAvailablePickupDistanceMeters;
+                })
+                .Select(location => location.ShipperId)
+                .Distinct()
+                .ToList();
+        }
+
+        private static GeoPoint? ResolveAddressCoordinate(UserAddress? address)
+        {
+            if (address == null) return null;
+
+            var combined = NormalizeForSearch($"{address.StreetAddress} {address.State} {address.City} {address.Country}");
+            var compact = combined.Replace(".", string.Empty).Replace(" ", string.Empty);
+
+            var isHoChiMinh = combined.Contains("ho chi minh")
+                || combined.Contains("tp ho chi minh")
+                || combined.Contains("hcm")
+                || combined.Contains("sai gon")
+                || combined.Contains("saigon");
+            if (isHoChiMinh)
+            {
+                var isDistrict1 = combined.Contains("quan 1")
+                    || combined.Contains("district 1")
+                    || compact.Contains("q1");
+                if (isDistrict1 && combined.Contains("le loi"))
+                {
+                    return CoordinateOnLeLoiDistrict1(ReadLeadingNumber(address.StreetAddress));
+                }
+
+                if (isDistrict1) return new GeoPoint(10.7758, 106.7019);
+                if (combined.Contains("quan 3") || compact.Contains("q3")) return new GeoPoint(10.7840, 106.6848);
+                if (combined.Contains("quan 7") || compact.Contains("q7")) return new GeoPoint(10.7325, 106.7219);
+                if (combined.Contains("quan 10") || compact.Contains("q10")) return new GeoPoint(10.7731, 106.6679);
+                if (combined.Contains("thu duc")) return new GeoPoint(10.8494, 106.7537);
+
+                return new GeoPoint(10.7769, 106.7009);
+            }
+
+            if (combined.Contains("ha noi") || combined.Contains("hanoi"))
+            {
+                if (combined.Contains("hoan kiem")) return new GeoPoint(21.0287, 105.8521);
+                if (combined.Contains("ba dinh")) return new GeoPoint(21.0367, 105.8342);
+                if (combined.Contains("dong da")) return new GeoPoint(21.0181, 105.8293);
+                if (combined.Contains("cau giay")) return new GeoPoint(21.0362, 105.7906);
+
+                return new GeoPoint(21.0278, 105.8342);
+            }
+
+            if (combined.Contains("da nang") || combined.Contains("danang"))
+            {
+                if (combined.Contains("hai chau")) return new GeoPoint(16.0678, 108.2208);
+                if (combined.Contains("son tra")) return new GeoPoint(16.1065, 108.2529);
+
+                return new GeoPoint(16.0471, 108.2068);
+            }
+
+            return null;
+        }
+
+        private static GeoPoint CoordinateOnLeLoiDistrict1(int? houseNumber)
+        {
+            var house = Math.Clamp(houseNumber ?? 60, 1, 120);
+            var progress = (house - 1) / 119d;
+            var latitude = 10.77295 + 0.00225 * progress;
+            var longitude = 106.69870 + 0.00495 * progress;
+
+            return new GeoPoint(Math.Round(latitude, 6), Math.Round(longitude, 6));
+        }
+
+        private static int? ReadLeadingNumber(string value)
+        {
+            var digits = new string((value ?? string.Empty).Trim().TakeWhile(char.IsDigit).ToArray());
+            return int.TryParse(digits, out var number) ? number : null;
+        }
+
+        private static string NormalizeForSearch(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+
+            var normalized = value.Normalize(NormalizationForm.FormD);
+            var builder = new StringBuilder(normalized.Length);
+            foreach (var character in normalized)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                {
+                    builder.Append(character);
+                }
+            }
+
+            return builder.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
+        }
+
+        private static int? CalculateDistanceMeters(GeoPoint? from, GeoPoint? to)
+        {
+            if (from == null || to == null) return null;
+
+            const double earthRadiusKm = 6371.0088;
+            var latitudeDelta = DegreesToRadians(to.Value.Latitude - from.Value.Latitude);
+            var longitudeDelta = DegreesToRadians(to.Value.Longitude - from.Value.Longitude);
+            var fromLatitude = DegreesToRadians(from.Value.Latitude);
+            var toLatitude = DegreesToRadians(to.Value.Latitude);
+
+            var haversine = Math.Sin(latitudeDelta / 2) * Math.Sin(latitudeDelta / 2)
+                + Math.Cos(fromLatitude) * Math.Cos(toLatitude)
+                * Math.Sin(longitudeDelta / 2) * Math.Sin(longitudeDelta / 2);
+            var distance = 2 * earthRadiusKm * Math.Asin(Math.Min(1, Math.Sqrt(haversine)));
+
+            return (int)Math.Round(distance * 1000, MidpointRounding.AwayFromZero);
+        }
+
+        private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180d;
 
         private async Task BroadcastOrderUpdatedAsync(Order order, string eventName)
         {

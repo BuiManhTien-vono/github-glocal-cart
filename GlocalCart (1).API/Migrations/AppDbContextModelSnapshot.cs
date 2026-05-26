@@ -752,6 +752,27 @@ namespace GlocalCart.API.Migrations
                     b.ToTable("ShipmentLogs");
                 });
 
+            modelBuilder.Entity("GlocalCart.API.Models.ShipperLocation", b =>
+                {
+                    b.Property<int>("ShipperId")
+                        .HasColumnType("int");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("float");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("ShipperId");
+
+                    b.HasIndex("UpdatedAt");
+
+                    b.ToTable("ShipperLocations");
+                });
+
             modelBuilder.Entity("GlocalCart.API.Models.User", b =>
                 {
                     b.Property<int>("Id")
@@ -1290,6 +1311,17 @@ namespace GlocalCart.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Shipment");
+                });
+
+            modelBuilder.Entity("GlocalCart.API.Models.ShipperLocation", b =>
+                {
+                    b.HasOne("GlocalCart.API.Models.User", "Shipper")
+                        .WithOne()
+                        .HasForeignKey("GlocalCart.API.Models.ShipperLocation", "ShipperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Shipper");
                 });
 
             modelBuilder.Entity("GlocalCart.API.Models.UserAddress", b =>

@@ -219,6 +219,8 @@ export default function CheckoutScreen({ navigation, route }: any): React.JSX.El
                   selectedAddress.ward,
                   selectedAddress.district || selectedAddress.state,
                   selectedAddress.city,
+                  selectedAddress.zipcode,
+                  selectedAddress.country,
                 ].filter(Boolean).join(', ')}
               </Text>
             </View>

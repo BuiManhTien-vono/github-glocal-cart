@@ -7,11 +7,19 @@ using GlocalCart.API.Helpers;
 using GlocalCart.API.Hubs;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
+using System.Globalization;
+using System.Text;
 
 namespace GlocalCart.API.Services.Implementations
 {
     public class ShipperService : IShipperService
     {
+        private const string FallbackShopAddress = "72 Le Loi, Phuong Ben Thanh, Quan 1, TP Ho Chi Minh, Viet Nam";
+        private const int MaxAvailablePickupDistanceMeters = 10_000;
+        private static readonly TimeSpan ShipperLocationFreshness = TimeSpan.FromMinutes(15);
+        private static readonly GeoPoint FallbackShopCoordinate = new(10.7743, 106.7017);
+        private readonly record struct GeoPoint(double Latitude, double Longitude);
+
         private readonly AppDbContext _db;
         private readonly INotificationService _notif;
         private readonly IHubContext<DeliveryHub> _deliveryHub;
@@ -23,15 +31,26 @@ namespace GlocalCart.API.Services.Implementations
             _deliveryHub = deliveryHub;
         }
 
-        public async Task<PagedResult<ShipperShipmentDto>> GetAvailableShipmentsAsync(int page, int pageSize)
+        public async Task<PagedResult<ShipperShipmentDto>> GetAvailableShipmentsAsync(int shipperId, int page, int pageSize)
         {
-            var query = QueryShipments()
+            var shipperLocation = await GetFreshShipperLocationAsync(shipperId);
+            if (shipperLocation == null)
+            {
+                return EmptyShipmentPage(page, pageSize);
+            }
+
+            var shipments = await QueryShipments()
                 .Where(s => s.ShipperId == null
                     && s.Status == ShipmentStatus.Pending
                     && s.Order.Status == OrderStatus.Unshipped)
-                .OrderBy(s => s.CreatedAt);
+                .OrderBy(s => s.CreatedAt)
+                .ToListAsync();
 
-            return await ToShipmentPageAsync(query, page, pageSize);
+            var visibleShipments = shipments
+                .Where(s => IsWithinPickupRadius(s, shipperLocation))
+                .ToList();
+
+            return ToShipmentPage(visibleShipments, page, pageSize);
         }
 
         public async Task<PagedResult<ShipperShipmentDto>> GetMyShipmentsAsync(int shipperId, int page, int pageSize)
@@ -87,6 +106,31 @@ namespace GlocalCart.API.Services.Implementations
             };
         }
 
+        public async Task<bool> UpdateLocationAsync(int shipperId, ShipperLocationUpdateDto dto)
+        {
+            if (!IsValidCoordinate(dto.Latitude, dto.Longitude))
+                throw new InvalidOperationException("Vị trí shipper không hợp lệ.");
+
+            var shipper = await _db.Users.FindAsync(shipperId)
+                ?? throw new KeyNotFoundException("Shipper không tồn tại.");
+            if (shipper.Role != UserRole.Shipper && shipper.Role != UserRole.Admin)
+                throw new UnauthorizedAccessException("Tài khoản không có quyền cập nhật vị trí shipper.");
+
+            var location = await _db.ShipperLocations.FirstOrDefaultAsync(l => l.ShipperId == shipperId);
+            if (location == null)
+            {
+                location = new ShipperLocation { ShipperId = shipperId };
+                _db.ShipperLocations.Add(location);
+            }
+
+            location.Latitude = dto.Latitude;
+            location.Longitude = dto.Longitude;
+            location.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            return true;
+        }
+
         private static async Task<PagedResult<ShipperShipmentDto>> ToShipmentPageAsync(
             IQueryable<Shipment> query, int page, int pageSize)
         {
@@ -108,6 +152,57 @@ namespace GlocalCart.API.Services.Implementations
             };
         }
 
+        private static PagedResult<ShipperShipmentDto> ToShipmentPage(
+            IReadOnlyList<Shipment> shipments,
+            int page,
+            int pageSize)
+        {
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 50);
+
+            return new PagedResult<ShipperShipmentDto>
+            {
+                Items = shipments
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(MapToDto)
+                    .ToList(),
+                TotalCount = shipments.Count,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
+        private static PagedResult<ShipperShipmentDto> EmptyShipmentPage(int page, int pageSize)
+        {
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 50);
+
+            return new PagedResult<ShipperShipmentDto>
+            {
+                Items = new List<ShipperShipmentDto>(),
+                TotalCount = 0,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
+        private async Task<ShipperLocation?> GetFreshShipperLocationAsync(int shipperId)
+        {
+            var cutoff = DateTime.UtcNow.Subtract(ShipperLocationFreshness);
+            return await _db.ShipperLocations
+                .FirstOrDefaultAsync(l => l.ShipperId == shipperId && l.UpdatedAt >= cutoff);
+        }
+
+        private static bool IsWithinPickupRadius(Shipment shipment, ShipperLocation location)
+        {
+            var pickupCoordinate = ResolveAddressCoordinate(GetPickupAddress(shipment)) ?? FallbackShopCoordinate;
+            var shipperCoordinate = new GeoPoint(location.Latitude, location.Longitude);
+            var distanceMeters = CalculateDistanceMeters(shipperCoordinate, pickupCoordinate);
+
+            return distanceMeters.HasValue && distanceMeters.Value <= MaxAvailablePickupDistanceMeters;
+        }
+
         public async Task<ShipperShipmentDto> GetShipmentDetailAsync(int shipperId, int shipmentId)
         {
             var shipment = await QueryShipments()
@@ -119,6 +214,13 @@ namespace GlocalCart.API.Services.Implementations
 
             if (!isAvailable && !isMine)
                 throw new UnauthorizedAccessException("Bạn không có quyền xem vận đơn này.");
+
+            if (isAvailable)
+            {
+                var shipperLocation = await GetFreshShipperLocationAsync(shipperId);
+                if (shipperLocation == null || !IsWithinPickupRadius(shipment, shipperLocation))
+                    throw new UnauthorizedAccessException("Vận đơn này nằm ngoài bán kính nhận đơn của bạn.");
+            }
 
             return MapToDto(shipment);
         }
@@ -135,6 +237,10 @@ namespace GlocalCart.API.Services.Implementations
 
             if (shipment.Order.Status != OrderStatus.Unshipped)
                 throw new InvalidOperationException("Đơn hàng chưa được seller xác nhận.");
+
+            var shipperLocation = await GetFreshShipperLocationAsync(shipperId);
+            if (shipperLocation == null || !IsWithinPickupRadius(shipment, shipperLocation))
+                throw new UnauthorizedAccessException("Bạn chỉ có thể nhận đơn có điểm lấy hàng trong bán kính 10 km.");
 
             var shipper = await _db.Users.FindAsync(shipperId)
                 ?? throw new KeyNotFoundException("Shipper không tồn tại.");
@@ -505,15 +611,174 @@ namespace GlocalCart.API.Services.Implementations
                 .Include(s => s.Order).ThenInclude(o => o.ShippingAddress)
                 .Include(s => s.Order).ThenInclude(o => o.Payment)
                 .Include(s => s.Order).ThenInclude(o => o.OrderItems).ThenInclude(oi => oi.Product)
-                .Include(s => s.Order).ThenInclude(o => o.OrderItems).ThenInclude(oi => oi.Seller)
+                .Include(s => s.Order).ThenInclude(o => o.OrderItems).ThenInclude(oi => oi.Seller).ThenInclude(seller => seller.Addresses)
                 .Include(s => s.Shipper);
 
-        private static decimal EstimateDistanceKm(int orderId) =>
-            Math.Round(2.5m + orderId % 8 * 1.35m, 1);
+        private static string FormatAddress(UserAddress? address)
+        {
+            if (address == null) return string.Empty;
+
+            return string.Join(", ",
+                new[] { address.StreetAddress, address.State, address.City, address.Country }
+                    .Where(part => !string.IsNullOrWhiteSpace(part)));
+        }
+
+        private static UserAddress? GetPickupAddress(Shipment shipment)
+        {
+            var seller = shipment.Order.OrderItems
+                .OrderBy(oi => oi.Id)
+                .Select(oi => oi.Seller)
+                .FirstOrDefault(seller => seller != null);
+
+            return seller?.Addresses
+                .OrderByDescending(address => address.IsDefault)
+                .ThenBy(address => address.Id)
+                .FirstOrDefault();
+        }
+
+        private static string BuildPickupAddress(Shipment shipment)
+        {
+            var sellerAddress = GetPickupAddress(shipment);
+            var formattedAddress = FormatAddress(sellerAddress);
+
+            return string.IsNullOrWhiteSpace(formattedAddress)
+                ? FallbackShopAddress
+                : formattedAddress;
+        }
+
+        private static GeoPoint? ResolveAddressCoordinate(UserAddress? address)
+        {
+            if (address == null) return null;
+
+            return ResolveAddressCoordinate(
+                address.StreetAddress,
+                address.State,
+                address.City,
+                address.Country);
+        }
+
+        private static GeoPoint? ResolveAddressCoordinate(
+            string streetAddress,
+            string state,
+            string city,
+            string country)
+        {
+            var combined = NormalizeForSearch($"{streetAddress} {state} {city} {country}");
+            var compact = combined.Replace(".", string.Empty).Replace(" ", string.Empty);
+
+            var isHoChiMinh = combined.Contains("ho chi minh")
+                || combined.Contains("tp ho chi minh")
+                || combined.Contains("hcm")
+                || combined.Contains("sai gon")
+                || combined.Contains("saigon");
+            if (isHoChiMinh)
+            {
+                var isDistrict1 = combined.Contains("quan 1")
+                    || combined.Contains("district 1")
+                    || compact.Contains("q1");
+                if (isDistrict1 && combined.Contains("le loi"))
+                {
+                    return CoordinateOnLeLoiDistrict1(ReadLeadingNumber(streetAddress));
+                }
+
+                if (isDistrict1) return new GeoPoint(10.7758, 106.7019);
+                if (combined.Contains("quan 3") || compact.Contains("q3")) return new GeoPoint(10.7840, 106.6848);
+                if (combined.Contains("quan 7") || compact.Contains("q7")) return new GeoPoint(10.7325, 106.7219);
+                if (combined.Contains("quan 10") || compact.Contains("q10")) return new GeoPoint(10.7731, 106.6679);
+                if (combined.Contains("thu duc")) return new GeoPoint(10.8494, 106.7537);
+
+                return new GeoPoint(10.7769, 106.7009);
+            }
+
+            if (combined.Contains("ha noi") || combined.Contains("hanoi"))
+            {
+                if (combined.Contains("hoan kiem")) return new GeoPoint(21.0287, 105.8521);
+                if (combined.Contains("ba dinh")) return new GeoPoint(21.0367, 105.8342);
+                if (combined.Contains("dong da")) return new GeoPoint(21.0181, 105.8293);
+                if (combined.Contains("cau giay")) return new GeoPoint(21.0362, 105.7906);
+
+                return new GeoPoint(21.0278, 105.8342);
+            }
+
+            if (combined.Contains("da nang") || combined.Contains("danang"))
+            {
+                if (combined.Contains("hai chau")) return new GeoPoint(16.0678, 108.2208);
+                if (combined.Contains("son tra")) return new GeoPoint(16.1065, 108.2529);
+
+                return new GeoPoint(16.0471, 108.2068);
+            }
+
+            return null;
+        }
+
+        private static GeoPoint CoordinateOnLeLoiDistrict1(int? houseNumber)
+        {
+            var house = Math.Clamp(houseNumber ?? 60, 1, 120);
+            var progress = (house - 1) / 119d;
+            var latitude = 10.77295 + 0.00225 * progress;
+            var longitude = 106.69870 + 0.00495 * progress;
+
+            return new GeoPoint(Math.Round(latitude, 6), Math.Round(longitude, 6));
+        }
+
+        private static int? ReadLeadingNumber(string value)
+        {
+            var digits = new string((value ?? string.Empty).Trim().TakeWhile(char.IsDigit).ToArray());
+            return int.TryParse(digits, out var number) ? number : null;
+        }
+
+        private static string NormalizeForSearch(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+
+            var normalized = value.Normalize(NormalizationForm.FormD);
+            var builder = new StringBuilder(normalized.Length);
+            foreach (var character in normalized)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                {
+                    builder.Append(character);
+                }
+            }
+
+            return builder.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
+        }
+
+        private static int? CalculateDistanceMeters(GeoPoint? from, GeoPoint? to)
+        {
+            if (from == null || to == null) return null;
+
+            const double earthRadiusKm = 6371.0088;
+            var latitudeDelta = DegreesToRadians(to.Value.Latitude - from.Value.Latitude);
+            var longitudeDelta = DegreesToRadians(to.Value.Longitude - from.Value.Longitude);
+            var fromLatitude = DegreesToRadians(from.Value.Latitude);
+            var toLatitude = DegreesToRadians(to.Value.Latitude);
+
+            var haversine = Math.Sin(latitudeDelta / 2) * Math.Sin(latitudeDelta / 2)
+                + Math.Cos(fromLatitude) * Math.Cos(toLatitude)
+                * Math.Sin(longitudeDelta / 2) * Math.Sin(longitudeDelta / 2);
+            var distance = 2 * earthRadiusKm * Math.Asin(Math.Min(1, Math.Sqrt(haversine)));
+
+            return (int)Math.Round(distance * 1000, MidpointRounding.AwayFromZero);
+        }
+
+        private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180d;
+
+        private static bool IsValidCoordinate(double latitude, double longitude) =>
+            double.IsFinite(latitude)
+            && double.IsFinite(longitude)
+            && Math.Abs(latitude) <= 90
+            && Math.Abs(longitude) <= 180;
 
         private static ShipperShipmentDto MapToDto(Shipment s)
         {
             var addr = s.Order.ShippingAddress;
+            var pickupAddress = GetPickupAddress(s);
+            var pickupAddressText = BuildPickupAddress(s);
+            var deliveryAddressText = FormatAddress(addr);
+            var pickupCoordinate = ResolveAddressCoordinate(pickupAddress) ?? FallbackShopCoordinate;
+            var deliveryCoordinate = ResolveAddressCoordinate(addr);
+            var distanceMeters = CalculateDistanceMeters(pickupCoordinate, deliveryCoordinate);
             var payment = s.Order.Payment;
             var isCashCod = payment != null
                 && (payment.Method == PaymentMethod.CashOnDelivery || payment.Method == PaymentMethod.CreditCard)
@@ -539,13 +804,16 @@ namespace GlocalCart.API.Services.Implementations
                 AssignedAt = s.AssignedAt,
                 BuyerName = s.Order.Buyer.FullName,
                 BuyerPhone = s.Order.Buyer.PhoneNumber ?? "",
-                DeliveryAddress = $"{addr.StreetAddress}, {addr.City}, {addr.State}, {addr.Country}",
-                PickupAddress = string.Join(", ",
-                    s.Order.OrderItems
-                        .Select(oi => oi.Seller?.FullName)
-                        .Where(name => !string.IsNullOrWhiteSpace(name))
-                        .Distinct()),
-                DistanceKm = EstimateDistanceKm(s.OrderId),
+                DeliveryAddress = deliveryAddressText,
+                PickupAddress = pickupAddressText,
+                DeliveryLatitude = deliveryCoordinate?.Latitude,
+                DeliveryLongitude = deliveryCoordinate?.Longitude,
+                PickupLatitude = pickupCoordinate.Latitude,
+                PickupLongitude = pickupCoordinate.Longitude,
+                DistanceMeters = distanceMeters,
+                DistanceKm = distanceMeters.HasValue
+                    ? Math.Round(distanceMeters.Value / 1000m, 3)
+                    : 0m,
                 ShipperName = s.Shipper?.FullName,
                 ShipperId = s.ShipperId,
                 CanConfirmPickup = s.Status == ShipmentStatus.Accepted && ShipmentTiming.CanConfirmPickup(s.AcceptedAt),

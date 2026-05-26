@@ -9,6 +9,7 @@ import {
   Switch,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Location from "expo-location";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { colors } from "../../theme/colors";
@@ -19,6 +20,66 @@ import {
   startDeliveryRealtime,
 } from "../../services/realtime/deliveryRealtime";
 const PAGE_SIZE = 20;
+
+const withTimeout = async <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | null> =>
+  Promise.race([
+    promise,
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), timeoutMs);
+    }),
+  ]);
+
+const syncShipperLocation = async () => {
+  try {
+    let permission = await Location.getForegroundPermissionsAsync();
+    if (!permission.granted) {
+      const requested = await withTimeout(
+        Location.requestForegroundPermissionsAsync(),
+        6000,
+      );
+      permission = requested || permission;
+    }
+
+    if (!permission.granted) return false;
+
+    const current = await withTimeout(
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }),
+      6000,
+    );
+    const fallback = current
+      ? null
+      : await withTimeout(
+          Location.getLastKnownPositionAsync({
+            maxAge: 120000,
+            requiredAccuracy: 1000,
+          }),
+          1000,
+        );
+    const position = current || fallback;
+    const latitude = Number(position?.coords?.latitude);
+    const longitude = Number(position?.coords?.longitude);
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180
+    ) {
+      return false;
+    }
+
+    await shipperService.updateLocation({ latitude, longitude });
+    return true;
+  } catch (error) {
+    console.log("sync shipper location error:", error);
+    return false;
+  }
+};
 
 export default function ShipperAvailableScreen() {
   const [unassigned, setUnassigned] = useState<Shipment[]>([]);
@@ -50,6 +111,7 @@ export default function ShipperAvailableScreen() {
       }
 
       try {
+        await syncShipperLocation();
         const availableRes: any = await shipperService.getAvailableShipments(
           nextPage,
           PAGE_SIZE,

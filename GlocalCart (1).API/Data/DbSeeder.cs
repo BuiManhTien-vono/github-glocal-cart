@@ -580,6 +580,36 @@ namespace GlocalCart.API.Data
                 await context.SaveChangesAsync();
             }
 
+            var storeAddress = await context.UserAddresses
+                .OrderByDescending(a => a.IsDefault)
+                .ThenBy(a => a.Id)
+                .FirstOrDefaultAsync(a => a.UserId == storeSeller.Id);
+
+            if (storeAddress == null)
+            {
+                context.UserAddresses.Add(new UserAddress
+                {
+                    UserId = storeSeller.Id,
+                    StreetAddress = "72 Le Loi, Phuong Ben Thanh",
+                    City = "TP Ho Chi Minh",
+                    State = "Quan 1",
+                    Zipcode = "700000",
+                    Country = "Viet Nam",
+                    IsDefault = true
+                });
+            }
+            else
+            {
+                storeAddress.StreetAddress = "72 Le Loi, Phuong Ben Thanh";
+                storeAddress.City = "TP Ho Chi Minh";
+                storeAddress.State = "Quan 1";
+                storeAddress.Zipcode = "700000";
+                storeAddress.Country = "Viet Nam";
+                storeAddress.IsDefault = true;
+            }
+
+            await context.SaveChangesAsync();
+
             return storeSeller;
         }
     }

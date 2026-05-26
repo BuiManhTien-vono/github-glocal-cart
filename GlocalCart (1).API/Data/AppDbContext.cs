@@ -36,6 +36,7 @@ namespace GlocalCart.API.Data
         public DbSet<Payment> Payments { get; set; }
         public DbSet<Shipment> Shipments { get; set; }
         public DbSet<ShipmentLog> ShipmentLogs { get; set; }
+        public DbSet<ShipperLocation> ShipperLocations { get; set; }
 
         // === THÔNG BÁO ===
         public DbSet<Notification> Notifications { get; set; }
@@ -62,6 +63,21 @@ namespace GlocalCart.API.Data
                     .WithMany(u => u.Addresses)
                     .HasForeignKey(a => a.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ========================
+            // SHIPPER LOCATION
+            // ========================
+            modelBuilder.Entity<ShipperLocation>(entity =>
+            {
+                entity.HasKey(l => l.ShipperId);
+
+                entity.HasOne(l => l.Shipper)
+                    .WithOne()
+                    .HasForeignKey<ShipperLocation>(l => l.ShipperId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(l => l.UpdatedAt);
             });
 
             // ========================
