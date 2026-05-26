@@ -447,12 +447,15 @@ namespace GlocalCart.API.Services.Implementations
                 orderNumber = shipment.Order.OrderNumber,
                 shipmentStatus = shipment.Status.ToString(),
                 orderStatus = shipment.Order.Status.ToString(),
+                paymentStatus = shipment.Order.Payment?.Status.ToString(),
+                buyerId = shipment.Order.BuyerId,
                 shipperId = shipment.ShipperId
             };
 
             var targetGroups = groups.Distinct().ToArray();
             await _deliveryHub.Clients.Groups(targetGroups).SendAsync(eventName, payload);
             await _deliveryHub.Clients.Groups(targetGroups).SendAsync("ShipmentUpdated", payload);
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync("OrderUpdated", payload);
         }
 
         private async Task CreditShipperBalanceAsync(int shipperId, decimal amount)

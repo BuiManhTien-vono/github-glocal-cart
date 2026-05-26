@@ -101,12 +101,20 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
 
   useEffect(() => {
     startDeliveryRealtime();
-    const offUpdated = onDeliveryRealtime("ShipmentUpdated", (payload) => {
+    const refreshIfCurrentShipment = (payload: any) => {
       if (!payload.shipmentId || payload.shipmentId === shipmentId) {
         refresh();
       }
-    });
-    return offUpdated;
+    };
+
+    const offUpdated = onDeliveryRealtime("ShipmentUpdated", refreshIfCurrentShipment);
+    const offOrder = onDeliveryRealtime("OrderUpdated", refreshIfCurrentShipment);
+    const offPayment = onDeliveryRealtime("PaymentUpdated", refreshIfCurrentShipment);
+    return () => {
+      offUpdated();
+      offOrder();
+      offPayment();
+    };
   }, [shipmentId]);
 
   const footerAction = useMemo(() => getFooterAction(shipment), [shipment]);

@@ -4,8 +4,10 @@ using GlocalCart.API.Data;
 using GlocalCart.API.DTOs.Payments;
 using GlocalCart.API.Enums;
 using GlocalCart.API.Helpers;
+using GlocalCart.API.Hubs;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace GlocalCart.API.Services.Implementations
@@ -19,11 +21,17 @@ namespace GlocalCart.API.Services.Implementations
         private readonly string _bankId;
         private readonly string _bankAccount;
         private readonly string _accountName;
+        private readonly IHubContext<DeliveryHub> _deliveryHub;
 
-        public PaymentService(AppDbContext db, IConfiguration config, INotificationService notif)
+        public PaymentService(
+            AppDbContext db,
+            IConfiguration config,
+            INotificationService notif,
+            IHubContext<DeliveryHub> deliveryHub)
         {
             _db = db;
             _notif = notif;
+            _deliveryHub = deliveryHub;
 
             var settings = config.GetSection("PaymentSettings");
             _merchantId = settings["MerchantId"] ?? "MERCHANT_001";
@@ -82,7 +90,8 @@ namespace GlocalCart.API.Services.Implementations
                 throw new InvalidOperationException(
                     $"Không thể xác nhận chuyển khoản ở trạng thái: {payment.Status}");
 
-            payment.Status = PaymentStatus.Pending;
+            payment.Status = PaymentStatus.Completed;
+            payment.TransactionRef ??= $"MANUAL-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
             payment.UpdatedAt = DateTime.UtcNow;
 
             _db.OrderLogs.Add(new OrderLog
@@ -104,6 +113,8 @@ namespace GlocalCart.API.Services.Implementations
                 await _notif.CreateNotificationAsync(sellerId,
                     $"Đơn #{order.OrderNumber}: người mua đã chuyển khoản, chờ ngân hàng xác nhận.");
 
+            await BroadcastPaymentUpdatedAsync(order, "PaymentCompleted");
+
             return MapPaymentStatus(order);
         }
 
@@ -117,6 +128,16 @@ namespace GlocalCart.API.Services.Implementations
 
             if (!isBuyer && !isSeller && !isAdmin)
                 throw new UnauthorizedAccessException("Bạn không có quyền xem thanh toán đơn hàng này.");
+
+            if (order.Payment?.Method == PaymentMethod.ElectronicBankTransfer
+                && order.Payment.Status == PaymentStatus.Pending)
+            {
+                order.Payment.Status = PaymentStatus.Completed;
+                order.Payment.TransactionRef ??= $"MANUAL-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+                order.Payment.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+                await BroadcastPaymentUpdatedAsync(order, "PaymentCompleted");
+            }
 
             return MapPaymentStatus(order);
         }
@@ -141,7 +162,7 @@ namespace GlocalCart.API.Services.Implementations
             if (!OrderBusinessRules.RequiresBankConfirmation(order.Payment))
                 return false;
 
-            if (order.Payment.Status == PaymentStatus.Completed && status == "PAID")
+            if (order.Payment.Status == PaymentStatus.Completed)
                 return true;
 
             if (order.TotalAmount != amount)
@@ -172,8 +193,13 @@ namespace GlocalCart.API.Services.Implementations
             {
                 await CancelOrderDueToFailedPaymentAsync(order, transactionId);
             }
+            else
+            {
+                return false;
+            }
 
             await _db.SaveChangesAsync();
+            await BroadcastPaymentUpdatedAsync(order, status == "FAILED" ? "PaymentFailed" : "PaymentCompleted");
             return true;
         }
 
@@ -211,6 +237,41 @@ namespace GlocalCart.API.Services.Implementations
                 .Include(o => o.Payment)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
             ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
+
+        private async Task BroadcastPaymentUpdatedAsync(Order order, string eventName)
+        {
+            var shipment = await _db.Shipments.FirstOrDefaultAsync(s => s.OrderId == order.Id);
+            var groups = new List<string> { DeliveryHub.UserGroup(order.BuyerId) };
+
+            groups.AddRange(await _db.OrderItems
+                .Where(oi => oi.OrderId == order.Id)
+                .Select(oi => oi.SellerId)
+                .Distinct()
+                .Select(sellerId => DeliveryHub.UserGroup(sellerId))
+                .ToListAsync());
+
+            if (shipment?.ShipperId.HasValue == true)
+            {
+                groups.Add(DeliveryHub.UserGroup(shipment.ShipperId.Value));
+            }
+
+            var payload = new
+            {
+                shipmentId = shipment?.Id,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                shipmentStatus = shipment?.Status.ToString(),
+                orderStatus = order.Status.ToString(),
+                paymentStatus = order.Payment?.Status.ToString(),
+                buyerId = order.BuyerId,
+                shipperId = shipment?.ShipperId
+            };
+
+            var targetGroups = groups.Distinct().ToArray();
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync(eventName, payload);
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync("PaymentUpdated", payload);
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync("OrderUpdated", payload);
+        }
 
         private static PaymentStatusDto MapPaymentStatus(Order order)
         {

@@ -25,6 +25,10 @@ import {
   getOrderDisplayLabel,
   matchesTabLabel,
 } from '../../utils/orderDisplayStatus';
+import {
+  onDeliveryRealtime,
+  startDeliveryRealtime,
+} from '../../services/realtime/deliveryRealtime';
 
 type PaymentMethod = 'Cash' | 'Transfer';
 
@@ -82,6 +86,18 @@ export default function MyOrdersScreen({ route, navigation }: any): React.JSX.El
 
   useEffect(() => {
     fetchOrders();
+  }, [fetchOrders]);
+
+  useEffect(() => {
+    startDeliveryRealtime();
+    const offOrder = onDeliveryRealtime('OrderUpdated', fetchOrders);
+    const offShipment = onDeliveryRealtime('ShipmentUpdated', fetchOrders);
+    const offPayment = onDeliveryRealtime('PaymentUpdated', fetchOrders);
+    return () => {
+      offOrder();
+      offShipment();
+      offPayment();
+    };
   }, [fetchOrders]);
 
   useEffect(() => {

@@ -128,6 +128,8 @@ namespace GlocalCart.API.Services.Implementations
                 await _notif.CreateNotificationAsync(sellerId, notifMessage);
             }
 
+            await BroadcastOrderUpdatedAsync(order, "OrderCreated");
+
             return await GetOrderByIdAsync(buyerId, order.Id);
         }
 
@@ -203,6 +205,8 @@ namespace GlocalCart.API.Services.Implementations
             foreach (var sid in sellerIds)
                 await _notif.CreateNotificationAsync(sid, $"Đơn hàng #{order.OrderNumber} đã bị hủy bởi người mua.");
 
+            await BroadcastOrderUpdatedAsync(order, "OrderCanceled");
+
             return true;
         }
 
@@ -262,6 +266,7 @@ namespace GlocalCart.API.Services.Implementations
             await _db.SaveChangesAsync();
 
             await _notif.CreateNotificationAsync(order.BuyerId, $"Đơn hàng #{order.OrderNumber} chuyển sang trạng thái: {newStatus}");
+            await BroadcastOrderUpdatedAsync(order, "OrderStatusUpdated");
             return true;
         }
 
@@ -294,6 +299,7 @@ namespace GlocalCart.API.Services.Implementations
 
             await _db.SaveChangesAsync();
             await _notif.CreateNotificationAsync(order.BuyerId, $"Đơn hàng #{order.OrderNumber} bị từ chối. Lý do: {dto.Reason}");
+            await BroadcastOrderUpdatedAsync(order, "OrderRejected");
             return true;
         }
 
@@ -353,6 +359,9 @@ namespace GlocalCart.API.Services.Implementations
                 status = shipment.Status.ToString()
             });
 
+            order.Shipment = shipment;
+            await BroadcastOrderUpdatedAsync(order, "OrderShipmentCreated");
+
             return new ShipmentInfoDto
             {
                 Id = shipment.Id,
@@ -401,6 +410,7 @@ namespace GlocalCart.API.Services.Implementations
                     Note = dto.Note ?? "Tạm giữ vận chuyển."
                 });
                 await _db.SaveChangesAsync();
+                await BroadcastShipmentUpdatedAsync(shipment.Order, "ShipmentUpdated");
                 return true;
             }
 
@@ -559,27 +569,73 @@ namespace GlocalCart.API.Services.Implementations
 
         private async Task BroadcastShipmentUpdatedAsync(Order order, string eventName)
         {
-            if (order.Shipment == null) return;
+            var shipment = order.Shipment ?? await _db.Shipments.FirstOrDefaultAsync(s => s.OrderId == order.Id);
+            if (shipment == null) return;
 
             var groups = new List<string> { DeliveryHub.UserGroup(order.BuyerId) };
-            if (order.Shipment.ShipperId.HasValue)
+            if (shipment.ShipperId.HasValue)
             {
-                groups.Add(DeliveryHub.UserGroup(order.Shipment.ShipperId.Value));
+                groups.Add(DeliveryHub.UserGroup(shipment.ShipperId.Value));
             }
+
+            groups.AddRange(await GetSellerGroupsAsync(order.Id));
 
             var payload = new
             {
-                shipmentId = order.Shipment.Id,
+                shipmentId = shipment.Id,
                 orderId = order.Id,
                 orderNumber = order.OrderNumber,
-                shipmentStatus = order.Shipment.Status.ToString(),
+                shipmentStatus = shipment.Status.ToString(),
                 orderStatus = order.Status.ToString(),
-                shipperId = order.Shipment.ShipperId
+                paymentStatus = order.Payment?.Status.ToString(),
+                buyerId = order.BuyerId,
+                shipperId = shipment.ShipperId
             };
 
             var targetGroups = groups.Distinct().ToArray();
             await _deliveryHub.Clients.Groups(targetGroups).SendAsync(eventName, payload);
             await _deliveryHub.Clients.Groups(targetGroups).SendAsync("ShipmentUpdated", payload);
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync("OrderUpdated", payload);
+        }
+
+        private async Task BroadcastOrderUpdatedAsync(Order order, string eventName)
+        {
+            var shipment = order.Shipment ?? await _db.Shipments.FirstOrDefaultAsync(s => s.OrderId == order.Id);
+            var payment = order.Payment ?? await _db.Payments.FirstOrDefaultAsync(p => p.OrderId == order.Id);
+
+            var groups = new List<string> { DeliveryHub.UserGroup(order.BuyerId) };
+            groups.AddRange(await GetSellerGroupsAsync(order.Id));
+
+            if (shipment?.ShipperId.HasValue == true)
+            {
+                groups.Add(DeliveryHub.UserGroup(shipment.ShipperId.Value));
+            }
+
+            var payload = new
+            {
+                shipmentId = shipment?.Id,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                shipmentStatus = shipment?.Status.ToString(),
+                orderStatus = order.Status.ToString(),
+                paymentStatus = payment?.Status.ToString(),
+                buyerId = order.BuyerId,
+                shipperId = shipment?.ShipperId
+            };
+
+            var targetGroups = groups.Distinct().ToArray();
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync(eventName, payload);
+            await _deliveryHub.Clients.Groups(targetGroups).SendAsync("OrderUpdated", payload);
+        }
+
+        private async Task<List<string>> GetSellerGroupsAsync(int orderId)
+        {
+            return await _db.OrderItems
+                .Where(oi => oi.OrderId == orderId)
+                .Select(oi => oi.SellerId)
+                .Distinct()
+                .Select(sellerId => DeliveryHub.UserGroup(sellerId))
+                .ToListAsync();
         }
 
         private static OrderResponseDto MapToDto(Order o) => new()

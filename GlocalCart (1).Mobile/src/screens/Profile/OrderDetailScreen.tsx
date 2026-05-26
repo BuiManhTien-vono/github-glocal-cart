@@ -22,6 +22,10 @@ import { resolveProductImageUrl } from '../../utils/imageUtils';
 import { getOrderDisplayLabel } from '../../utils/orderDisplayStatus';
 import { useAuth } from '../../context/AuthContext';
 import { notificationHelper } from '../../utils/notificationHelper';
+import {
+  onDeliveryRealtime,
+  startDeliveryRealtime,
+} from '../../services/realtime/deliveryRealtime';
 
 const cancelReasons = [
   'Thay đổi địa chỉ giao hàng',
@@ -157,6 +161,24 @@ export default function OrderDetailScreen({ navigation, route }: any): React.JSX
     fetchOrderDetail();
   }, [fetchOrderDetail]);
 
+  useEffect(() => {
+    startDeliveryRealtime();
+    const refreshIfCurrentOrder = (payload: any) => {
+      if (!payload.orderId || String(payload.orderId) === String(orderId)) {
+        fetchOrderDetail();
+      }
+    };
+
+    const offOrder = onDeliveryRealtime('OrderUpdated', refreshIfCurrentOrder);
+    const offShipment = onDeliveryRealtime('ShipmentUpdated', refreshIfCurrentOrder);
+    const offPayment = onDeliveryRealtime('PaymentUpdated', refreshIfCurrentOrder);
+    return () => {
+      offOrder();
+      offShipment();
+      offPayment();
+    };
+  }, [fetchOrderDetail, orderId]);
+
   const handleGoBack = () => {
     if (fromPayment) {
       navigation.navigate('MainTabs', {
@@ -254,7 +276,7 @@ export default function OrderDetailScreen({ navigation, route }: any): React.JSX
   const isReviewed = orderItems.some((item: any) => reviewedOrders[`@reviewed_${order.id}_${item.productId}`]);
   const payment = paymentStatus || order.payment;
   const paymentText = getPaymentText(payment?.status);
-  const canPayNow = paymentStatus?.canInitiatePayment || payment?.status === 'Unpaid' || payment?.status === 'Pending';
+  const canPayNow = paymentStatus?.canInitiatePayment || payment?.status === 'Unpaid' || payment?.status === 'Failed';
   const shippingAddress = order.shippingAddress || {};
 
   return (

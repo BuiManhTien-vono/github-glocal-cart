@@ -7,6 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  onDeliveryRealtime,
+  startDeliveryRealtime,
+} from '../../services/realtime/deliveryRealtime';
 
 interface TrackingStep {
   id: string;
@@ -50,6 +54,24 @@ export default function ShipmentTrackingScreen({ navigation, route }: any) {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!orderId || typeof orderId !== 'number') return;
+
+    startDeliveryRealtime();
+    const refreshIfCurrentOrder = (payload: any) => {
+      if (!payload.orderId || payload.orderId === orderId) {
+        fetchOrderDetails();
+      }
+    };
+
+    const offOrder = onDeliveryRealtime('OrderUpdated', refreshIfCurrentOrder);
+    const offShipment = onDeliveryRealtime('ShipmentUpdated', refreshIfCurrentOrder);
+    return () => {
+      offOrder();
+      offShipment();
+    };
+  }, [orderId]);
 
   const useMockData = () => {
     // Generate beautiful mock data based on parameters or standard defaults

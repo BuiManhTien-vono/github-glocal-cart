@@ -34,6 +34,12 @@ export default function PaymentWaitingScreen({ navigation, route }: any) {
         };
     }, [navigation, status]);
 
+    useEffect(() => {
+        if (status !== 'success') return;
+        const timer = setTimeout(handleTrackOrder, 800);
+        return () => clearTimeout(timer);
+    }, [status]);
+
     const startPolling = () => {
         // Stop any existing intervals/timeouts
         stopPolling();

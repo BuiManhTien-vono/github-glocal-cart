@@ -11,6 +11,10 @@ import {
   getOrderDisplayLabel,
   matchesTabLabel,
 } from '../../utils/orderDisplayStatus';
+import {
+  onDeliveryRealtime,
+  startDeliveryRealtime,
+} from '../../services/realtime/deliveryRealtime';
 
 export default function SellerOrdersScreen({ route, navigation }: any) {
     const insets = useSafeAreaInsets();
@@ -31,7 +35,7 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    const fetchOrders = async () => {
+    const fetchOrders = useCallback(async () => {
         try {
             const data: any = await apiClient.get('/orders/seller');
             setOrders(data?.items || []);
@@ -41,14 +45,26 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
             setLoading(true);
             fetchOrders();
-        }, [])
+        }, [fetchOrders])
     );
+
+    useEffect(() => {
+        startDeliveryRealtime();
+        const offOrder = onDeliveryRealtime('OrderUpdated', fetchOrders);
+        const offShipment = onDeliveryRealtime('ShipmentUpdated', fetchOrders);
+        const offPayment = onDeliveryRealtime('PaymentUpdated', fetchOrders);
+        return () => {
+            offOrder();
+            offShipment();
+            offPayment();
+        };
+    }, [fetchOrders]);
 
     useEffect(() => {
         setActiveTab(normalizeTab(route.params?.activeTab));

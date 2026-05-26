@@ -123,7 +123,17 @@ export default function ShipperDeliveringScreen() {
     const offUpdated = onDeliveryRealtime("ShipmentUpdated", () =>
       loadData(1, true),
     );
-    return offUpdated;
+    const offOrder = onDeliveryRealtime("OrderUpdated", () =>
+      loadData(1, true),
+    );
+    const offPayment = onDeliveryRealtime("PaymentUpdated", () =>
+      loadData(1, true),
+    );
+    return () => {
+      offUpdated();
+      offOrder();
+      offPayment();
+    };
   }, [loadData]);
 
   useEffect(() => {
