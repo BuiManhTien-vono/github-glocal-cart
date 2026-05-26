@@ -59,8 +59,43 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
         fetchOrders();
     };
 
+    const createShipment = async (id: number) => {
+        try {
+            await apiClient.post(`/orders/${id}/shipment`, {
+                shipmentMethod: 'Giao Hàng Nhanh',
+            });
+            setActiveTab('Chờ lấy hàng');
+            fetchOrders();
+
+            if (Platform.OS === 'web') {
+                window.alert('Đã tạo vận đơn. Đơn hàng đã chuyển sang chờ lấy hàng.');
+            } else {
+                Alert.alert('Thành công', 'Đã tạo vận đơn. Đơn hàng đã chuyển sang chờ lấy hàng.');
+            }
+        } catch (error: any) {
+            if (Platform.OS === 'web') {
+                window.alert(error.message || 'Không thể tạo vận đơn.');
+            } else {
+                Alert.alert('Lỗi', error.message || 'Không thể tạo vận đơn.');
+            }
+        }
+    };
+
     const handleCreateShipment = (id: number) => {
-        navigation.navigate('SellerCreateShipment', { orderId: id });
+        if (Platform.OS === 'web') {
+            const ok = window.confirm('Tạo vận đơn cho đơn hàng này?');
+            if (ok) createShipment(id);
+            return;
+        }
+
+        Alert.alert(
+            'Tạo vận đơn',
+            'Xác nhận tạo vận đơn và chuyển đơn hàng sang chờ lấy hàng?',
+            [
+                { text: 'Hủy', style: 'cancel' },
+                { text: 'Xác nhận', onPress: () => createShipment(id) },
+            ]
+        );
     };
 
     const handleDeny = async (id: number) => {
@@ -165,7 +200,7 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
                                 <Text style={styles.denyBtnText}>Từ chối</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.approveBtn} onPress={() => handleCreateShipment(item.id)}>
-                                <Text style={styles.approveBtnText}>Xác nhận đơn</Text>
+                                <Text style={styles.approveBtnText}>Tạo vận đơn</Text>
                             </TouchableOpacity>
                         </>
                     )}

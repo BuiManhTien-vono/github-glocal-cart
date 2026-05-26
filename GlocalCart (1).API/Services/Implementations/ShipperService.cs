@@ -36,7 +36,8 @@ namespace GlocalCart.API.Services.Implementations
                 .Where(s => s.ShipperId == shipperId
                     && (s.Status == ShipmentStatus.Accepted
                         || s.Status == ShipmentStatus.Shipped
-                        || s.Status == ShipmentStatus.Arrived))
+                        || s.Status == ShipmentStatus.Arrived
+                        || s.Status == ShipmentStatus.OnHold))
                 .OrderByDescending(s => s.AssignedAt);
 
             return await ToShipmentPageAsync(query, page, pageSize);
@@ -49,6 +50,37 @@ namespace GlocalCart.API.Services.Implementations
                 .OrderByDescending(s => s.DeliveredAt);
 
             return await ToShipmentPageAsync(query, page, pageSize);
+        }
+
+        public async Task<ShipperStatsDto> GetStatsAsync(int shipperId)
+        {
+            var now = DateTime.UtcNow;
+            var today = now.Date;
+            var monthStart = new DateTime(now.Year, now.Month, 1);
+
+            var owned = QueryShipments().Where(s => s.ShipperId == shipperId);
+            var completed = owned.Where(s => s.Status == ShipmentStatus.Delivered && s.DeliveredAt != null);
+            var totalAssigned = await owned.CountAsync();
+            var completedCount = await completed.CountAsync();
+
+            return new ShipperStatsDto
+            {
+                TodayCompleted = await completed.CountAsync(s => s.DeliveredAt >= today),
+                TodayIncome = await completed.Where(s => s.DeliveredAt >= today).SumAsync(s => s.Order.ShippingFee),
+                MonthCompleted = await completed.CountAsync(s => s.DeliveredAt >= monthStart),
+                MonthIncome = await completed.Where(s => s.DeliveredAt >= monthStart).SumAsync(s => s.Order.ShippingFee),
+                ActiveShipments = await owned.CountAsync(s =>
+                    s.Status == ShipmentStatus.Accepted
+                    || s.Status == ShipmentStatus.Shipped
+                    || s.Status == ShipmentStatus.Arrived
+                    || s.Status == ShipmentStatus.OnHold),
+                PendingCodAmount = await owned
+                    .Where(s => s.Status == ShipmentStatus.Arrived
+                        && s.Order.Payment != null
+                        && s.Order.Payment.Status != PaymentStatus.Completed)
+                    .SumAsync(s => s.Order.TotalAmount),
+                SuccessRate = totalAssigned == 0 ? 100 : Math.Round((decimal)completedCount / totalAssigned * 100, 1)
+            };
         }
 
         private static async Task<PagedResult<ShipperShipmentDto>> ToShipmentPageAsync(
@@ -113,21 +145,21 @@ namespace GlocalCart.API.Services.Implementations
             {
                 ShipmentId = shipmentId,
                 Status = ShipmentStatus.Accepted,
-                Note = note ?? $"Shipper {shipper.FullName} đã nhận đơn."
+                Note = note ?? $"Shipper {shipper.FullName} đã nhận đơn và bắt đầu giao hàng."
             });
 
             _db.OrderLogs.Add(new OrderLog
             {
                 OrderId = shipment.OrderId,
                 Status = OrderStatus.Unshipped,
-                Note = $"Shipper {shipper.FullName} đã nhận đơn, đang đến lấy hàng."
+                Note = $"Shipper {shipper.FullName} đã nhận đơn và đang giao hàng."
             });
 
             await _db.SaveChangesAsync();
 
             await _notif.CreateNotificationAsync(
                 shipment.Order.BuyerId,
-                $"Đơn #{shipment.Order.OrderNumber} đã có shipper {shipper.FullName} nhận giao.",
+                $"Đơn #{shipment.Order.OrderNumber} đang được shipper {shipper.FullName} giao đến bạn.",
                 NotificationAction.OrderAccepted,
                 shipment.OrderId);
 
@@ -136,7 +168,7 @@ namespace GlocalCart.API.Services.Implementations
             {
                 await _notif.CreateNotificationAsync(
                     sellerId,
-                    $"Shipper đã nhận đơn #{shipment.Order.OrderNumber}, đang đến lấy hàng.",
+                    $"Đơn #{shipment.Order.OrderNumber} đã được shipper {shipper.FullName} nhận và đang giao cho khách.",
                     NotificationAction.OrderAccepted,
                     shipment.OrderId);
             }
@@ -234,7 +266,8 @@ namespace GlocalCart.API.Services.Implementations
                 throw new InvalidOperationException("Người mua chưa xác nhận nhận hàng.");
 
             var payment = shipment.Order.Payment;
-            if (payment == null || payment.Method != PaymentMethod.CreditCard)
+            if (payment == null
+                || (payment.Method != PaymentMethod.CashOnDelivery && payment.Method != PaymentMethod.CreditCard))
                 throw new InvalidOperationException("Đơn hàng không thanh toán tiền mặt tại cửa.");
 
             await CompleteShipmentAsync(shipment, shipperId, note ?? "Shipper đã nhận tiền mặt.");
@@ -277,18 +310,50 @@ namespace GlocalCart.API.Services.Implementations
             var shipment = await GetOwnedShipment(shipperId, shipmentId);
 
             if (shipment.Status != ShipmentStatus.Arrived)
-                throw new InvalidOperationException("Chỉ có thể hoàn tất khi đã đến nơi.");
-
-            var payment = shipment.Order.Payment;
-            var isPrepaid = payment != null && payment.Status == PaymentStatus.Completed;
-
-            if (!isPrepaid)
-                throw new InvalidOperationException("Đơn chưa thanh toán đủ. Vui lòng chờ xác nhận thanh toán.");
-
-            if (shipment.BuyerConfirmedReceiptAt == null)
-                throw new InvalidOperationException("Người mua chưa xác nhận nhận hàng.");
+                throw new InvalidOperationException("Chỉ có thể hoàn tất khi đơn đang được giao.");
 
             await CompleteShipmentAsync(shipment, shipperId, note ?? "Giao hàng thành công.");
+
+            return MapToDto(shipment);
+        }
+
+        public async Task<ShipperShipmentDto> ReportDeliveryFailedAsync(
+            int shipperId,
+            int shipmentId,
+            string? reason,
+            string? note)
+        {
+            var shipment = await GetOwnedShipment(shipperId, shipmentId);
+
+            if (shipment.Status != ShipmentStatus.Shipped && shipment.Status != ShipmentStatus.Arrived)
+                throw new InvalidOperationException("Chỉ báo giao thất bại khi đơn đang đi giao hoặc đã đến nơi.");
+
+            var failureReason = string.IsNullOrWhiteSpace(reason) ? "Không giao được" : reason.Trim();
+            shipment.Status = ShipmentStatus.OnHold;
+
+            _db.ShipmentLogs.Add(new ShipmentLog
+            {
+                ShipmentId = shipment.Id,
+                Status = ShipmentStatus.OnHold,
+                Note = string.IsNullOrWhiteSpace(note)
+                    ? $"Giao thất bại: {failureReason}"
+                    : $"Giao thất bại: {failureReason}. Ghi chú: {note}"
+            });
+
+            _db.OrderLogs.Add(new OrderLog
+            {
+                OrderId = shipment.OrderId,
+                Status = shipment.Order.Status,
+                Note = $"Shipper báo giao thất bại: {failureReason}"
+            });
+
+            await _db.SaveChangesAsync();
+
+            await _notif.CreateNotificationAsync(
+                shipment.Order.BuyerId,
+                $"Đơn #{shipment.Order.OrderNumber} giao chưa thành công: {failureReason}.",
+                NotificationAction.General,
+                shipment.OrderId);
 
             return MapToDto(shipment);
         }
@@ -301,14 +366,16 @@ namespace GlocalCart.API.Services.Implementations
             if (shipment.Order.Payment == null)
                 throw new InvalidOperationException("Đơn hàng chưa có thông tin thanh toán.");
 
-            if (shipment.Order.Payment.Method == PaymentMethod.CreditCard)
+            if (shipment.Order.Payment.Method == PaymentMethod.CashOnDelivery
+                || shipment.Order.Payment.Method == PaymentMethod.CreditCard)
             {
                 shipment.Order.Payment.Status = PaymentStatus.Completed;
                 shipment.Order.Payment.UpdatedAt = DateTime.UtcNow;
             }
             else if (shipment.Order.Payment.Status != PaymentStatus.Completed)
             {
-                throw new InvalidOperationException("Đơn chưa thanh toán đủ. Vui lòng chờ xác nhận thanh toán.");
+                shipment.Order.Payment.Status = PaymentStatus.Completed;
+                shipment.Order.Payment.UpdatedAt = DateTime.UtcNow;
             }
 
             shipment.Status = ShipmentStatus.Delivered;
@@ -388,14 +455,18 @@ namespace GlocalCart.API.Services.Implementations
                 .Include(s => s.Order).ThenInclude(o => o.ShippingAddress)
                 .Include(s => s.Order).ThenInclude(o => o.Payment)
                 .Include(s => s.Order).ThenInclude(o => o.OrderItems).ThenInclude(oi => oi.Product)
+                .Include(s => s.Order).ThenInclude(o => o.OrderItems).ThenInclude(oi => oi.Seller)
                 .Include(s => s.Shipper);
+
+        private static decimal EstimateDistanceKm(int orderId) =>
+            Math.Round(2.5m + orderId % 8 * 1.35m, 1);
 
         private static ShipperShipmentDto MapToDto(Shipment s)
         {
             var addr = s.Order.ShippingAddress;
             var payment = s.Order.Payment;
             var isCashCod = payment != null
-                && payment.Method == PaymentMethod.CreditCard
+                && (payment.Method == PaymentMethod.CashOnDelivery || payment.Method == PaymentMethod.CreditCard)
                 && payment.Status == PaymentStatus.Unpaid
                 && s.BuyerConfirmedReceiptAt != null;
             var awaitingTransfer = s.TransferReportedAt != null && s.Status == ShipmentStatus.Arrived;
@@ -419,6 +490,12 @@ namespace GlocalCart.API.Services.Implementations
                 BuyerName = s.Order.Buyer.FullName,
                 BuyerPhone = s.Order.Buyer.PhoneNumber ?? "",
                 DeliveryAddress = $"{addr.StreetAddress}, {addr.City}, {addr.State}, {addr.Country}",
+                PickupAddress = string.Join(", ",
+                    s.Order.OrderItems
+                        .Select(oi => oi.Seller?.FullName)
+                        .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .Distinct()),
+                DistanceKm = EstimateDistanceKm(s.OrderId),
                 ShipperName = s.Shipper?.FullName,
                 ShipperId = s.ShipperId,
                 CanConfirmPickup = s.Status == ShipmentStatus.Accepted && ShipmentTiming.CanConfirmPickup(s.AcceptedAt),

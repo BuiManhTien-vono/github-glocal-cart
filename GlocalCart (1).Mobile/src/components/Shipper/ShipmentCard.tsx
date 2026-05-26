@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { Shipment } from '../../services/api/shipperService';
@@ -18,6 +18,14 @@ interface ShipmentCardProps {
   secondaryActionColor?: string;
 }
 
+const formatCurrency = (amount = 0) =>
+  new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+
+const isCodShipment = (shipment: Shipment) =>
+  shipment.paymentMethod === 'CashOnDelivery'
+  || shipment.paymentMethod === 'CreditCard'
+  || shipment.paymentStatus !== 'Completed';
+
 export const ShipmentCard: React.FC<ShipmentCardProps> = ({
   shipment,
   onPress,
@@ -30,14 +38,21 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
   secondaryActionText,
   secondaryActionColor = colors.secondary,
 }) => {
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
-
-  const isCOD = shipment.paymentStatus !== 'Completed';
+  const isCOD = isCodShipment(shipment);
   const badgeLabel = getShipmentBadgeLabel(shipment.shipmentStatus);
 
+  const openMap = () => {
+    if (!shipment.deliveryAddress) return;
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shipment.deliveryAddress)}`;
+    Linking.openURL(url);
+  };
+
+  const callBuyer = () => {
+    if (shipment.buyerPhone) Linking.openURL(`tel:${shipment.buyerPhone}`);
+  };
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.header}>
         <View style={styles.orderIdContainer}>
           <Ionicons name="cube-outline" size={18} color={colors.textSecondary} />
@@ -50,57 +65,74 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
         </View>
       </View>
 
-      <View style={styles.divider} />
-
-      <View style={styles.body}>
-        <View style={styles.infoRow}>
-          <Ionicons name="person-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.buyerName}>{shipment.buyerName}</Text>
-          <Text style={styles.buyerPhone}> - {shipment.buyerPhone}</Text>
+      <View style={styles.routeBox}>
+        <View style={styles.routePoint}>
+          <Ionicons name="storefront-outline" size={16} color={colors.secondary} />
+          <Text style={styles.routeText} numberOfLines={1}>
+            {shipment.pickupAddress || 'Điểm lấy hàng tại shop'}
+          </Text>
         </View>
-
-        <View style={styles.infoRow}>
-          <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.addressText} numberOfLines={2}>{shipment.deliveryAddress}</Text>
+        <View style={styles.routePoint}>
+          <Ionicons name="location-outline" size={16} color={colors.primary} />
+          <Text style={styles.routeText} numberOfLines={2}>{shipment.deliveryAddress}</Text>
         </View>
-
-        {countdownLabel && (
-          <View style={styles.infoRow}>
-            <Ionicons name="timer-outline" size={16} color={colors.warning} />
-            <Text style={styles.countdownText}>{countdownLabel}</Text>
-          </View>
-        )}
       </View>
 
-      <View style={styles.divider} />
-
-      <View style={styles.footer}>
-        <View>
-          <Text style={styles.amountLabel}>{isCOD ? 'Cần thu tiền (COD)' : 'Tổng giá trị'}</Text>
-          <Text style={[styles.amountValue, isCOD && styles.amountCOD]}>
+      <View style={styles.infoGrid}>
+        <View style={styles.infoItem}>
+          <Text style={styles.infoLabel}>Khoảng cách</Text>
+          <Text style={styles.infoValue}>{shipment.distanceKm?.toFixed?.(1) || '--'} km</Text>
+        </View>
+        <View style={styles.infoItem}>
+          <Text style={styles.infoLabel}>Tiền ship</Text>
+          <Text style={styles.infoValue}>{formatCurrency(shipment.shippingFee)}</Text>
+        </View>
+        <View style={styles.infoItem}>
+          <Text style={styles.infoLabel}>{isCOD ? 'Cần thu COD' : 'Giá trị đơn'}</Text>
+          <Text style={[styles.infoValue, isCOD && styles.amountCOD]}>
             {formatCurrency(shipment.totalAmount)}
           </Text>
         </View>
+      </View>
 
+      <View style={styles.buyerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.buyerName}>{shipment.buyerName || 'Người nhận'}</Text>
+          <Text style={styles.buyerPhone}>{shipment.buyerPhone || 'Chưa có số điện thoại'}</Text>
+        </View>
+        <TouchableOpacity style={styles.iconBtn} onPress={callBuyer}>
+          <Ionicons name="call" size={18} color={colors.success} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconBtn} onPress={openMap}>
+          <Ionicons name="map" size={18} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {countdownLabel && (
+        <View style={styles.countdownRow}>
+          <Ionicons name="timer-outline" size={16} color={colors.warning} />
+          <Text style={styles.countdownText}>{countdownLabel}</Text>
+        </View>
+      )}
+
+      {(onAction || onSecondaryAction) && (
         <View style={styles.actionsContainer}>
           {onSecondaryAction && secondaryActionText && (
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: secondaryActionColor, marginRight: 8 }]}
+              style={[styles.actionBtn, styles.secondaryBtn, { borderColor: secondaryActionColor }]}
               onPress={onSecondaryAction}
             >
-              <Text style={styles.actionBtnText}>{secondaryActionText}</Text>
+              <Text style={[styles.secondaryBtnText, { color: secondaryActionColor }]}>
+                {secondaryActionText}
+              </Text>
             </TouchableOpacity>
-          )}
-          {countdownLabel && !onAction && (
-            <View style={[styles.actionBtn, styles.countdownBtn]}>
-              <Text style={styles.countdownBtnText}>{countdownLabel}</Text>
-            </View>
           )}
           {onAction && actionText && (
             <TouchableOpacity
               style={[
                 styles.actionBtn,
-                { backgroundColor: actionDisabled ? colors.border : actionColor },
+                styles.primaryBtn,
+                { backgroundColor: actionDisabled ? colors.disabled : actionColor },
               ]}
               onPress={onAction}
               disabled={actionDisabled}
@@ -109,7 +141,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      )}
     </TouchableOpacity>
   );
 };
@@ -117,9 +149,9 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -128,27 +160,38 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   orderIdContainer: { flexDirection: 'row', alignItems: 'center' },
-  orderNumber: { fontSize: 16, fontWeight: 'bold', color: colors.text, marginLeft: 8 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  statusText: { fontSize: 12, fontWeight: 'bold' },
+  orderNumber: { fontSize: 16, fontWeight: '800', color: colors.text, marginLeft: 8 },
+  statusBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8 },
+  statusText: { fontSize: 12, fontWeight: '800' },
   statusCOD: { backgroundColor: '#FFF3E0' },
-  statusCODText: { color: '#E65100', fontSize: 12, fontWeight: 'bold' },
+  statusCODText: { color: '#E65100' },
   statusPaid: { backgroundColor: '#E8F5E9' },
-  statusPaidText: { color: '#2E7D32', fontSize: 12, fontWeight: 'bold' },
-  divider: { height: 1, backgroundColor: colors.borderLight, marginBottom: 12 },
-  body: { marginBottom: 12 },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
-  buyerName: { fontSize: 14, fontWeight: '600', color: colors.text, marginLeft: 8 },
-  buyerPhone: { fontSize: 14, color: colors.textSecondary },
-  addressText: { flex: 1, fontSize: 14, color: colors.text, marginLeft: 8, lineHeight: 20 },
-  countdownText: { fontSize: 13, color: colors.warning, marginLeft: 8, fontWeight: '600' },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  amountLabel: { fontSize: 12, color: colors.textSecondary, marginBottom: 2 },
-  amountValue: { fontSize: 18, fontWeight: 'bold', color: colors.text },
+  statusPaidText: { color: '#2E7D32' },
+  routeBox: { backgroundColor: colors.background, borderRadius: 10, padding: 10, gap: 8 },
+  routePoint: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  routeText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 18 },
+  infoGrid: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  infoItem: { flex: 1, backgroundColor: '#FAFAFA', borderRadius: 10, padding: 9 },
+  infoLabel: { color: colors.textSecondary, fontSize: 11, marginBottom: 4 },
+  infoValue: { color: colors.text, fontWeight: '800', fontSize: 12 },
   amountCOD: { color: colors.primary },
-  actionBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  actionBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
-  countdownBtn: { backgroundColor: colors.borderLight },
-  countdownBtnText: { color: colors.textSecondary, fontWeight: '600', fontSize: 12 },
-  actionsContainer: { flexDirection: 'row', alignItems: 'center' },
+  buyerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 8 },
+  buyerName: { fontSize: 14, fontWeight: '700', color: colors.text },
+  buyerPhone: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countdownRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  countdownText: { fontSize: 13, color: colors.warning, fontWeight: '700' },
+  actionsContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  actionBtn: { flex: 1, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  primaryBtn: {},
+  secondaryBtn: { backgroundColor: '#FFF', borderWidth: 1 },
+  actionBtnText: { color: '#FFF', fontWeight: '800', fontSize: 13 },
+  secondaryBtnText: { fontWeight: '800', fontSize: 13 },
 });

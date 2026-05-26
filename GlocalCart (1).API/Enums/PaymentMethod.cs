@@ -1,11 +1,13 @@
 namespace GlocalCart.API.Enums
 {
     /// <summary>
-    /// Phương thức thanh toán (theo UML Class Diagram)
+    /// Phương thức thanh toán.
     /// </summary>
     public enum PaymentMethod
     {
-        CreditCard,             // Thẻ tín dụng
-        ElectronicBankTransfer  // Chuyển khoản ngân hàng
+        CreditCard = 0,
+        ElectronicBankTransfer = 1,
+        CashOnDelivery = 2,
+        Wallet = 3
     }
 }

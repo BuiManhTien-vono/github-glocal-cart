@@ -17,13 +17,15 @@ export interface Shipment {
   shippingFee: number;
   paymentMethod?: string;
   paymentStatus?: string;
-  trackingNumber: string;
-  shipmentMethod: string;
-  shipmentDate: string;
-  estimatedArrival: string;
+  trackingNumber?: string;
+  shipmentMethod?: string;
+  shipmentDate?: string;
+  estimatedArrival?: string;
   buyerName: string;
   buyerPhone: string;
   deliveryAddress: string;
+  pickupAddress?: string;
+  distanceKm?: number;
   assignedAt?: string;
   deliveredAt?: string;
   shipperId?: number;
@@ -36,6 +38,23 @@ export interface Shipment {
   buyerConfirmedReceipt?: boolean;
   awaitingCash?: boolean;
   awaitingTransferConfirm?: boolean;
+}
+
+export interface ShipperStats {
+  todayCompleted: number;
+  todayIncome: number;
+  monthCompleted: number;
+  monthIncome: number;
+  activeShipments: number;
+  pendingCodAmount: number;
+  successRate: number;
+  rating: number;
+}
+
+export interface ShipperActionPayload {
+  note?: string;
+  failureReason?: string;
+  proofNote?: string;
 }
 
 export const shipperService = {
@@ -51,27 +70,31 @@ export const shipperService = {
     return apiClient.get(`/shipper/shipments/completed?page=${page}&pageSize=${pageSize}`);
   },
 
+  getStats: async (): Promise<ShipperStats> => {
+    return apiClient.get('/shipper/stats');
+  },
+
   getShipmentDetail: async (id: number) => {
     return apiClient.get(`/shipper/shipments/${id}`);
   },
 
-  acceptShipment: async (id: number, note: string = '') => {
+  acceptShipment: async (id: number, note = '') => {
     return apiClient.post(`/shipper/shipments/${id}/accept`, { note });
   },
 
-  confirmPickup: async (id: number, note: string = '') => {
+  confirmPickup: async (id: number, note = '') => {
     return apiClient.post(`/shipper/shipments/${id}/confirm-pickup`, { note });
   },
 
-  confirmArrival: async (id: number, note: string = '') => {
+  confirmArrival: async (id: number, note = '') => {
     return apiClient.post(`/shipper/shipments/${id}/confirm-arrival`, { note });
   },
 
-  confirmCashReceived: async (id: number, note: string = '') => {
+  confirmCashReceived: async (id: number, note = '') => {
     return apiClient.post(`/shipper/shipments/${id}/confirm-cash-received`, { note });
   },
 
-  confirmTransferReceived: async (id: number, note: string = '') => {
+  confirmTransferReceived: async (id: number, note = '') => {
     return apiClient.post(`/shipper/shipments/${id}/confirm-transfer-received`, { note });
   },
 
@@ -79,7 +102,12 @@ export const shipperService = {
     return apiClient.post(`/shipper/shipments/${id}/request-payment`);
   },
 
-  deliverShipment: async (id: number, note: string = '') => {
-    return apiClient.post(`/shipper/shipments/${id}/deliver`, { note });
+  deliverShipment: async (id: number, payload: string | ShipperActionPayload = '') => {
+    const body = typeof payload === 'string' ? { note: payload } : payload;
+    return apiClient.post(`/shipper/shipments/${id}/deliver`, body);
+  },
+
+  reportDeliveryFailed: async (id: number, payload: ShipperActionPayload) => {
+    return apiClient.post(`/shipper/shipments/${id}/delivery-failed`, payload);
   },
 };

@@ -1,40 +1,63 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl, Text, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { colors } from '../../theme/colors';
-import { ShipmentCard } from '../../components/Shipper/ShipmentCard';
-import { Shipment, shipperService } from '../../services/api/shipperService';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  RefreshControl,
+  Text,
+  Alert,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import { colors } from "../../theme/colors";
+import { ShipmentCard } from "../../components/Shipper/ShipmentCard";
+import { Shipment, shipperService } from "../../services/api/shipperService";
+
+const POLL_INTERVAL_MS = 15000;
+const PAGE_SIZE = 20;
+
+function getCountdownLabel(shipment: Shipment) {
+  if (shipment.shipmentStatus === "Accepted" && shipment.pickupCountdownSeconds) {
+    return `Có thể xác nhận lấy hàng sau ${shipment.pickupCountdownSeconds}s`;
+  }
+  if (shipment.shipmentStatus === "Shipped" && shipment.arrivalCountdownSeconds) {
+    return `Có thể xác nhận đến nơi sau ${shipment.arrivalCountdownSeconds}s`;
+  }
+  return undefined;
+}
 
 function getShipperActions(shipment: Shipment) {
-  if (shipment.shipmentStatus === 'Accepted') {
-    if (shipment.canConfirmPickup) {
-      return { actionText: 'Đã lấy hàng', onAction: 'pickup' as const };
-    }
+  if (shipment.shipmentStatus === "Accepted") {
     return {
-      countdownLabel: `Chờ lấy hàng (${shipment.pickupCountdownSeconds ?? 0}s)`,
+      actionText: shipment.canConfirmPickup ? "Đã lấy hàng" : "Chờ lấy hàng",
+      onAction: "pickup" as const,
+      disabled: !shipment.canConfirmPickup,
     };
   }
 
-  if (shipment.shipmentStatus === 'Shipped') {
-    if (shipment.canConfirmArrival) {
-      return { actionText: 'Đã đến nơi', onAction: 'arrival' as const };
-    }
+  if (shipment.shipmentStatus === "Shipped") {
     return {
-      countdownLabel: `Đang giao (${shipment.arrivalCountdownSeconds ?? 0}s)`,
+      actionText: shipment.canConfirmArrival ? "Đã đến nơi" : "Đang di chuyển",
+      onAction: "arrival" as const,
+      disabled: !shipment.canConfirmArrival,
     };
   }
 
-  if (shipment.shipmentStatus === 'Arrived') {
+  if (shipment.shipmentStatus === "Arrived") {
     if (shipment.awaitingCash) {
-      return { actionText: 'Đã nhận tiền', onAction: 'cash' as const };
+      return { actionText: "Đã nhận tiền", onAction: "cash" as const };
     }
     if (shipment.awaitingTransferConfirm) {
-      return { actionText: 'Đã nhận chuyển khoản', onAction: 'transfer' as const };
+      return { actionText: "Đã nhận chuyển khoản", onAction: "transfer" as const };
     }
-    if (shipment.paymentStatus === 'Completed' && shipment.buyerConfirmedReceipt) {
-      return { actionText: 'Hoàn thành đơn', onAction: 'deliver' as const };
+    if (shipment.paymentStatus === "Completed" && shipment.buyerConfirmedReceipt) {
+      return { actionText: "Hoàn thành đơn", onAction: "deliver" as const };
     }
+    return { actionText: "Nhắc thanh toán", onAction: "requestPayment" as const };
+  }
+
+  if (shipment.shipmentStatus === "OnHold") {
+    return { actionText: "Đang xử lý sự cố", onAction: "noop" as const, disabled: true };
   }
 
   return {};
@@ -43,85 +66,129 @@ function getShipperActions(shipment: Shipment) {
 export default function ShipperDeliveringScreen() {
   const [deliveringShipments, setDeliveringShipments] = useState<Shipment[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [submittingId, setSubmittingId] = useState<number | null>(null);
   const navigation = useNavigation<any>();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (nextPage = 1, replace = true) => {
     try {
-      const response: any = await shipperService.getMyShipments();
-      const allItems: Shipment[] = response?.items || [];
-      // Đơn Accepted (chờ lấy hàng) đã hiển thị ở tab "Chờ lấy hàng", loại khỏi tab này
-      setDeliveringShipments(allItems.filter(s => s.shipmentStatus !== 'Accepted'));
+      const response: any = await shipperService.getMyShipments(nextPage, PAGE_SIZE);
+      const items: Shipment[] = response?.items || [];
+      setDeliveringShipments((current) => (replace ? items : [...current, ...items]));
+      setPage(nextPage);
+      setHasMore(items.length === PAGE_SIZE && (response?.totalCount || 0) > nextPage * PAGE_SIZE);
     } catch (e) {
-      console.log('Lỗi tải danh sách', e);
+      console.log("Lỗi tải danh sách", e);
     } finally {
       setRefreshing(false);
+      setLoadingMore(false);
     }
   }, []);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
+    const unsubscribe = navigation.addListener("focus", () => {
       setRefreshing(true);
-      loadData();
+      loadData(1, true);
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(() => loadData(1, true), POLL_INTERVAL_MS);
     });
     return unsubscribe;
   }, [navigation, loadData]);
 
   useEffect(() => {
-    const hasCountdown = deliveringShipments.some(
-      s => s.shipmentStatus === 'Shipped' && !s.canConfirmArrival
-    );
+    const unsubscribe = navigation.addListener("blur", () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    });
+    return unsubscribe;
+  }, [navigation]);
 
-    if (hasCountdown) {
-      pollRef.current = setInterval(() => loadData(), 2000);
-    } else if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [deliveringShipments, loadData]);
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+  }, []);
 
   const runAction = async (shipment: Shipment, type: string) => {
+    if (submittingId || type === "noop") return;
+    setSubmittingId(shipment.shipmentId);
     try {
+      let message = "";
       switch (type) {
-        case 'pickup':
+        case "pickup":
           await shipperService.confirmPickup(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã lấy hàng. Đơn chuyển sang chờ giao hàng.');
+          message = "Đã lấy hàng. Đơn chuyển sang đang giao.";
           break;
-        case 'arrival':
+        case "arrival":
           await shipperService.confirmArrival(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã đến nơi. Người mua sẽ nhận thông báo xác nhận nhận hàng.');
+          message = "Đã đến nơi. Người mua sẽ nhận thông báo xác nhận nhận hàng.";
           break;
-        case 'cash':
+        case "cash":
           await shipperService.confirmCashReceived(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã xác nhận nhận tiền mặt. Đơn hoàn tất.');
+          message = "Đã xác nhận nhận tiền mặt. Đơn hoàn tất.";
           break;
-        case 'transfer':
+        case "transfer":
           await shipperService.confirmTransferReceived(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã xác nhận nhận chuyển khoản. Đơn hoàn tất.');
+          message = "Đã xác nhận nhận chuyển khoản. Đơn hoàn tất.";
           break;
-        case 'deliver':
-          await shipperService.deliverShipment(shipment.shipmentId);
-          Alert.alert('Thành công', 'Đã hoàn thành đơn hàng.');
+        case "requestPayment":
+          await shipperService.requestPayment(shipment.shipmentId);
+          message = "Đã gửi nhắc thanh toán/xác nhận nhận hàng cho người mua.";
+          break;
+        case "deliver":
+          await shipperService.deliverShipment(shipment.shipmentId, {
+            note: "Giao hàng thành công",
+            proofNote: "Shipper xác nhận đã giao trực tiếp cho người nhận.",
+          });
+          message = "Đã hoàn thành đơn hàng.";
           break;
       }
-      loadData();
+      await loadData(1, true);
+      Alert.alert("Thành công", message);
     } catch (e: any) {
-      Alert.alert('Lỗi', e.message || 'Thao tác thất bại');
+      Alert.alert("Lỗi", e.message || "Thao tác thất bại");
+    } finally {
+      setSubmittingId(null);
     }
   };
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>Hiện không có đơn đang xử lý.</Text>
-    </View>
-  );
+  const reportFailure = (shipment: Shipment) => {
+    const submit = async (reason: string) => {
+      if (submittingId) return;
+      setSubmittingId(shipment.shipmentId);
+      try {
+        await shipperService.reportDeliveryFailed(shipment.shipmentId, {
+          failureReason: reason,
+          note: "Shipper báo từ màn đang giao",
+        });
+        await loadData(1, true);
+        Alert.alert("Đã ghi nhận", "Đơn đã chuyển sang trạng thái cần xử lý.");
+      } catch (e: any) {
+        Alert.alert("Lỗi", e.message || "Không thể báo giao thất bại");
+      } finally {
+        setSubmittingId(null);
+      }
+    };
+
+    Alert.alert("Báo giao thất bại", "Chọn lý do không giao được đơn này.", [
+      { text: "Khách không nghe máy", onPress: () => submit("Khách không nghe máy") },
+      { text: "Sai địa chỉ", onPress: () => submit("Sai địa chỉ") },
+      { text: "Khách từ chối nhận", style: "destructive", onPress: () => submit("Khách từ chối nhận") },
+      { text: "Hủy", style: "cancel" },
+    ]);
+  };
+
+  const loadMore = () => {
+    if (!hasMore || loadingMore || refreshing) return;
+    setLoadingMore(true);
+    loadData(page + 1, false);
+  };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Đang giao</Text>
         <Text style={styles.headerSubtitle}>Đang xử lý {deliveringShipments.length} đơn</Text>
@@ -129,16 +196,16 @@ export default function ShipperDeliveringScreen() {
 
       <FlatList
         data={deliveringShipments}
-        keyExtractor={item => item.shipmentId.toString()}
+        keyExtractor={(item) => item.shipmentId.toString()}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => {
           const actions = getShipperActions(item);
           return (
             <ShipmentCard
               shipment={item}
-              countdownLabel={actions.countdownLabel}
+              countdownLabel={getCountdownLabel(item)}
               onPress={() =>
-                navigation.navigate('ShipperShipmentDetail', {
+                navigation.navigate("ShipperShipmentDetail", {
                   shipmentId: item.shipmentId,
                   shipment: item,
                 })
@@ -146,7 +213,14 @@ export default function ShipperDeliveringScreen() {
               onAction={actions.onAction ? () => runAction(item, actions.onAction!) : undefined}
               actionText={actions.actionText}
               actionColor={colors.success}
-              actionDisabled={!!actions.countdownLabel}
+              actionDisabled={actions.disabled || submittingId === item.shipmentId}
+              onSecondaryAction={
+                item.shipmentStatus === "Shipped" || item.shipmentStatus === "Arrived"
+                  ? () => reportFailure(item)
+                  : undefined
+              }
+              secondaryActionText="Giao thất bại"
+              secondaryActionColor={colors.danger}
             />
           );
         }}
@@ -155,28 +229,34 @@ export default function ShipperDeliveringScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              loadData();
+              loadData(1, true);
             }}
             colors={[colors.primary]}
           />
         }
-        ListEmptyComponent={renderEmpty}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.25}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Hiện không có đơn đang xử lý.</Text>
+          </View>
+        }
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  container: { flex: 1, backgroundColor: "#F3F4F6" },
   header: {
     padding: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: "#FFF",
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: colors.text },
+  headerTitle: { fontSize: 22, fontWeight: "800", color: colors.text },
   headerSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
-  listContent: { padding: 16, paddingBottom: 100 },
-  emptyContainer: { padding: 32, alignItems: 'center' },
-  emptyText: { fontSize: 16, color: colors.textSecondary },
+  listContent: { padding: 16, paddingBottom: 100, flexGrow: 1 },
+  emptyContainer: { flex: 1, padding: 32, alignItems: "center", justifyContent: "center" },
+  emptyText: { fontSize: 16, color: colors.textSecondary, textAlign: "center" },
 });

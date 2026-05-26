@@ -18,6 +18,8 @@ namespace GlocalCart.API.DTOs.Shipper
         public string BuyerName { get; set; } = string.Empty;
         public string BuyerPhone { get; set; } = string.Empty;
         public string DeliveryAddress { get; set; } = string.Empty;
+        public string PickupAddress { get; set; } = string.Empty;
+        public decimal DistanceKm { get; set; }
         public string? ShipperName { get; set; }
         public int? ShipperId { get; set; }
         public decimal ShippingFee { get; set; }
@@ -34,6 +36,20 @@ namespace GlocalCart.API.DTOs.Shipper
     public class ShipperActionDto
     {
         public string? Note { get; set; }
+        public string? FailureReason { get; set; }
+        public string? ProofNote { get; set; }
+    }
+
+    public class ShipperStatsDto
+    {
+        public int TodayCompleted { get; set; }
+        public decimal TodayIncome { get; set; }
+        public int MonthCompleted { get; set; }
+        public decimal MonthIncome { get; set; }
+        public int ActiveShipments { get; set; }
+        public decimal PendingCodAmount { get; set; }
+        public decimal SuccessRate { get; set; }
+        public decimal Rating { get; set; } = 4.8m;
     }
 
     public class ShipperOrderItemDto

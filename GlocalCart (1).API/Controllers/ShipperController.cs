@@ -8,7 +8,7 @@ using GlocalCart.API.Services.Interfaces;
 namespace GlocalCart.API.Controllers
 {
     /// <summary>
-    /// API dành cho nhân viên giao hàng (Shipper).
+    /// API dành cho nhân viên giao hàng.
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
@@ -32,6 +32,10 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> GetCompleted([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
             Ok(ApiResponse.Ok(await _shipperService.GetCompletedShipmentsAsync(UserId, page, pageSize)));
 
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetStats() =>
+            Ok(ApiResponse.Ok(await _shipperService.GetStatsAsync(UserId)));
+
         [HttpGet("shipments/{id}")]
         public async Task<IActionResult> GetDetail(int id) =>
             Ok(ApiResponse.Ok(await _shipperService.GetShipmentDetailAsync(UserId, id)));
@@ -40,7 +44,7 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> Accept(int id, [FromBody] ShipperActionDto? dto) =>
             Ok(ApiResponse.Ok(
                 await _shipperService.AcceptShipmentAsync(UserId, id, dto?.Note),
-                "Đã nhận đơn. Vui lòng đợi 30 giây rồi xác nhận đã lấy hàng."));
+                "Đã nhận đơn. Vui lòng xác nhận đã lấy hàng sau khi tới shop."));
 
         [HttpPost("shipments/{id}/confirm-pickup")]
         public async Task<IActionResult> ConfirmPickup(int id, [FromBody] ShipperActionDto? dto) =>
@@ -75,7 +79,18 @@ namespace GlocalCart.API.Controllers
         [HttpPost("shipments/{id}/deliver")]
         public async Task<IActionResult> Deliver(int id, [FromBody] ShipperActionDto? dto) =>
             Ok(ApiResponse.Ok(
-                await _shipperService.ConfirmDeliveredAsync(UserId, id, dto?.Note),
+                await _shipperService.ConfirmDeliveredAsync(
+                    UserId,
+                    id,
+                    string.IsNullOrWhiteSpace(dto?.ProofNote)
+                        ? dto?.Note
+                        : $"{dto?.Note} | Bằng chứng: {dto?.ProofNote}"),
                 "Đã xác nhận giao hàng thành công."));
+
+        [HttpPost("shipments/{id}/delivery-failed")]
+        public async Task<IActionResult> DeliveryFailed(int id, [FromBody] ShipperActionDto? dto) =>
+            Ok(ApiResponse.Ok(
+                await _shipperService.ReportDeliveryFailedAsync(UserId, id, dto?.FailureReason, dto?.Note),
+                "Đã ghi nhận giao hàng thất bại."));
     }
 }
