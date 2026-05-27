@@ -561,29 +561,33 @@ export default function AccountSettingsScreen({ navigation }: any) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-        {sections.map((section, idx) => (
-          <View key={idx} style={s.section}>
-            <Text style={s.sectionTitle}>{section.title}</Text>
-            <View style={s.itemsContainer}>
-              {section.items.map((item: any, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={[s.item, i === section.items.length - 1 && { borderBottomWidth: 0 }]}
-                  onPress={() => handleItem(item.label, item.screen)}
-                >
-                  <View style={[s.itemIcon, { backgroundColor: (item.color || colors.primary) + '15' }]}>
-                    <Ionicons name={item.icon as any} size={18} color={item.color || colors.primary} />
-                  </View>
-                  <View style={s.itemLeft}>
-                    <Text style={s.itemLabel}>{item.label}</Text>
-                    {item.sub && <Text style={s.itemSub}>{item.sub}</Text>}
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color="#ccc" />
-                </TouchableOpacity>
-              ))}
+        {sections.filter((_, idx) => idx !== 1).map((section, idx) => {
+          const visibleItems = section.items.filter((item: any) => item.icon !== 'trash-outline');
+
+          return (
+            <View key={idx} style={s.section}>
+              <Text style={s.sectionTitle}>{section.title}</Text>
+              <View style={s.itemsContainer}>
+                {visibleItems.map((item: any, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[s.item, i === visibleItems.length - 1 && { borderBottomWidth: 0 }]}
+                    onPress={() => handleItem(item.label, item.screen)}
+                  >
+                    <View style={[s.itemIcon, { backgroundColor: (item.color || colors.primary) + '15' }]}>
+                      <Ionicons name={item.icon as any} size={18} color={item.color || colors.primary} />
+                    </View>
+                    <View style={s.itemLeft}>
+                      <Text style={s.itemLabel}>{item.label}</Text>
+                      {item.sub && <Text style={s.itemSub}>{item.sub}</Text>}
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#ccc" />
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
 
         {/* Đăng xuất */}
         <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>

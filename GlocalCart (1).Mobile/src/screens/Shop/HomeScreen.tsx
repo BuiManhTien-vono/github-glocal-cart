@@ -1,39 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, RefreshControl, Platform, useWindowDimensions } from 'react-native';
+import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import apiClient from '../../services/api/apiClient';
 import { colors } from '../../theme/colors';
 import { Loading } from '../../components/common/Loading';
 
 // Import shop sub-components
 import { HomeHeader } from '../../components/shop/HomeHeader';
-import { HomeBanner } from '../../components/shop/HomeBanner';
-import { HomeFeatures } from '../../components/shop/HomeFeatures';
-import { HomeCategories } from '../../components/shop/HomeCategories';
 import { FlashSale } from '../../components/shop/FlashSale';
 import { DailyDiscover } from '../../components/shop/DailyDiscover';
 
-const isWeb = Platform.OS === 'web';
-
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
-  const isLargeScreen = windowWidth > 768;
 
-  const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     try {
-      // Parallel data fetching
-      const [catRes, prodRes] = await Promise.all([
-        apiClient.get('/categories') as any,
-        apiClient.get('/products') as any,
-      ]);
-      setCategories(catRes?.items || catRes || []);
+      const prodRes = await apiClient.get('/products') as any;
       setProducts(prodRes?.items || prodRes || []);
     } catch (error) {
       console.warn("Home fetch error:", error);
@@ -68,13 +54,7 @@ export default function HomeScreen() {
             }
             showsVerticalScrollIndicator={false}
           >
-            <HomeBanner />
-            <HomeFeatures />
-            <HomeCategories data={categories} />
-
-            {/* Lấy 5 sản phẩm đầu tiên cho FlashSale */}
             <FlashSale data={products.slice(0, 5)} />
-
             <DailyDiscover data={products} />
           </ScrollView>
         )}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, Animated, Modal, TextInput, Dimensions, Platform,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ export default function ProfileScreen({ navigation }: any) {
   const { user, updateUser, logout, isLoggedIn, setGuestMode } = useAuth();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [supportModal, setSupportModal] = useState<'help' | 'contact' | 'blog' | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -132,7 +134,33 @@ export default function ProfileScreen({ navigation }: any) {
       bg: '#ECFDF5',
       requireAuth: true,
     }] : []),
-    { icon: 'chatbubble-ellipses-outline', label: 'Hỗ Trợ', screen: 'ChatList', color: '#8B5CF6', bg: '#F5F3FF', requireAuth: true },
+  ];
+
+  const supportItems = [
+    {
+      icon: 'help-circle-outline',
+      label: 'Trung tâm trợ giúp',
+      sub: 'FAQ mua hàng, thanh toán, giao nhận',
+      color: '#2563EB',
+      bg: '#EFF6FF',
+      modal: 'help' as const,
+    },
+    {
+      icon: 'headset-outline',
+      label: 'Chăm sóc khách hàng',
+      sub: 'Chat, email hoặc hotline hỗ trợ',
+      color: '#16A34A',
+      bg: '#ECFDF5',
+      modal: 'contact' as const,
+    },
+    {
+      icon: 'newspaper-outline',
+      label: 'GlocalCart Blog',
+      sub: 'Mẹo mua sắm và tin khuyến mãi',
+      color: '#F59E0B',
+      bg: '#FFFBEB',
+      modal: 'blog' as const,
+    },
   ];
 
   // Admin menu
@@ -341,27 +369,120 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* ===== SUPPORT MENU ===== */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Hỗ trợ</Text>
-          {[
-            { icon: 'help-circle-outline', label: 'Trung tâm trợ giúp', color: '#555' },
-            { icon: 'headset-outline', label: 'Chăm sóc khách hàng', color: '#555' },
-            { icon: 'newspaper-outline', label: 'GlocalCart Blog', color: '#555' },
-          ].map((item, i) => (
+          {supportItems.map((item, i) => (
             <TouchableOpacity
               key={i}
-              style={[styles.menuItem, i === 0 && { borderTopWidth: 0 }]}
-              activeOpacity={0.6}
-              onPress={() => handleSupportPress(item.label)}
+              style={[styles.supportItem, i === 0 && { marginTop: 8 }]}
+              activeOpacity={0.7}
+              onPress={() => setSupportModal(item.modal)}
             >
-              <Ionicons name={item.icon as any} size={22} color={item.color} />
-              <Text style={styles.menuLabel}>{item.label}</Text>
+              <View style={[styles.supportIconWrap, { backgroundColor: item.bg }]}>
+                <Ionicons name={item.icon as any} size={22} color={item.color} />
+              </View>
+              <View style={styles.supportTextWrap}>
+                <Text style={styles.supportLabel}>{item.label}</Text>
+                <Text style={styles.supportSub}>{item.sub}</Text>
+              </View>
               <Ionicons name="chevron-forward" size={16} color="#ccc" />
             </TouchableOpacity>
           ))}
         </View>
+        <Modal visible={supportModal !== null} transparent animationType="slide" onRequestClose={() => setSupportModal(null)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.supportModalContent}>
+              <View style={styles.modalHandle} />
+              <View style={styles.supportModalHeader}>
+                <View style={styles.supportModalIcon}>
+                  <Ionicons
+                    name={supportModal === 'contact' ? 'headset-outline' : supportModal === 'blog' ? 'newspaper-outline' : 'help-circle-outline'}
+                    size={24}
+                    color={colors.primary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.supportModalTitle}>
+                    {supportModal === 'contact' ? 'Chăm sóc khách hàng' : supportModal === 'blog' ? 'GlocalCart Blog' : 'Trung tâm trợ giúp'}
+                  </Text>
+                  <Text style={styles.supportModalSubtitle}>
+                    {supportModal === 'contact' ? 'Chọn kênh hỗ trợ phù hợp với bạn' : supportModal === 'blog' ? 'Tin mới và mẹo mua sắm' : 'Các câu hỏi thường gặp'}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setSupportModal(null)} style={styles.supportCloseBtn}>
+                  <Ionicons name="close" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
 
+              {supportModal === 'help' && (
+                <View style={styles.supportContent}>
+                  {[
+                    ['Làm thế nào để mua hàng?', 'Chọn sản phẩm, thêm vào giỏ hàng, kiểm tra địa chỉ và thanh toán.'],
+                    ['Thời gian giao hàng bao lâu?', 'Thông thường 1-3 ngày làm việc tùy khu vực nhận hàng.'],
+                    ['Có những phương thức thanh toán nào?', 'Hỗ trợ chuyển khoản QR ngân hàng và thanh toán khi nhận hàng COD.'],
+                    ['Đổi trả sản phẩm như thế nào?', 'Hỗ trợ đổi trả trong 7 ngày nếu sản phẩm lỗi hoặc không đúng mô tả.'],
+                  ].map(([title, body]) => (
+                    <View key={title} style={styles.faqItem}>
+                      <Text style={styles.faqTitle}>{title}</Text>
+                      <Text style={styles.faqBody}>{body}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {supportModal === 'contact' && (
+                <View style={styles.supportContent}>
+                  <TouchableOpacity style={styles.contactAction} onPress={() => {
+                    if (!isLoggedIn) {
+                      Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để chat với CSKH.');
+                      return;
+                    }
+                    setSupportModal(null);
+                    navigation.navigate('ChatList');
+                  }}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={22} color="#2563EB" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.contactActionTitle}>Chat với hỗ trợ viên</Text>
+                      <Text style={styles.contactActionSub}>Phản hồi trực tiếp trong ứng dụng</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.contactAction} onPress={() => Linking.openURL('mailto:support@glocalcart.vn')}>
+                    <Ionicons name="mail-outline" size={22} color="#16A34A" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.contactActionTitle}>support@glocalcart.vn</Text>
+                      <Text style={styles.contactActionSub}>Gửi mô tả vấn đề và mã đơn hàng nếu có</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.contactAction} onPress={() => Linking.openURL('tel:19008888')}>
+                    <Ionicons name="call-outline" size={22} color="#F59E0B" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.contactActionTitle}>1900 8888</Text>
+                      <Text style={styles.contactActionSub}>08:00 - 22:00 hằng ngày</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {supportModal === 'blog' && (
+                <View style={styles.supportContent}>
+                  {[
+                    ['Mẹo săn voucher hiệu quả', 'Cách kết hợp mã giảm giá và freeship khi mua sắm.'],
+                    ['Bí quyết chọn đặc sản địa phương', 'Nhận biết sản phẩm uy tín từ shop chất lượng.'],
+                    ['Cẩm nang bán hàng online', 'Gợi ý tối ưu gian hàng cho người bán mới.'],
+                  ].map(([title, body]) => (
+                    <View key={title} style={styles.blogItem}>
+                      <View style={styles.blogDot} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.faqTitle}>{title}</Text>
+                        <Text style={styles.faqBody}>{body}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
       </Animated.ScrollView>
 
     </View>
@@ -629,6 +750,135 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   // ── Menu List ──
+  supportItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  supportIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supportTextWrap: {
+    flex: 1,
+  },
+  supportLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  supportSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  supportModalContent: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 28,
+    maxHeight: '82%',
+  },
+  supportModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  supportModalIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: colors.primary + '12',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supportModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  supportModalSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  supportCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supportContent: {
+    gap: 10,
+  },
+  faqItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  faqTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  faqBody: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginTop: 5,
+  },
+  contactAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  contactActionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  contactActionSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 3,
+  },
+  blogItem: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  blogDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#F59E0B',
+    marginTop: 6,
+  },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
