@@ -9,6 +9,7 @@ interface FollowedShop {
   name: string;
   logoUrl?: string;
   productCount?: number;
+  followedAt?: string;
 }
 
 interface FollowShopState {
@@ -49,7 +50,10 @@ export const useFollowShopStore = create<FollowShopState>((set, get) => ({
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     try {
       await apiClient.post(`/shops/${shop.id}/follow`);
-    } catch {}
+      await get().loadFollowedShops();
+    } catch (error) {
+      console.log('followShop sync failed:', error);
+    }
   },
 
   unfollowShop: async (shopId: number) => {
@@ -57,8 +61,15 @@ export const useFollowShopStore = create<FollowShopState>((set, get) => ({
     set({ followedShops: updated });
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     try {
-      await apiClient.delete(`/shops/${shopId}/follow`);
-    } catch {}
+      try {
+        await apiClient.delete(`/shops/${shopId}/follow`);
+      } catch {
+        await apiClient.post(`/shops/${shopId}/unfollow`);
+      }
+      await get().loadFollowedShops();
+    } catch (error) {
+      console.log('unfollowShop sync failed:', error);
+    }
   },
 
   toggleFollow: async (shop: FollowedShop) => {

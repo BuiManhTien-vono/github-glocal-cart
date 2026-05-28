@@ -17,8 +17,9 @@ namespace GlocalCart.API.Services.Implementations
     {
         private const int MaxAvailablePickupDistanceMeters = 10_000;
         private static readonly TimeSpan ShipperLocationFreshness = TimeSpan.FromMinutes(15);
-        private static readonly GeoPoint FallbackShopCoordinate = new(10.7743, 106.7017);
+        private static readonly GeoPoint FallbackShopCoordinate = new(21.0287, 105.8521);
         private readonly record struct GeoPoint(double Latitude, double Longitude);
+        private readonly record struct OrderLine(Product Product, int Quantity, decimal UnitPrice);
 
         private readonly AppDbContext _db;
         private readonly INotificationService _notif;
@@ -41,31 +42,69 @@ namespace GlocalCart.API.Services.Implementations
         {
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
-            // Lấy giỏ hàng
-            var cartItems = await _db.CartItems
-                .Include(ci => ci.Product)
-                .Where(ci => ci.UserId == buyerId)
-                .ToListAsync();
+            var requestedItems = dto.Items?
+                .Where(i => i.ProductId > 0 && i.Quantity > 0)
+                .GroupBy(i => i.ProductId)
+                .Select(g => new CreateOrderItemDto
+                {
+                    ProductId = g.Key,
+                    Quantity = g.Sum(i => i.Quantity)
+                })
+                .ToList();
 
-            if (!cartItems.Any())
-                throw new InvalidOperationException("Giỏ hàng trống.");
+            var cartItemsToRemove = new List<CartItem>();
+            List<OrderLine> orderLines;
 
-            var sellerIdsInCart = cartItems.Select(ci => ci.Product.SellerId).Distinct().ToList();
-            if (sellerIdsInCart.Count > 1)
-                throw new InvalidOperationException("Hiện tại mỗi đơn hàng chỉ hỗ trợ sản phẩm từ một shop. Vui lòng tách giỏ hàng theo từng shop để đặt hàng.");
+            if (requestedItems?.Any() == true)
+            {
+                var productIds = requestedItems.Select(i => i.ProductId).ToList();
+                var products = await _db.Products
+                    .Where(p => productIds.Contains(p.Id))
+                    .ToListAsync();
 
-            // Kiểm tra địa chỉ
+                if (products.Count != productIds.Count)
+                    throw new KeyNotFoundException("Mot so san pham khong ton tai.");
+
+                var quantityByProductId = requestedItems.ToDictionary(i => i.ProductId, i => i.Quantity);
+                orderLines = products
+                    .Select(p => new OrderLine(p, quantityByProductId[p.Id], p.Price))
+                    .ToList();
+
+                if (!dto.IsBuyNow)
+                {
+                    cartItemsToRemove = await _db.CartItems
+                        .Where(ci => ci.UserId == buyerId && productIds.Contains(ci.ProductId))
+                        .ToListAsync();
+                }
+            }
+            else
+            {
+                var cartItems = await _db.CartItems
+                    .Include(ci => ci.Product)
+                    .Where(ci => ci.UserId == buyerId)
+                    .ToListAsync();
+
+                if (!cartItems.Any())
+                    throw new InvalidOperationException("Gio hang trong.");
+
+                orderLines = cartItems
+                    .Select(ci => new OrderLine(ci.Product, ci.Quantity, ci.PriceSnapshot))
+                    .ToList();
+                cartItemsToRemove = cartItems;
+            }
+
+            var sellerIdsInOrder = orderLines.Select(line => line.Product.SellerId).Distinct().ToList();
+
             var address = await _db.UserAddresses
                 .FirstOrDefaultAsync(a => a.Id == dto.ShippingAddressId && a.UserId == buyerId)
-                ?? throw new KeyNotFoundException("Địa chỉ giao hàng không tồn tại.");
+                ?? throw new KeyNotFoundException("Dia chi giao hang khong ton tai.");
 
-            // Kiểm tra tồn kho cho tất cả sản phẩm
-            foreach (var item in cartItems)
+            foreach (var line in orderLines)
             {
-                if (item.Quantity > item.Product.AvailableItemCount)
-                    throw new InvalidOperationException($"Sản phẩm '{item.Product.Name}' chỉ còn {item.Product.AvailableItemCount} đơn vị.");
-                if (!item.Product.IsActive || item.Product.IsLocked)
-                    throw new InvalidOperationException($"Sản phẩm '{item.Product.Name}' không khả dụng.");
+                if (line.Quantity > line.Product.AvailableItemCount)
+                    throw new InvalidOperationException($"San pham '{line.Product.Name}' chi con {line.Product.AvailableItemCount} don vi.");
+                if (!line.Product.IsActive || line.Product.IsLocked)
+                    throw new InvalidOperationException($"San pham '{line.Product.Name}' khong kha dung.");
             }
 
             var order = new Order
@@ -75,27 +114,25 @@ namespace GlocalCart.API.Services.Implementations
                 ShippingAddressId = dto.ShippingAddressId,
                 Status = OrderStatus.Pending,
                 ShippingFee = 30000m,
-                TotalAmount = cartItems.Sum(ci => ci.PriceSnapshot * ci.Quantity) + 30000m,
+                TotalAmount = orderLines.Sum(line => line.UnitPrice * line.Quantity) + 30000m,
                 Note = dto.Note
             };
 
             _db.Orders.Add(order);
             await _db.SaveChangesAsync();
 
-            // Tạo OrderItems + trừ kho
-            foreach (var ci in cartItems)
+            foreach (var line in orderLines)
             {
                 _db.OrderItems.Add(new OrderItem
                 {
                     OrderId = order.Id,
-                    ProductId = ci.ProductId,
-                    SellerId = ci.Product.SellerId,
-                    Quantity = ci.Quantity,
-                    UnitPrice = ci.PriceSnapshot
+                    ProductId = line.Product.Id,
+                    SellerId = line.Product.SellerId,
+                    Quantity = line.Quantity,
+                    UnitPrice = line.UnitPrice
                 });
 
-                // Trừ tồn kho
-                ci.Product.AvailableItemCount -= ci.Quantity;
+                line.Product.AvailableItemCount -= line.Quantity;
             }
 
             var isBankTransfer = dto.PaymentMethod == PaymentMethod.ElectronicBankTransfer;
@@ -113,25 +150,23 @@ namespace GlocalCart.API.Services.Implementations
                 OrderId = order.Id,
                 Status = OrderStatus.Pending,
                 Note = isBankTransfer
-                    ? "Đơn hàng được tạo. Chờ thanh toán chuyển khoản."
-                    : "Đơn hàng được tạo (COD). Chờ seller xử lý."
+                    ? "Don hang duoc tao. Cho thanh toan chuyen khoan."
+                    : "Don hang duoc tao (COD). Cho seller xu ly."
             });
 
-            // Xóa giỏ hàng
-            _db.CartItems.RemoveRange(cartItems);
+            if (cartItemsToRemove.Any())
+                _db.CartItems.RemoveRange(cartItemsToRemove);
 
             await _db.SaveChangesAsync();
 
             await transaction.CommitAsync();
 
-            // Thông báo cho Seller(s)
-            var sellerIds = cartItems.Select(ci => ci.Product.SellerId).Distinct();
-            foreach (var sellerId in sellerIds)
+            foreach (var sellerId in sellerIdsInOrder)
             {
                 string notifMessage = isBankTransfer
-                    ? $"Bạn có đơn hàng mới #{order.OrderNumber}. Người mua đang tiến hành thanh toán chuyển khoản."
-                    : $"YÊU CẦU XÁC NHẬN: Bạn có đơn hàng mới #{order.OrderNumber} (COD), vui lòng xác nhận để chuẩn bị hàng.";
-                    
+                    ? $"Ban co don hang moi #{order.OrderNumber}. Nguoi mua dang tien hanh thanh toan chuyen khoan."
+                    : $"Yeu cau xac nhan: Ban co don hang moi #{order.OrderNumber} (COD), vui long xac nhan de chuan bi hang.";
+
                 await _notif.CreateNotificationAsync(sellerId, notifMessage);
             }
 

@@ -28,6 +28,7 @@ namespace GlocalCart.API.Data
 
         // === GIỎ HÀNG ===
         public DbSet<CartItem> CartItems { get; set; }
+        public DbSet<ProductFavorite> ProductFavorites { get; set; }
 
         // === ĐƠN HÀNG & GIAO DỊCH ===
         public DbSet<Order> Orders { get; set; }
@@ -40,6 +41,7 @@ namespace GlocalCart.API.Data
 
         // === THÔNG BÁO ===
         public DbSet<Notification> Notifications { get; set; }
+        public DbSet<ShopFollow> ShopFollows { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -211,6 +213,25 @@ namespace GlocalCart.API.Data
             });
 
             // ========================
+            // PRODUCT FAVORITE
+            // ========================
+            modelBuilder.Entity<ProductFavorite>(entity =>
+            {
+                entity.HasOne(f => f.User)
+                    .WithMany(u => u.FavoriteProducts)
+                    .HasForeignKey(f => f.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(f => f.Product)
+                    .WithMany(p => p.Favorites)
+                    .HasForeignKey(f => f.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(f => new { f.UserId, f.ProductId }).IsUnique();
+                entity.HasIndex(f => f.ProductId);
+            });
+
+            // ========================
             // ORDER
             // ========================
             modelBuilder.Entity<Order>(entity =>
@@ -315,6 +336,22 @@ namespace GlocalCart.API.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(n => new { n.UserId, n.IsRead });
+            });
+
+            modelBuilder.Entity<ShopFollow>(entity =>
+            {
+                entity.HasOne(sf => sf.User)
+                    .WithMany(u => u.FollowedShops)
+                    .HasForeignKey(sf => sf.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(sf => sf.Shop)
+                    .WithMany(u => u.ShopFollowers)
+                    .HasForeignKey(sf => sf.ShopId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(sf => new { sf.UserId, sf.ShopId }).IsUnique();
+                entity.HasIndex(sf => sf.ShopId);
             });
 
             // ========================

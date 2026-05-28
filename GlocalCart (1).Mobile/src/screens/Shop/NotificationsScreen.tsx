@@ -238,6 +238,10 @@ export default function NotificationsScreen({ navigation }: any): React.JSX.Elem
   const handleNotificationPress = async (item: NotificationItem) => {
     await markRead(item.id);
 
+    if (activeTab === 'orders') {
+      return;
+    }
+
     if (!item.isOrder || !item.orderId) {
       navigation.navigate('NotificationContent', { notification: item });
       return;
@@ -270,6 +274,7 @@ export default function NotificationsScreen({ navigation }: any): React.JSX.Elem
 
   const renderItem = ({ item }: { item: NotificationItem }) => {
     const imageUri = item.productImage || item.image || ORDER_ICON;
+    const isOrderTab = activeTab === 'orders';
 
     return (
       <TouchableOpacity
@@ -288,7 +293,7 @@ export default function NotificationsScreen({ navigation }: any): React.JSX.Elem
           <Text style={styles.notificationBody} numberOfLines={2}>{item.body}</Text>
           <Text style={styles.notificationTime}>{item.time}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        {!isOrderTab && <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />}
       </TouchableOpacity>
     );
   };

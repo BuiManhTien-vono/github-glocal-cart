@@ -16,10 +16,13 @@ namespace GlocalCart.API.Services.Implementations
         {
             var items = await _db.CartItems
                 .Include(ci => ci.Product).ThenInclude(p => p.Images)
+                .Include(ci => ci.Product).ThenInclude(p => p.Seller)
                 .Where(ci => ci.UserId == userId)
                 .Select(ci => new CartItemResponseDto
                 {
                     Id = ci.Id, ProductId = ci.ProductId,
+                    SellerId = ci.Product.SellerId,
+                    SellerName = ci.Product.Seller.FullName,
                     ProductName = ci.Product.Name,
                     ProductImage = ci.Product.Images.Where(i => i.IsMain).Select(i => i.ImageUrl).FirstOrDefault() ?? ci.Product.MediaUrl,
                     PriceSnapshot = ci.PriceSnapshot, CurrentPrice = ci.Product.Price,
@@ -31,7 +34,9 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<CartItemResponseDto> AddToCartAsync(int userId, AddToCartDto dto)
         {
-            var product = await _db.Products.FindAsync(dto.ProductId)
+            var product = await _db.Products
+                .Include(p => p.Seller)
+                .FirstOrDefaultAsync(p => p.Id == dto.ProductId)
                 ?? throw new KeyNotFoundException("Sản phẩm không tồn tại.");
 
             if (!product.IsActive || product.IsLocked)
@@ -68,6 +73,7 @@ namespace GlocalCart.API.Services.Implementations
             return new CartItemResponseDto
             {
                 Id = existing.Id, ProductId = product.Id, ProductName = product.Name,
+                SellerId = product.SellerId, SellerName = product.Seller.FullName,
                 PriceSnapshot = existing.PriceSnapshot, CurrentPrice = product.Price,
                 Quantity = existing.Quantity, AvailableStock = product.AvailableItemCount
             };
@@ -75,7 +81,8 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<CartItemResponseDto> UpdateCartItemAsync(int userId, int itemId, UpdateCartItemDto dto)
         {
-            var item = await _db.CartItems.Include(ci => ci.Product)
+            var item = await _db.CartItems
+                .Include(ci => ci.Product).ThenInclude(p => p.Seller)
                 .FirstOrDefaultAsync(ci => ci.Id == itemId && ci.UserId == userId)
                 ?? throw new KeyNotFoundException("Không tìm thấy sản phẩm trong giỏ hàng.");
 
@@ -88,6 +95,7 @@ namespace GlocalCart.API.Services.Implementations
             return new CartItemResponseDto
             {
                 Id = item.Id, ProductId = item.ProductId, ProductName = item.Product.Name,
+                SellerId = item.Product.SellerId, SellerName = item.Product.Seller.FullName,
                 PriceSnapshot = item.PriceSnapshot, CurrentPrice = item.Product.Price,
                 Quantity = item.Quantity, AvailableStock = item.Product.AvailableItemCount
             };

@@ -6,6 +6,8 @@ namespace GlocalCart.API.DTOs.Cart
     {
         public int Id { get; set; }
         public int ProductId { get; set; }
+        public int SellerId { get; set; }
+        public string SellerName { get; set; } = string.Empty;
         public string ProductName { get; set; } = string.Empty;
         public string? ProductImage { get; set; }
         public decimal PriceSnapshot { get; set; }

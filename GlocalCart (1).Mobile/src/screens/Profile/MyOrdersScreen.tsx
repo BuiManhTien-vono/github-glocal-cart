@@ -226,21 +226,6 @@ export default function MyOrdersScreen({ route, navigation }: any): React.JSX.El
     }
   };
 
-  const handleRepurchase = async (orderItems: any[]) => {
-    try {
-      setIsLoading(true);
-      for (const item of orderItems || []) {
-        await apiClient.post('/cart/items', { productId: item.productId, quantity: item.quantity });
-      }
-      navigation.navigate('Cart');
-    } catch (error) {
-      console.log('Repurchase error:', error);
-      Alert.alert('Lỗi', 'Không thể thêm vào giỏ hàng.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleViewReview = async (productId?: number) => {
     if (!productId) return;
 
@@ -411,14 +396,9 @@ export default function MyOrdersScreen({ route, navigation }: any): React.JSX.El
           )}
 
           {item.status === 'Canceled' && (
-            <>
-              <TouchableOpacity style={st.actionBtn} onPress={() => navigation.navigate('CancelOrderDetailScreen', { orderId: item.id })}>
-                <Text style={st.outlineBtnText}>Chi tiết hủy</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[st.actionBtn, st.primaryBtn]} onPress={() => handleRepurchase(orderItems)}>
-                <Text style={st.primaryBtnText}>Mua lại</Text>
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity style={st.actionBtn} onPress={() => navigation.navigate('CancelOrderDetailScreen', { orderId: item.id })}>
+              <Text style={st.outlineBtnText}>Chi tiết hủy</Text>
+            </TouchableOpacity>
           )}
 
           <TouchableOpacity style={st.actionBtn} onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}>

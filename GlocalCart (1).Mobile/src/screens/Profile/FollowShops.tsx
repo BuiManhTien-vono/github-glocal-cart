@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { useAuth } from '../../context/AuthContext';
-import apiClient from '../../services/api/apiClient';
 import { resolveProductImageUrl } from '../../utils/imageUtils';
 import { Image } from 'expo-image';
+import { useFollowShopStore } from '../../store/useFollowShopStore';
 
 interface Shop {
   id: number;
@@ -19,46 +19,14 @@ interface Shop {
 export const FollowedShopsScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { isLoggedIn } = useAuth();
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { followedShops, isLoading, loadFollowedShops, unfollowShop } = useFollowShopStore();
 
   useEffect(() => {
-    if (isLoggedIn) fetchFollowedShops();
-    else setIsLoading(false);
-  }, []);
+    if (isLoggedIn) loadFollowedShops();
+  }, [isLoggedIn, loadFollowedShops]);
 
-  const fetchFollowedShops = async () => {
-    setIsLoading(true);
-    try {
-      const res = await apiClient.get('/shops/followed') as any;
-      setShops(res || []);
-    } catch (err) {
-      setShops([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleUnfollow = (shopId: number, shopName: string) => {
-    Alert.alert(
-      'Hủy theo dõi',
-      `Bạn có muốn hủy theo dõi "${shopName}"?`,
-      [
-        { text: 'Không', style: 'cancel' },
-        {
-          text: 'Hủy theo dõi',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiClient.delete(`/shops/${shopId}/follow`);
-              setShops(prev => prev.filter(s => s.id !== shopId));
-            } catch {
-              Alert.alert('Lỗi', 'Không thể hủy theo dõi. Thử lại sau.');
-            }
-          },
-        },
-      ]
-    );
+  const handleUnfollow = async (shopId: number) => {
+    await unfollowShop(shopId);
   };
 
   const renderItem = ({ item }: { item: Shop }) => (
@@ -84,7 +52,10 @@ export const FollowedShopsScreen = ({ navigation }: any) => {
       </View>
       <TouchableOpacity
         style={s.unfollowBtn}
-        onPress={() => handleUnfollow(item.id, item.name)}
+        onPress={(event) => {
+          event.stopPropagation();
+          handleUnfollow(item.id);
+        }}
       >
         <Text style={s.unfollowText}>Đang theo dõi</Text>
       </TouchableOpacity>
@@ -105,7 +76,7 @@ export const FollowedShopsScreen = ({ navigation }: any) => {
         <View style={s.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : shops.length === 0 ? (
+      ) : followedShops.length === 0 ? (
         <View style={s.center}>
           <Ionicons name="storefront-outline" size={70} color="#ddd" />
           <Text style={s.emptyText}>Bạn chưa theo dõi shop nào</Text>
@@ -119,7 +90,8 @@ export const FollowedShopsScreen = ({ navigation }: any) => {
         </View>
       ) : (
         <FlatList
-          data={shops}
+          data={followedShops}
+          extraData={followedShops}
           keyExtractor={item => String(item.id)}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 40 }}

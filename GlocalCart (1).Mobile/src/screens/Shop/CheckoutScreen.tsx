@@ -32,6 +32,27 @@ function showAlert(title: string, message: string) {
 
 const getItemPrice = (item: any) => Number(item.priceSnapshot ?? item.currentPrice ?? item.price ?? 0);
 const getItemProductId = (item: any) => item.productId || item.id;
+const normalizeMessage = (message?: string) =>
+  String(message || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+const isEmptyCartError = (error: any) => {
+  const message = normalizeMessage(error?.message);
+  return message.includes('gio hang') && message.includes('trong');
+};
+
+const isSingleShopError = (error: any) => {
+  const message = normalizeMessage(error?.message);
+  return (
+    (message.includes('mot shop') || message.includes('1 shop')) &&
+    (message.includes('don hang') || message.includes('san pham'))
+  );
+};
+
+const getItemShopKey = (item: any) =>
+  String(item.sellerId ?? item.shopId ?? item.sellerName ?? item.shopName ?? 'default-shop');
 
 export default function CheckoutScreen({ navigation, route }: any): React.JSX.Element {
   const insets = useSafeAreaInsets();
@@ -98,6 +119,131 @@ export default function CheckoutScreen({ navigation, route }: any): React.JSX.El
     await clearCart();
   };
 
+  const restoreCartItems = async (cartItems: any[]) => {
+    await apiClient.delete('/cart/clear');
+    for (const item of cartItems) {
+      await apiClient.post('/cart', {
+        productId: getItemProductId(item),
+        quantity: Number(item.quantity || 1),
+      });
+    }
+    await fetchCart();
+  };
+
+  const getItemShopKeyAsync = async (item: any) => {
+    const existingKey = getItemShopKey(item);
+    if (existingKey !== 'default-shop') return existingKey;
+
+    try {
+      const product: any = await apiClient.get(`/products/${getItemProductId(item)}`);
+      return String(product?.sellerId ?? product?.sellerName ?? existingKey);
+    } catch {
+      return existingKey;
+    }
+  };
+
+  const createLegacySplitOrders = async (orderData: any) => {
+    const selectedItems = route.params?.selectedItems || [];
+    if (!selectedItems.length) throw new Error('Khong co san pham duoc chon.');
+
+    const groups: Record<string, any[]> = {};
+    for (const item of selectedItems) {
+      const key = await getItemShopKeyAsync(item);
+      groups[key] = groups[key] || [];
+      groups[key].push(item);
+    }
+
+    const groupedItems = Object.values(groups);
+    if (groupedItems.length <= 1) throw new Error('Khong can tach don theo shop.');
+
+    const selectedProductIds = new Set(selectedItems.map((item: any) => getItemProductId(item)));
+    const itemsToRestore = items.filter((item: any) => !selectedProductIds.has(getItemProductId(item)));
+    const createdOrders: any[] = [];
+
+    try {
+      for (const group of groupedItems) {
+        await apiClient.delete('/cart/clear');
+        for (const item of group) {
+          await apiClient.post('/cart', {
+            productId: getItemProductId(item),
+            quantity: Number(item.quantity || 1),
+          });
+        }
+
+        const { items: _items, ...legacyOrderData } = orderData;
+        const created = await apiClient.post('/orders', legacyOrderData);
+        createdOrders.push(created);
+      }
+
+      await restoreCartItems(itemsToRestore);
+      return createdOrders;
+    } catch (error) {
+      await restoreCartItems(items);
+      throw error;
+    }
+  };
+
+  const createIsolatedBuyNowOrder = async (orderData: any) => {
+    const buyNowItems = route.params?.selectedItems || [];
+    if (!buyNowItems.length) throw new Error('Khong co san pham mua ngay.');
+
+    const cartSnapshot = [...items];
+
+    try {
+      await apiClient.delete('/cart/clear');
+      for (const item of buyNowItems) {
+        await apiClient.post('/cart', {
+          productId: getItemProductId(item),
+          quantity: Number(item.quantity || 1),
+        });
+      }
+
+      return await apiClient.post('/orders', orderData);
+    } finally {
+      await restoreCartItems(cartSnapshot);
+    }
+  };
+
+  const createOrder = async (orderData: any) => {
+    try {
+      return await apiClient.post('/orders', orderData);
+    } catch (error: any) {
+      if (route.params?.isBuyNow && (isEmptyCartError(error) || isSingleShopError(error))) {
+        return await createIsolatedBuyNowOrder(orderData);
+      }
+
+      const hasExplicitCheckoutItems = Boolean(route.params?.selectedItems?.length);
+      if (hasExplicitCheckoutItems && isSingleShopError(error)) {
+        return await createLegacySplitOrders(orderData);
+      }
+
+      if (!hasExplicitCheckoutItems || !isEmptyCartError(error)) {
+        throw error;
+      }
+
+      await Promise.all(
+        orderData.items.map((item: any) =>
+          apiClient.post('/cart', {
+            productId: item.productId,
+            quantity: item.quantity,
+          })
+        )
+      );
+
+      try {
+        return await apiClient.post('/orders', orderData);
+      } catch (retryError: any) {
+        if (route.params?.isBuyNow && isSingleShopError(retryError)) {
+          return await createIsolatedBuyNowOrder(orderData);
+        }
+        if (isSingleShopError(retryError)) {
+          return await createLegacySplitOrders(orderData);
+        }
+        throw retryError;
+      }
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
       showAlert('Thông báo', 'Vui lòng chọn địa chỉ giao hàng.');
@@ -115,23 +261,50 @@ export default function CheckoutScreen({ navigation, route }: any): React.JSX.El
         shippingAddressId: selectedAddress.id,
         paymentMethod: paymentMethodCode,
         note: `Giao hàng đến ${selectedAddress.fullName || user?.fullName || 'người nhận'}`,
+        isBuyNow: Boolean(route.params?.isBuyNow),
         items: checkoutItems.map((item: any) => ({
           productId: getItemProductId(item),
           quantity: Number(item.quantity || 1),
         })),
       };
 
-      const createdOrder: any = await apiClient.post('/orders', orderData);
+      const createdOrderResult: any = await createOrder(orderData);
+      const createdOrders = Array.isArray(createdOrderResult) ? createdOrderResult : [createdOrderResult];
+      const createdOrder = createdOrders[0];
 
-      await notificationHelper.updateOrderNotification(
-        createdOrder.orderNumber || `GC-${createdOrder.id}`,
-        'Pending',
-        checkoutItems[0]?.productName || checkoutItems[0]?.name || 'Sản phẩm',
-        checkoutItems[0]?.productImage
+      await Promise.all(
+        createdOrders.map((order: any) =>
+          notificationHelper.updateOrderNotification(
+            order.orderNumber || `GC-${order.id}`,
+            'Pending',
+            checkoutItems[0]?.productName || checkoutItems[0]?.name || 'Sản phẩm',
+            checkoutItems[0]?.productImage
+          )
+        )
       );
 
       await clearPurchasedItems();
       await fetchCart();
+
+      if (createdOrders.length > 1) {
+        const message =
+          paymentMethodCode === 1
+            ? `Đã tạo ${createdOrders.length} đơn hàng. Vui lòng thanh toán từng đơn trong danh sách đơn mua.`
+            : `Đã tạo ${createdOrders.length} đơn hàng từ các shop khác nhau.`;
+
+        if (isWeb) {
+          window.alert(message);
+          navigation.navigate('MainTabs', { screen: 'Profile', params: { screen: 'MyOrders' } });
+        } else {
+          Alert.alert(
+            'Đặt hàng thành công',
+            message,
+            [{ text: 'Xem đơn hàng', onPress: () => navigation.navigate('MainTabs', { screen: 'Profile', params: { screen: 'MyOrders' } }) }],
+            { cancelable: false }
+          );
+        }
+        return;
+      }
 
       if (paymentMethodCode === 1) {
         if (isWeb) {
