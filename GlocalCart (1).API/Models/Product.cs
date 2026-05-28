@@ -64,5 +64,6 @@ namespace GlocalCart.API.Models
         public ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
         public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
         public ICollection<CatalogProduct> CatalogProducts { get; set; } = new List<CatalogProduct>();
+        public ICollection<ProductFavorite> Favorites { get; set; } = new List<ProductFavorite>();
     }
 }

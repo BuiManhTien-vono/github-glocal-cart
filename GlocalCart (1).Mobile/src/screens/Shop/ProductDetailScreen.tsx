@@ -34,7 +34,7 @@ export default function ProductDetailScreen() {
   const [showMenu, setShowMenu] = useState(false); // 3-dot menu
 
   const { addToCart } = useCartStore();
-  const { isFavorite, toggleFavorite } = useFavoritesStore();
+  const { isFavorite, toggleFavorite, loadFavorites } = useFavoritesStore();
   const { isFollowing, toggleFollow, loadFollowedShops } = useFollowShopStore();
 
   // Shop mock info (sẽ lấy từ API sau)
@@ -48,6 +48,10 @@ export default function ProductDetailScreen() {
   useEffect(() => {
     if (isLoggedIn) loadFollowedShops();
   }, [isLoggedIn, loadFollowedShops]);
+
+  useEffect(() => {
+    if (isLoggedIn) loadFavorites();
+  }, [isLoggedIn, loadFavorites]);
 
   const fetchProductDetail = async () => {
     try {

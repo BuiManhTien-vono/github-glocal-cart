@@ -28,6 +28,7 @@ namespace GlocalCart.API.Data
 
         // === GIỎ HÀNG ===
         public DbSet<CartItem> CartItems { get; set; }
+        public DbSet<ProductFavorite> ProductFavorites { get; set; }
 
         // === ĐƠN HÀNG & GIAO DỊCH ===
         public DbSet<Order> Orders { get; set; }
@@ -209,6 +210,25 @@ namespace GlocalCart.API.Data
 
                 // Mỗi user chỉ có 1 dòng cho mỗi sản phẩm trong giỏ
                 entity.HasIndex(ci => new { ci.UserId, ci.ProductId }).IsUnique();
+            });
+
+            // ========================
+            // PRODUCT FAVORITE
+            // ========================
+            modelBuilder.Entity<ProductFavorite>(entity =>
+            {
+                entity.HasOne(f => f.User)
+                    .WithMany(u => u.FavoriteProducts)
+                    .HasForeignKey(f => f.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(f => f.Product)
+                    .WithMany(p => p.Favorites)
+                    .HasForeignKey(f => f.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(f => new { f.UserId, f.ProductId }).IsUnique();
+                entity.HasIndex(f => f.ProductId);
             });
 
             // ========================
