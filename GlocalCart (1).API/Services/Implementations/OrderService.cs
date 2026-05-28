@@ -17,7 +17,7 @@ namespace GlocalCart.API.Services.Implementations
     {
         private const int MaxAvailablePickupDistanceMeters = 10_000;
         private static readonly TimeSpan ShipperLocationFreshness = TimeSpan.FromMinutes(15);
-        private static readonly GeoPoint FallbackShopCoordinate = new(10.7743, 106.7017);
+        private static readonly GeoPoint FallbackShopCoordinate = new(21.0287, 105.8521);
         private readonly record struct GeoPoint(double Latitude, double Longitude);
         private readonly record struct OrderLine(Product Product, int Quantity, decimal UnitPrice);
 
@@ -70,9 +70,12 @@ namespace GlocalCart.API.Services.Implementations
                     .Select(p => new OrderLine(p, quantityByProductId[p.Id], p.Price))
                     .ToList();
 
-                cartItemsToRemove = await _db.CartItems
-                    .Where(ci => ci.UserId == buyerId && productIds.Contains(ci.ProductId))
-                    .ToListAsync();
+                if (!dto.IsBuyNow)
+                {
+                    cartItemsToRemove = await _db.CartItems
+                        .Where(ci => ci.UserId == buyerId && productIds.Contains(ci.ProductId))
+                        .ToListAsync();
+                }
             }
             else
             {
@@ -91,8 +94,6 @@ namespace GlocalCart.API.Services.Implementations
             }
 
             var sellerIdsInOrder = orderLines.Select(line => line.Product.SellerId).Distinct().ToList();
-            if (sellerIdsInOrder.Count > 1)
-                throw new InvalidOperationException("Moi don hang chi ho tro san pham tu mot shop.");
 
             var address = await _db.UserAddresses
                 .FirstOrDefaultAsync(a => a.Id == dto.ShippingAddressId && a.UserId == buyerId)

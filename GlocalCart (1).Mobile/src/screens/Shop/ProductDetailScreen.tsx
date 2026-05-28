@@ -90,6 +90,8 @@ export default function ProductDetailScreen() {
           productName: product.name,
           productImage: product.images?.[0]?.imageUrl || product.mediaUrl,
           priceSnapshot: product.price,
+          sellerId: product.sellerId,
+          sellerName: product.sellerName,
           quantity: 1,
         }],
         isBuyNow: true

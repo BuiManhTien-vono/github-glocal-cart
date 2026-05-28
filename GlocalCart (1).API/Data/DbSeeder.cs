@@ -590,20 +590,20 @@ namespace GlocalCart.API.Data
                 context.UserAddresses.Add(new UserAddress
                 {
                     UserId = storeSeller.Id,
-                    StreetAddress = "72 Le Loi, Phuong Ben Thanh",
-                    City = "TP Ho Chi Minh",
-                    State = "Quan 1",
-                    Zipcode = "700000",
+                    StreetAddress = "Hoan Kiem",
+                    City = "Ha Noi",
+                    State = "Ha Noi",
+                    Zipcode = "100000",
                     Country = "Viet Nam",
                     IsDefault = true
                 });
             }
             else
             {
-                storeAddress.StreetAddress = "72 Le Loi, Phuong Ben Thanh";
-                storeAddress.City = "TP Ho Chi Minh";
-                storeAddress.State = "Quan 1";
-                storeAddress.Zipcode = "700000";
+                storeAddress.StreetAddress = "Hoan Kiem";
+                storeAddress.City = "Ha Noi";
+                storeAddress.State = "Ha Noi";
+                storeAddress.Zipcode = "100000";
                 storeAddress.Country = "Viet Nam";
                 storeAddress.IsDefault = true;
             }

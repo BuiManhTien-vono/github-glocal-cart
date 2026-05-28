@@ -15,6 +15,8 @@ namespace GlocalCart.API.DTOs.Orders
         public string? Note { get; set; }
 
         public List<CreateOrderItemDto>? Items { get; set; }
+
+        public bool IsBuyNow { get; set; }
     }
 
     public class CreateOrderItemDto
