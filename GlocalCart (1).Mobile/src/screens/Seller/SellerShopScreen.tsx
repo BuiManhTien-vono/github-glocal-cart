@@ -237,11 +237,6 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
         </Animated.View>
         {isPreviewMode ? (
           <>
-            <TouchableOpacity style={styles.headerIconBtn} onPress={reloadSellerHome}>
-              <Animated.Text style={{ color: topTextColor }}>
-                <Ionicons name="storefront-outline" size={23} />
-              </Animated.Text>
-            </TouchableOpacity>
             <Animated.View style={[styles.previewTabsInHeader, { opacity: compactOpacity }]}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {PREVIEW_TABS.map(tab => (
@@ -273,11 +268,6 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
           </>
         ) : (
           <>
-            <TouchableOpacity style={styles.headerIconBtn} onPress={reloadSellerHome}>
-              <Animated.Text style={{ color: topTextColor }}>
-                <Ionicons name="storefront-outline" size={23} />
-              </Animated.Text>
-            </TouchableOpacity>
             <Animated.View style={[styles.collapsedSearchBox, { opacity: compactOpacity }]}>
               <Ionicons name="search-outline" size={17} color={colors.textMuted} />
               <TextInput
