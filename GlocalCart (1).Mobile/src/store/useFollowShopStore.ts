@@ -52,24 +52,23 @@ export const useFollowShopStore = create<FollowShopState>((set, get) => ({
       await apiClient.post(`/shops/${shop.id}/follow`);
       await get().loadFollowedShops();
     } catch (error) {
-      const rollback = get().followedShops.filter(s => s.id !== shop.id);
-      set({ followedShops: rollback });
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(rollback));
-      throw error;
+      console.log('followShop sync failed:', error);
     }
   },
 
   unfollowShop: async (shopId: number) => {
-    const previous = get().followedShops;
     const updated = get().followedShops.filter(s => s.id !== shopId);
     set({ followedShops: updated });
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     try {
-      await apiClient.delete(`/shops/${shopId}/follow`);
+      try {
+        await apiClient.delete(`/shops/${shopId}/follow`);
+      } catch {
+        await apiClient.post(`/shops/${shopId}/unfollow`);
+      }
+      await get().loadFollowedShops();
     } catch (error) {
-      set({ followedShops: previous });
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(previous));
-      throw error;
+      console.log('unfollowShop sync failed:', error);
     }
   },
 

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
@@ -25,25 +25,8 @@ export const FollowedShopsScreen = ({ navigation }: any) => {
     if (isLoggedIn) loadFollowedShops();
   }, [isLoggedIn, loadFollowedShops]);
 
-  const handleUnfollow = (shopId: number, shopName: string) => {
-    Alert.alert(
-      'Hủy theo dõi',
-      `Bạn có muốn hủy theo dõi "${shopName}"?`,
-      [
-        { text: 'Không', style: 'cancel' },
-        {
-          text: 'Hủy theo dõi',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await unfollowShop(shopId);
-            } catch {
-              Alert.alert('Lỗi', 'Không thể hủy theo dõi. Thử lại sau.');
-            }
-          },
-        },
-      ]
-    );
+  const handleUnfollow = async (shopId: number) => {
+    await unfollowShop(shopId);
   };
 
   const renderItem = ({ item }: { item: Shop }) => (
@@ -69,7 +52,10 @@ export const FollowedShopsScreen = ({ navigation }: any) => {
       </View>
       <TouchableOpacity
         style={s.unfollowBtn}
-        onPress={() => handleUnfollow(item.id, item.name)}
+        onPress={(event) => {
+          event.stopPropagation();
+          handleUnfollow(item.id);
+        }}
       >
         <Text style={s.unfollowText}>Đang theo dõi</Text>
       </TouchableOpacity>

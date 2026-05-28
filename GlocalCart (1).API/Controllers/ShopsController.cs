@@ -46,7 +46,8 @@ namespace GlocalCart.API.Controllers
             if (shopId == UserId)
                 return BadRequest(ApiResponse.Fail("Khong the theo doi shop cua chinh ban."));
 
-            var shopExists = await _db.Users.AnyAsync(u => u.Id == shopId && u.IsSeller);
+            var shopExists = await _db.Users.AnyAsync(u => u.Id == shopId && u.IsSeller)
+                || await _db.Products.AnyAsync(p => p.SellerId == shopId);
             if (!shopExists)
                 return NotFound(ApiResponse.NotFound("Khong tim thay shop."));
 
@@ -67,6 +68,19 @@ namespace GlocalCart.API.Controllers
         [HttpDelete("{shopId:int}/follow")]
         public async Task<IActionResult> UnfollowShop(int shopId)
         {
+            await RemoveFollowAsync(shopId);
+            return Ok(ApiResponse.Ok("Da huy theo doi shop."));
+        }
+
+        [HttpPost("{shopId:int}/unfollow")]
+        public async Task<IActionResult> UnfollowShopPost(int shopId)
+        {
+            await RemoveFollowAsync(shopId);
+            return Ok(ApiResponse.Ok("Da huy theo doi shop."));
+        }
+
+        private async Task RemoveFollowAsync(int shopId)
+        {
             var follow = await _db.ShopFollows
                 .FirstOrDefaultAsync(f => f.UserId == UserId && f.ShopId == shopId);
 
@@ -75,8 +89,6 @@ namespace GlocalCart.API.Controllers
                 _db.ShopFollows.Remove(follow);
                 await _db.SaveChangesAsync();
             }
-
-            return Ok(ApiResponse.Ok("Da huy theo doi shop."));
         }
     }
 }

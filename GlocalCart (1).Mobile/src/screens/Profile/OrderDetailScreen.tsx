@@ -220,20 +220,6 @@ export default function OrderDetailScreen({ navigation, route }: any): React.JSX
     }
   };
 
-  const handleRepurchase = async () => {
-    try {
-      setIsLoading(true);
-      for (const item of orderItems) {
-        await apiClient.post('/cart/items', { productId: item.productId, quantity: item.quantity });
-      }
-      navigation.navigate('Cart');
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.message || 'Không thể thêm sản phẩm vào giỏ hàng.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleViewReview = async (productId?: number) => {
     if (!productId) return;
 
@@ -253,9 +239,6 @@ export default function OrderDetailScreen({ navigation, route }: any): React.JSX
     }
   };
 
-  const handlePayNow = () => {
-    navigation.navigate('VietQR', { orderId });
-  };
 
   if (isLoading) return <Loading />;
 
@@ -276,7 +259,6 @@ export default function OrderDetailScreen({ navigation, route }: any): React.JSX
   const isReviewed = orderItems.some((item: any) => reviewedOrders[`@reviewed_${order.id}_${item.productId}`]);
   const payment = paymentStatus || order.payment;
   const paymentText = getPaymentText(payment?.status);
-  const canPayNow = paymentStatus?.canInitiatePayment || payment?.status === 'Unpaid' || payment?.status === 'Failed';
   const shippingAddress = order.shippingAddress || {};
 
   return (
@@ -413,15 +395,6 @@ export default function OrderDetailScreen({ navigation, route }: any): React.JSX
           </TouchableOpacity>
         )}
 
-        {canPayNow && (
-          <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={handlePayNow}>
-            <Text style={styles.primaryText}>Thanh toán</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity style={[styles.actionBtn, styles.primaryBtn]} onPress={handleRepurchase}>
-          <Text style={styles.primaryText}>Mua lại</Text>
-        </TouchableOpacity>
       </View>
 
       <CancelModal
