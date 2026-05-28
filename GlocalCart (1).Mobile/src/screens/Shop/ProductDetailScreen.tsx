@@ -35,7 +35,7 @@ export default function ProductDetailScreen() {
 
   const { addToCart } = useCartStore();
   const { isFavorite, toggleFavorite } = useFavoritesStore();
-  const { isFollowing, toggleFollow } = useFollowShopStore();
+  const { isFollowing, toggleFollow, loadFollowedShops } = useFollowShopStore();
 
   // Shop mock info (sẽ lấy từ API sau)
   const shopId = product?.sellerId || 1;
@@ -44,6 +44,10 @@ export default function ProductDetailScreen() {
   useEffect(() => {
     fetchProductDetail();
   }, [productId]);
+
+  useEffect(() => {
+    if (isLoggedIn) loadFollowedShops();
+  }, [isLoggedIn, loadFollowedShops]);
 
   const fetchProductDetail = async () => {
     try {
@@ -117,6 +121,26 @@ export default function ProductDetailScreen() {
       return;
     }
     if (product) await toggleFavorite(product);
+  };
+
+  const handleToggleFollowShop = async () => {
+    if (!isLoggedIn) {
+      Alert.alert('Yeu cau dang nhap', 'Ban can dang nhap de theo doi shop.', [
+        { text: 'De sau', style: 'cancel' },
+        { text: 'Dang nhap', onPress: () => setGuestMode(false) },
+      ]);
+      return;
+    }
+
+    try {
+      await toggleFollow({
+        id: shopId,
+        name: shopName,
+        logoUrl: product?.sellerLogoUrl,
+      });
+    } catch (error: any) {
+      Alert.alert('Loi', error?.message || 'Khong the cap nhat theo doi shop.');
+    }
   };
 
   // Chia sẻ sản phẩm
@@ -266,7 +290,7 @@ export default function ProductDetailScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.followBtn, shopFollowed && styles.followBtnActive]}
-                onPress={() => toggleFollow({ id: shopId, name: shopName })}
+                onPress={handleToggleFollowShop}
               >
                 <Text style={[styles.followBtnText, shopFollowed && styles.followBtnTextActive]}>
                   {shopFollowed ? '✓ Đang theo dõi' : '+ Theo dõi'}

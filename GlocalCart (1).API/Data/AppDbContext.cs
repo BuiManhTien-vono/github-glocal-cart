@@ -40,6 +40,7 @@ namespace GlocalCart.API.Data
 
         // === THÔNG BÁO ===
         public DbSet<Notification> Notifications { get; set; }
+        public DbSet<ShopFollow> ShopFollows { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -315,6 +316,22 @@ namespace GlocalCart.API.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(n => new { n.UserId, n.IsRead });
+            });
+
+            modelBuilder.Entity<ShopFollow>(entity =>
+            {
+                entity.HasOne(sf => sf.User)
+                    .WithMany(u => u.FollowedShops)
+                    .HasForeignKey(sf => sf.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(sf => sf.Shop)
+                    .WithMany(u => u.ShopFollowers)
+                    .HasForeignKey(sf => sf.ShopId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(sf => new { sf.UserId, sf.ShopId }).IsUnique();
+                entity.HasIndex(sf => sf.ShopId);
             });
 
             // ========================

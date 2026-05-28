@@ -8,6 +8,8 @@ import apiClient from '../../services/api/apiClient';
 import { Loading } from '../../components/common/Loading';
 import { ProductCard } from '../../components/shop/ProductCard';
 import { resolveProductImage } from '../../utils/imageUtils';
+import { useAuth } from '../../context/AuthContext';
+import { useFollowShopStore } from '../../store/useFollowShopStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_HEIGHT = 180;
@@ -41,14 +43,17 @@ const MOCK_SHOP_CATEGORIES = [
 export default function ShopScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
   const { shopId } = route.params || {};
+  const { isLoggedIn, setGuestMode } = useAuth();
+  const { isFollowing, toggleFollow, loadFollowedShops } = useFollowShopStore();
+  const currentShopId = Number(shopId || MOCK_SHOP.id);
 
   // ─── State ───
   const [activeTab, setActiveTab] = useState<'shop' | 'products' | 'categories'>('shop');
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(MOCK_SHOP.isFollowing);
   const [followCount, setFollowCount] = useState(MOCK_SHOP.followers);
+  const shopFollowed = isFollowing(currentShopId);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const fetchProducts = async () => {
@@ -65,8 +70,9 @@ export default function ShopScreen({ route, navigation }: any) {
 
   useEffect(() => {
     fetchProducts();
+    if (isLoggedIn) loadFollowedShops();
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (route.params?.activeTab) {
@@ -76,9 +82,27 @@ export default function ShopScreen({ route, navigation }: any) {
 
   const onRefresh = () => { setRefreshing(true); fetchProducts(); };
 
-  const handleFollow = () => {
-    setIsFollowing(!isFollowing);
-    setFollowCount(prev => isFollowing ? prev - 1 : prev + 1);
+  const handleFollow = async () => {
+    if (!isLoggedIn) {
+      Alert.alert('Yeu cau dang nhap', 'Ban can dang nhap de theo doi shop.', [
+        { text: 'De sau', style: 'cancel' },
+        { text: 'Dang nhap', onPress: () => setGuestMode(false) },
+      ]);
+      return;
+    }
+
+    const wasFollowing = shopFollowed;
+    setFollowCount(prev => Math.max(0, wasFollowing ? prev - 1 : prev + 1));
+    try {
+      await toggleFollow({
+        id: currentShopId,
+        name: MOCK_SHOP.name,
+        logoUrl: MOCK_SHOP.logo,
+      });
+    } catch (error: any) {
+      setFollowCount(prev => Math.max(0, wasFollowing ? prev + 1 : prev - 1));
+      Alert.alert('Loi', error?.message || 'Khong the cap nhat theo doi shop.');
+    }
   };
 
   // ─── Mock derived data ───
@@ -296,10 +320,10 @@ export default function ShopScreen({ route, navigation }: any) {
               </View>
             </View>
             <View style={styles.shopActions}>
-              <TouchableOpacity style={[styles.followBtn, isFollowing && styles.followBtnActive]} onPress={handleFollow}>
-                <Ionicons name={isFollowing ? 'checkmark' : 'add'} size={14} color={isFollowing ? colors.primary : '#fff'} />
-                <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
-                  {isFollowing ? 'Đang theo dõi' : 'Theo dõi'}
+              <TouchableOpacity style={[styles.followBtn, shopFollowed && styles.followBtnActive]} onPress={handleFollow}>
+                <Ionicons name={shopFollowed ? 'checkmark' : 'add'} size={14} color={shopFollowed ? colors.primary : '#fff'} />
+                <Text style={[styles.followBtnText, shopFollowed && styles.followBtnTextActive]}>
+                  {shopFollowed ? 'Đang theo dõi' : 'Theo dõi'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.chatBtn}>
@@ -499,3 +523,4 @@ const styles = StyleSheet.create({
   emptyWrap: { padding: 48, alignItems: 'center', gap: 12 },
   emptyText: { fontSize: 14, color: colors.textSecondary },
 });
+

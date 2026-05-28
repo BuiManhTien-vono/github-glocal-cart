@@ -32,6 +32,13 @@ function showAlert(title: string, message: string) {
 
 const getItemPrice = (item: any) => Number(item.priceSnapshot ?? item.currentPrice ?? item.price ?? 0);
 const getItemProductId = (item: any) => item.productId || item.id;
+const isEmptyCartError = (error: any) => {
+  const message = String(error?.message || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return message.includes('gio hang') && message.includes('trong');
+};
 
 export default function CheckoutScreen({ navigation, route }: any): React.JSX.Element {
   const insets = useSafeAreaInsets();
@@ -98,6 +105,28 @@ export default function CheckoutScreen({ navigation, route }: any): React.JSX.El
     await clearCart();
   };
 
+  const createOrder = async (orderData: any) => {
+    try {
+      return await apiClient.post('/orders', orderData);
+    } catch (error: any) {
+      const hasExplicitCheckoutItems = Boolean(route.params?.selectedItems?.length);
+      if (!hasExplicitCheckoutItems || !isEmptyCartError(error)) {
+        throw error;
+      }
+
+      await Promise.all(
+        orderData.items.map((item: any) =>
+          apiClient.post('/cart', {
+            productId: item.productId,
+            quantity: item.quantity,
+          })
+        )
+      );
+
+      return await apiClient.post('/orders', orderData);
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
       showAlert('Thông báo', 'Vui lòng chọn địa chỉ giao hàng.');
@@ -121,7 +150,7 @@ export default function CheckoutScreen({ navigation, route }: any): React.JSX.El
         })),
       };
 
-      const createdOrder: any = await apiClient.post('/orders', orderData);
+      const createdOrder: any = await createOrder(orderData);
 
       await notificationHelper.updateOrderNotification(
         createdOrder.orderNumber || `GC-${createdOrder.id}`,

@@ -45,5 +45,7 @@ namespace GlocalCart.API.Models
         public ICollection<Order> Orders { get; set; } = new List<Order>();
         public ICollection<ProductReview> Reviews { get; set; } = new List<ProductReview>();
         public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+        public ICollection<ShopFollow> FollowedShops { get; set; } = new List<ShopFollow>();
+        public ICollection<ShopFollow> ShopFollowers { get; set; } = new List<ShopFollow>();
     }
 }

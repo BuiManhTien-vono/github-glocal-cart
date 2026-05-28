@@ -9,6 +9,7 @@ interface FollowedShop {
   name: string;
   logoUrl?: string;
   productCount?: number;
+  followedAt?: string;
 }
 
 interface FollowShopState {
@@ -49,16 +50,27 @@ export const useFollowShopStore = create<FollowShopState>((set, get) => ({
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     try {
       await apiClient.post(`/shops/${shop.id}/follow`);
-    } catch {}
+      await get().loadFollowedShops();
+    } catch (error) {
+      const rollback = get().followedShops.filter(s => s.id !== shop.id);
+      set({ followedShops: rollback });
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(rollback));
+      throw error;
+    }
   },
 
   unfollowShop: async (shopId: number) => {
+    const previous = get().followedShops;
     const updated = get().followedShops.filter(s => s.id !== shopId);
     set({ followedShops: updated });
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     try {
       await apiClient.delete(`/shops/${shopId}/follow`);
-    } catch {}
+    } catch (error) {
+      set({ followedShops: previous });
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(previous));
+      throw error;
+    }
   },
 
   toggleFollow: async (shop: FollowedShop) => {

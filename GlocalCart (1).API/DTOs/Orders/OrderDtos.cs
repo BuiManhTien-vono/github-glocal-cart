@@ -13,6 +13,17 @@ namespace GlocalCart.API.DTOs.Orders
 
         [MaxLength(500)]
         public string? Note { get; set; }
+
+        public List<CreateOrderItemDto>? Items { get; set; }
+    }
+
+    public class CreateOrderItemDto
+    {
+        [Required]
+        public int ProductId { get; set; }
+
+        [Range(1, int.MaxValue)]
+        public int Quantity { get; set; } = 1;
     }
 
     public class OrderResponseDto
