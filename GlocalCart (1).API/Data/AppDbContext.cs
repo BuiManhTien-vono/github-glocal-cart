@@ -42,6 +42,8 @@ namespace GlocalCart.API.Data
         // === THÔNG BÁO ===
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<ShopFollow> ShopFollows { get; set; }
+        public DbSet<ChatConversation> ChatConversations { get; set; }
+        public DbSet<ChatMessage> ChatMessages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -352,6 +354,44 @@ namespace GlocalCart.API.Data
 
                 entity.HasIndex(sf => new { sf.UserId, sf.ShopId }).IsUnique();
                 entity.HasIndex(sf => sf.ShopId);
+            });
+
+            modelBuilder.Entity<ChatConversation>(entity =>
+            {
+                entity.HasOne(c => c.Buyer)
+                    .WithMany()
+                    .HasForeignKey(c => c.BuyerId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(c => c.Seller)
+                    .WithMany()
+                    .HasForeignKey(c => c.SellerId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(c => c.Product)
+                    .WithMany()
+                    .HasForeignKey(c => c.ProductId)
+                    .OnDelete(DeleteBehavior.SetNull)
+                    .IsRequired(false);
+
+                entity.HasIndex(c => new { c.BuyerId, c.SellerId }).IsUnique();
+                entity.HasIndex(c => c.UpdatedAt);
+            });
+
+            modelBuilder.Entity<ChatMessage>(entity =>
+            {
+                entity.HasOne(m => m.Conversation)
+                    .WithMany(c => c.Messages)
+                    .HasForeignKey(m => m.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(m => m.Sender)
+                    .WithMany()
+                    .HasForeignKey(m => m.SenderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(m => new { m.ConversationId, m.CreatedAt });
+                entity.HasIndex(m => new { m.ConversationId, m.IsRead });
             });
 
             // ========================

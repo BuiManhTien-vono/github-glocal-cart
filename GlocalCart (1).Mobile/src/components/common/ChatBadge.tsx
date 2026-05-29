@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import { useChatStore } from '../../store/useChatStore';
 
@@ -8,7 +8,11 @@ interface ChatBadgeProps {
 }
 
 export const ChatBadge: React.FC<ChatBadgeProps> = ({ containerStyle, textStyle }) => {
-  const { totalUnreadCount } = useChatStore();
+  const { totalUnreadCount, fetchConversations } = useChatStore();
+
+  useEffect(() => {
+    fetchConversations().catch(() => {});
+  }, [fetchConversations]);
 
   if (totalUnreadCount <= 0) return null;
 

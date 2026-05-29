@@ -1,44 +1,154 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, Image, ActionSheetIOS,
+  KeyboardAvoidingView, Platform, Alert, Image, ActionSheetIOS, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../../theme/colors';
-
-interface Message {
-  id: string;
-  text?: string;
-  imageUri?: string;
-  isMine: boolean;
-  time: string;
-}
+import { ChatMessage, Conversation, useChatStore } from '../../store/useChatStore';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
+import { onChatRealtime, startChatRealtime } from '../../services/realtime/chatRealtime';
 
 export default function ChatDetailScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { shopName = 'Shop', shopId } = route.params || {};
+  const {
+    conversationId: routeConversationId,
+    shopName = 'Shop',
+    shopId,
+    productId,
+  } = route.params || {};
+
+  const [conversationId, setConversationId] = useState<number | null>(
+    routeConversationId ? Number(routeConversationId) : null
+  );
+  const [headerTitle, setHeaderTitle] = useState(shopName);
   const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', text: 'Chào bạn, mình có thể giúp gì cho bạn?', isMine: false, time: '10:00' },
-    { id: '2', text: 'Sản phẩm này còn hàng không ạ?', isMine: true, time: '10:05' },
-    { id: '3', text: 'Dạ còn bạn nhé, bạn đặt hàng ngay để nhận ưu đãi ạ.', isMine: false, time: '10:06' },
-  ]);
+  const { startConversation, getMessages, sendMessage, markAsRead, upsertConversation } = useChatStore();
 
-  const timeNow = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const loadMessages = async (id: number, showLoading = false) => {
+    if (showLoading) setIsLoading(true);
+    try {
+      const data = await getMessages(id);
+      setMessages(data);
+      await markAsRead(id).catch(() => {});
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 50);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error?.message || 'Không thể tải tin nhắn.');
+    } finally {
+      if (showLoading) setIsLoading(false);
+    }
+  };
 
-  const sendMessage = () => {
-    if (!message.trim()) return;
-    setMessages(prev => [
-      ...prev,
-      { id: Date.now().toString(), text: message.trim(), isMine: true, time: timeNow() },
-    ]);
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let active = true;
+
+    const init = async () => {
+      try {
+        setIsLoading(true);
+        let id = conversationId;
+
+        if (!id && shopId) {
+          const conversation = await startConversation(Number(shopId), productId ? Number(productId) : undefined);
+          if (!active) return;
+          id = conversation.id;
+          setConversationId(id);
+          setHeaderTitle(conversation.shopName || conversation.otherUserName || shopName);
+        }
+
+        if (!id) {
+          Alert.alert('Lỗi', 'Không tìm thấy cuộc trò chuyện.');
+          navigation.goBack();
+          return;
+        }
+
+        await loadMessages(id, false);
+        timer = setInterval(() => loadMessages(id!, false), 5000);
+      } catch (error: any) {
+        Alert.alert('Lỗi', error?.message || 'Không thể mở chat.');
+        navigation.goBack();
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
+    init();
+
+    return () => {
+      active = false;
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    startChatRealtime().catch(() => {});
+
+    const unsubscribeMessage = onChatRealtime('ReceiveMessage', (incoming: ChatMessage) => {
+      if (conversationId && incoming.conversationId !== conversationId) return;
+      setMessages(prev => {
+        if (prev.some(item => item.id === incoming.id)) return prev;
+        return [...prev, incoming];
+      });
+      if (conversationId && !incoming.isMine) {
+        markAsRead(conversationId).catch(() => {});
+      }
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
+    });
+
+    const unsubscribeConversation = onChatRealtime('ConversationUpdated', (conversation: Conversation) => {
+      upsertConversation(conversation);
+    });
+
+    return () => {
+      unsubscribeMessage();
+      unsubscribeConversation();
+    };
+  }, [conversationId, markAsRead, upsertConversation]);
+
+  const formatTime = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleSendText = async () => {
+    if (!conversationId || !message.trim() || isSending) return;
+
+    const text = message.trim();
     setMessage('');
-    // Scroll to bottom
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    setIsSending(true);
+    try {
+      const sent = await sendMessage(conversationId, text);
+      setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (error: any) {
+      setMessage(text);
+      Alert.alert('Lỗi', error?.message || 'Không thể gửi tin nhắn.');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const sendImage = async (uri: string) => {
+    if (!conversationId || isSending) return;
+
+    setIsSending(true);
+    try {
+      const sent = await sendMessage(conversationId, undefined, uri);
+      setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error?.message || 'Không thể gửi ảnh.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const pickImage = async (fromCamera: boolean) => {
@@ -56,12 +166,7 @@ export default function ChatDetailScreen({ navigation, route }: any) {
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
-      const uri = result.assets[0].uri;
-      setMessages(prev => [
-        ...prev,
-        { id: Date.now().toString(), imageUri: uri, isMine: true, time: timeNow() },
-      ]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      await sendImage(result.assets[0].uri);
     }
   };
 
@@ -83,31 +188,34 @@ export default function ChatDetailScreen({ navigation, route }: any) {
     }
   };
 
-  const renderItem = ({ item }: { item: Message }) => (
-    <View style={[styles.messageRow, item.isMine ? styles.myMessageRow : styles.theirMessageRow]}>
-      {!item.isMine && (
-        <View style={styles.avatarSmall}>
-          <Ionicons name="storefront-outline" size={14} color={colors.primary} />
-        </View>
-      )}
-      <View style={[styles.messageBubble, item.isMine ? styles.myBubble : styles.theirBubble]}>
-        {item.imageUri ? (
-          <Image source={{ uri: item.imageUri }} style={styles.sentImage} resizeMode="cover" />
-        ) : (
-          <Text style={[styles.messageText, item.isMine ? styles.myText : styles.theirText]}>
-            {item.text}
-          </Text>
+  const renderItem = ({ item }: { item: ChatMessage }) => {
+    const imageUrl = item.imageUrl ? resolveProductImageUrl(item.imageUrl) : null;
+
+    return (
+      <View style={[styles.messageRow, item.isMine ? styles.myMessageRow : styles.theirMessageRow]}>
+        {!item.isMine && (
+          <View style={styles.avatarSmall}>
+            <Ionicons name="storefront-outline" size={14} color={colors.primary} />
+          </View>
         )}
-        <Text style={[styles.timeText, item.isMine && { color: 'rgba(255,255,255,0.7)' }]}>
-          {item.time}
-        </Text>
+        <View style={[styles.messageBubble, item.isMine ? styles.myBubble : styles.theirBubble]}>
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.sentImage} resizeMode="cover" />
+          ) : (
+            <Text style={[styles.messageText, item.isMine ? styles.myText : styles.theirText]}>
+              {item.text}
+            </Text>
+          )}
+          <Text style={[styles.timeText, item.isMine && { color: 'rgba(255,255,255,0.7)' }]}>
+            {formatTime(item.createdAt)}
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
@@ -116,30 +224,40 @@ export default function ChatDetailScreen({ navigation, route }: any) {
           <View style={styles.headerAvatar}>
             <Ionicons name="storefront-outline" size={18} color={colors.primary} />
           </View>
-          <Text style={styles.headerTitle} numberOfLines={1}>{shopName}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{headerTitle}</Text>
         </View>
         <TouchableOpacity style={styles.headerIcon}>
           <Ionicons name="call-outline" size={22} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Chat Content & Input */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        />
+        {isLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderItem}
+            keyExtractor={item => String(item.id)}
+            contentContainerStyle={messages.length === 0 ? styles.emptyContent : styles.listContent}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Ionicons name="chatbubble-ellipses-outline" size={42} color="#bbb" />
+                <Text style={styles.emptyText}>Hãy bắt đầu cuộc trò chuyện</Text>
+              </View>
+            }
+          />
+        )}
 
         <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-          {/* Nút + gửi ảnh */}
-          <TouchableOpacity style={styles.attachBtn} onPress={handleAttach}>
+          <TouchableOpacity style={styles.attachBtn} onPress={handleAttach} disabled={isSending || !conversationId}>
             <Ionicons name="add-circle" size={30} color={colors.primary} />
           </TouchableOpacity>
 
@@ -152,18 +270,18 @@ export default function ChatDetailScreen({ navigation, route }: any) {
             multiline
             maxLength={1000}
             textAlignVertical="center"
+            editable={!isSending && !!conversationId}
           />
 
           <TouchableOpacity
-            onPress={sendMessage}
-            style={[styles.sendBtn, !message.trim() && styles.sendBtnDisabled]}
-            disabled={!message.trim()}
+            onPress={handleSendText}
+            style={[styles.sendBtn, (!message.trim() || isSending) && styles.sendBtnDisabled]}
+            disabled={!message.trim() || isSending || !conversationId}
           >
-            <Ionicons name="send" size={22} color={message.trim() ? colors.primary : '#ccc'} />
+            <Ionicons name="send" size={22} color={message.trim() && !isSending ? colors.primary : '#ccc'} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-
     </View>
   );
 }
@@ -188,6 +306,10 @@ const styles = StyleSheet.create({
   headerIcon: { padding: 6 },
 
   listContent: { padding: 12, paddingBottom: 8 },
+  emptyContent: { flexGrow: 1, padding: 12 },
+  loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { marginTop: 10, color: '#888', fontSize: 14 },
 
   messageRow: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-end' },
   myMessageRow: { justifyContent: 'flex-end' },

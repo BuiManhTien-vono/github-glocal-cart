@@ -45,7 +45,7 @@ export default function ShopScreen({ route, navigation }: any) {
   const { shopId } = route.params || {};
   const { isLoggedIn, setGuestMode } = useAuth();
   const { isFollowing, toggleFollow, loadFollowedShops } = useFollowShopStore();
-  const currentShopId = Number(shopId || MOCK_SHOP.id);
+  const currentShopId = Number(shopId || 0);
 
   // ─── State ───
   const [activeTab, setActiveTab] = useState<'shop' | 'products' | 'categories'>('shop');
@@ -58,7 +58,8 @@ export default function ShopScreen({ route, navigation }: any) {
 
   const fetchProducts = async () => {
     try {
-      const res = await apiClient.get('/products') as any;
+      const url = currentShopId > 0 ? `/products?sellerId=${currentShopId}&pageSize=100` : '/products?pageSize=100';
+      const res = await apiClient.get(url) as any;
       setProducts(res?.items || (Array.isArray(res) ? res : []));
     } catch (error) {
       console.warn('ShopScreen fetch error:', error);
@@ -103,6 +104,26 @@ export default function ShopScreen({ route, navigation }: any) {
       setFollowCount(prev => Math.max(0, wasFollowing ? prev + 1 : prev - 1));
       Alert.alert('Loi', error?.message || 'Khong the cap nhat theo doi shop.');
     }
+  };
+
+  const handleChat = () => {
+    if (!isLoggedIn) {
+      Alert.alert('Yêu cầu đăng nhập', 'Bạn cần đăng nhập để chat với shop.', [
+        { text: 'Để sau', style: 'cancel' },
+        { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+      ]);
+      return;
+    }
+
+    const targetShopId = currentShopId || Number(products[0]?.sellerId || 0);
+    const targetShopName = products[0]?.sellerName || MOCK_SHOP.name;
+
+    if (!targetShopId) {
+      Alert.alert('Không thể mở chat', 'Shop này chưa có thông tin người bán.');
+      return;
+    }
+
+    navigation.navigate('ChatDetail', { shopId: targetShopId, shopName: targetShopName });
   };
 
   // ─── Mock derived data ───
@@ -304,7 +325,7 @@ export default function ShopScreen({ route, navigation }: any) {
             <View style={styles.shopInfoRight}>
               <Image source={{ uri: MOCK_SHOP.logo }} style={styles.shopLogo} />
               <View style={styles.shopMeta}>
-                <TouchableOpacity onPress={() => navigation.navigate('ShopDetail')}>
+                <TouchableOpacity onPress={() => navigation.navigate('ShopDetail', { shopId: currentShopId, shopName: MOCK_SHOP.name })}>
                   <View style={styles.shopNameRow}>
                     <Text style={styles.shopName}>{MOCK_SHOP.name}</Text>
                     <Ionicons name="chevron-forward" size={14} color={colors.text} />
@@ -326,7 +347,7 @@ export default function ShopScreen({ route, navigation }: any) {
                   {shopFollowed ? 'Đang theo dõi' : 'Theo dõi'}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.chatBtn}>
+              <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
                 <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.primary} />
                 <Text style={styles.chatBtnText}>Nhắn tin</Text>
               </TouchableOpacity>

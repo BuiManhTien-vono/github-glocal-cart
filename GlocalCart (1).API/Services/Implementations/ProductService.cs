@@ -31,6 +31,8 @@ namespace GlocalCart.API.Services.Implementations
                 var allCategoryIds = await GetCategoryIdsRecursive(search.CategoryId.Value);
                 query = query.Where(p => allCategoryIds.Contains(p.CategoryId));
             }
+            if (search.SellerId.HasValue)
+                query = query.Where(p => p.SellerId == search.SellerId.Value);
             if (search.MinPrice.HasValue)
                 query = query.Where(p => p.Price >= search.MinPrice.Value);
             if (search.MaxPrice.HasValue)

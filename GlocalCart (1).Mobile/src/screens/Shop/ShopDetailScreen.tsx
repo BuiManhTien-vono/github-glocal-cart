@@ -7,10 +7,11 @@ import { colors } from '../../theme/colors';
 
 export default function ShopDetailScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { shopId, shopName } = route.params || {};
 
   // Mock data matching the image provided
   const shopData = {
-    name: 'Glocal Cart Official Store',
+    name: shopName || 'Glocal Cart Official Store',
     logo: 'https://ui-avatars.com/api/?name=G&background=000&color=fff&size=80&bold=true',
     isOnline: true,
     followers: '304,9k',
@@ -110,7 +111,7 @@ export default function ShopDetailScreen({ route, navigation }: any) {
         <View style={styles.bottomSection}>
           <TouchableOpacity
             style={styles.allProductsBtn}
-            onPress={() => navigation.navigate('ShopView', { activeTab: 'products' })}
+            onPress={() => navigation.navigate('ShopView', { shopId, activeTab: 'products' })}
           >
             <Text style={styles.allProductsText}>Xem tất cả sản phẩm</Text>
           </TouchableOpacity>

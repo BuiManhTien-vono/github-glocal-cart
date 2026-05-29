@@ -1,16 +1,32 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useChatStore } from '../../store/useChatStore';
-import { colors, spacing, shadow } from '../../theme/colors';
+import { useFocusEffect } from '@react-navigation/native';
+import { Conversation, useChatStore } from '../../store/useChatStore';
+import { colors } from '../../theme/colors';
+import { onChatRealtime, startChatRealtime } from '../../services/realtime/chatRealtime';
 
 export default function ChatListScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { conversations, markAsRead } = useChatStore();
+  const { conversations, isLoading, fetchConversations, markAsRead, upsertConversation } = useChatStore();
 
-  const handleConversationPress = (item: any) => {
-    markAsRead(item.id);
+  useEffect(() => {
+    startChatRealtime().catch(() => {});
+    const unsubscribe = onChatRealtime('ConversationUpdated', (conversation) => {
+      upsertConversation(conversation);
+    });
+    return unsubscribe;
+  }, [upsertConversation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchConversations().catch(() => {});
+    }, [fetchConversations])
+  );
+
+  const handleConversationPress = async (item: Conversation) => {
+    await markAsRead(item.id).catch(() => {});
     navigation.navigate('ChatDetail', { conversationId: item.id, shopName: item.shopName });
   };
 
@@ -23,13 +39,9 @@ export default function ChatListScreen({ navigation }: any) {
     return `${date.getDate()}/${date.getMonth() + 1}`;
   };
 
-  const renderItem = ({ item }: any) => (
-    <TouchableOpacity 
-      style={styles.chatItem}
-      onPress={() => handleConversationPress(item)}
-    >
+  const renderItem = ({ item }: { item: Conversation }) => (
+    <TouchableOpacity style={styles.chatItem} onPress={() => handleConversationPress(item)}>
       <View style={styles.avatarContainer}>
-        {/* Placeholder avatar or shop logo */}
         <View style={styles.avatarCircle}>
           <Ionicons name="storefront-outline" size={24} color={colors.primary} />
         </View>
@@ -37,12 +49,12 @@ export default function ChatListScreen({ navigation }: any) {
 
       <View style={styles.chatContent}>
         <View style={styles.chatHeader}>
-          <Text style={styles.shopName} numberOfLines={1}>{item.shopName}</Text>
+          <Text style={styles.shopName} numberOfLines={1}>{item.shopName || item.otherUserName}</Text>
           <Text style={styles.timeText}>{formatDate(item.updatedAt)}</Text>
         </View>
-        
+
         <View style={styles.chatFooter}>
-          <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage}</Text>
+          <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage || 'Chưa có tin nhắn'}</Text>
           {item.unreadCount > 0 && (
             <View style={styles.unreadBadge}>
               <Text style={styles.unreadCount}>{item.unreadCount}</Text>
@@ -55,7 +67,6 @@ export default function ChatListScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#EE4D2D" />
@@ -63,13 +74,25 @@ export default function ChatListScreen({ navigation }: any) {
         <Text style={styles.headerTitle}>Chat</Text>
       </View>
 
-      <FlatList
-        data={conversations}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      {isLoading && conversations.length === 0 ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={conversations}
+          renderItem={renderItem}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={conversations.length === 0 ? styles.emptyList : styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <View style={styles.centerState}>
+              <Ionicons name="chatbubble-ellipses-outline" size={44} color="#ccc" />
+              <Text style={styles.emptyText}>Chưa có cuộc trò chuyện nào</Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -97,6 +120,20 @@ const styles = StyleSheet.create({
   },
   listContent: {
     flexGrow: 1,
+  },
+  emptyList: {
+    flexGrow: 1,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  emptyText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#888',
   },
   chatItem: {
     flexDirection: 'row',

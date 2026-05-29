@@ -114,7 +114,7 @@ export default function ProductDetailScreen() {
       ]);
       return;
     }
-    navigation.navigate('ChatDetail', { shopId, shopName });
+    navigation.navigate('ChatDetail', { shopId, shopName, productId });
   };
 
   // Toggle yêu thích
