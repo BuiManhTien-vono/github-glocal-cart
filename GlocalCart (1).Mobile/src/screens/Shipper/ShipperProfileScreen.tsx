@@ -83,22 +83,18 @@ export default function ShipperProfileScreen() {
         </View>
 
         <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Vận hành hôm nay</Text>
+          <Text style={styles.sectionTitle}>Thống kê hôm nay</Text>
           <View style={styles.statsGrid}>
-            <StatCard icon="checkmark-circle" color={colors.success} value={`${stats.todayCompleted}`} label="Đã giao" />
-            <StatCard icon="wallet" color={colors.primary} value={formatCurrency(stats.todayIncome)} label="Thu nhập" />
-          </View>
-        </View>
-
-        <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Tổng quan</Text>
-          <View style={styles.statsGrid}>
-            <StatCard icon="bicycle" color={colors.secondary} value={`${stats.activeShipments}`} label="Đang giữ" />
-            <StatCard icon="cash" color={colors.warning} value={formatCurrency(stats.pendingCodAmount)} label="COD cần nộp" />
+            <StatCard icon="checkmark-circle" color={colors.success} value={`${stats.todayCompleted}`} label="Đã giao" onPress={() => navigation.navigate('Completed')} />
+            <StatCard icon="wallet" color={colors.primary} value={formatCurrency(stats.todayIncome)} label="Thu nhập" onPress={() => navigation.navigate('Completed')} />
           </View>
           <View style={styles.statsGrid}>
-            <StatCard icon="layers" color={colors.secondary} value={`${stats.monthCompleted}`} label="Đơn tháng" />
-            <StatCard icon="trending-up" color={colors.success} value={`${stats.successRate}%`} label="Tỉ lệ thành công" />
+            <StatCard icon="bicycle" color={colors.secondary} value={`${stats.activeShipments}`} label="Đang giữ" onPress={() => navigation.navigate('Delivering')} />
+            <StatCard icon="cash" color={colors.warning} value={formatCurrency(stats.pendingCodAmount)} label="COD" onPress={() => navigation.navigate('Delivering')} />
+          </View>
+          <View style={styles.statsGrid}>
+            <StatCard icon="layers" color={colors.secondary} value={`${stats.monthCompleted}`} label="Đơn tháng" onPress={() => navigation.navigate('Completed')} />
+            <StatCard icon="trending-up" color={colors.success} value={`${stats.successRate}%`} label="Tỉ lệ thành công" onPress={() => navigation.navigate('Completed')} />
           </View>
         </View>
 
@@ -118,13 +114,28 @@ export default function ShipperProfileScreen() {
   );
 }
 
-function StatCard({ icon, color, value, label }: { icon: any; color: string; value: string; label: string }) {
+function StatCard({
+  icon,
+  color,
+  value,
+  label,
+  onPress,
+}: {
+  icon: any;
+  color: string;
+  value: string;
+  label: string;
+  onPress?: () => void;
+}) {
   return (
-    <View style={styles.statCard}>
+    <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.82} disabled={!onPress}>
       <Ionicons name={icon} size={30} color={color} />
       <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+      <View style={styles.statLabelRow}>
+        <Text style={styles.statLabel}>{label}</Text>
+        {onPress ? <Ionicons name="chevron-forward" size={13} color={colors.textMuted} /> : null}
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -186,6 +197,7 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: 18, fontWeight: '800', color: colors.text, marginTop: 10, marginBottom: 4, maxWidth: '100%' },
   statLabel: { fontSize: 13, color: colors.textSecondary },
+  statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   optionsSection: {
     marginTop: 22,
     paddingHorizontal: 16,

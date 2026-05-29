@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
+import { fetchPagedItems } from '../../services/api/pagedApi';
 import { resolveProductImage } from '../../utils/imageUtils';
 import { getCategoryIcon } from '../../utils/categoryIcon';
 
@@ -64,7 +65,6 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
     name: 'Glocal Cart Official Store',
     logo: 'https://ui-avatars.com/api/?name=GC&background=FF6B35&color=fff&size=120&bold=true',
     banner: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=900&h=380&fit=crop',
-    rating: 4.8,
     followerCount: '15.2k',
   };
 
@@ -96,14 +96,12 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
 
   const loadData = useCallback(async () => {
     try {
-      const [productsRes, ordersRes, categoriesRes]: any[] = await Promise.all([
-        apiClient.get('/products/my-products?pageSize=100'),
-        apiClient.get('/orders/seller'),
+      const [productItems, orderItems, categoriesRes]: any[] = await Promise.all([
+        fetchPagedItems('/products/my-products'),
+        fetchPagedItems('/orders/seller'),
         apiClient.get('/categories'),
       ]);
 
-      const productItems = productsRes?.items || (Array.isArray(productsRes) ? productsRes : []);
-      const orderItems = ordersRes?.items || (Array.isArray(ordersRes) ? ordersRes : []);
       const categoryItems = categoriesRes?.items || categoriesRes?.data || (Array.isArray(categoriesRes) ? categoriesRes : []);
       const rootCategories = categoryItems.filter((cat: any) => !cat.parentCategoryId && !cat.parentId);
 
@@ -157,6 +155,12 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
       (sum, order) => sum + getOrderItems(order).reduce((total: number, item: any) => total + Number(item.quantity || 0), 0),
       0
     );
+    const reviewCount = products.reduce((sum, product) => sum + Number(product.reviewCount || 0), 0);
+    const ratingTotal = products.reduce(
+      (sum, product) => sum + Number(product.averageRating || 0) * Number(product.reviewCount || 0),
+      0
+    );
+    const averageRating = reviewCount > 0 ? ratingTotal / reviewCount : 0;
 
     return {
       newOrders: orders.filter(order => order.status === 'Pending').length,
@@ -165,9 +169,10 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
       hiddenProducts: products.filter(product => product.isActive === false || product.isLocked === true).length,
       revenue,
       soldItems,
-      rating: shopData.rating,
+      rating: averageRating.toFixed(1),
+      reviewCount,
     };
-  }, [completedOrders, orders, products, shopData.rating]);
+  }, [completedOrders, orders, products]);
 
   const flashProducts = filteredProducts.slice(0, 8);
   const bestProducts = [...filteredProducts]
@@ -202,15 +207,6 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
     scrollToTop();
     setRefreshing(true);
     loadData();
-  };
-
-  const goOrders = (activeTab?: string) => {
-    const parent = navigation.getParent?.();
-    if (parent) {
-      parent.navigate('Orders', activeTab ? { activeTab } : undefined);
-      return;
-    }
-    navigation.navigate('SellerOrders', activeTab ? { activeTab } : undefined);
   };
 
   const openShopDecoration = () => navigation.navigate('SellerShopInfo');
@@ -334,7 +330,7 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
           <Text style={styles.shopName} numberOfLines={1}>{shopData.name}</Text>
           <View style={styles.shopStatsLine}>
             <Ionicons name="star" size={12} color="#FACC15" />
-            <Text style={styles.shopStatsText}>{shopData.rating}</Text>
+            <Text style={styles.shopStatsText}>{stats.rating}</Text>
             <Text style={styles.shopStatsText}>|</Text>
             <Text style={styles.shopStatsText}>{shopData.followerCount} người theo dõi</Text>
           </View>
@@ -364,21 +360,20 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
   const renderManagementStats = () => (
     <View style={styles.overlapWrap}>
       <View style={styles.statsPanel}>
-        <TouchableOpacity style={styles.statBox} onPress={() => goOrders('Chờ xác nhận')}>
-          <Text style={[styles.statValue, { color: colors.primary }]}>{stats.newOrders}</Text>
-          <Text style={styles.statLabel}>Đơn mới</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerProducts')}>
           <Text style={[styles.statValue, { color: colors.secondary }]}>{stats.activeProducts}</Text>
           <Text style={styles.statLabel}>Đang bán</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerProducts')}>
-          <Text style={[styles.statValue, { color: colors.warning }]}>{stats.outOfStock}</Text>
-          <Text style={styles.statLabel}>Hết hàng</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerRevenue')}>
           <Text style={[styles.statValue, { color: colors.success }]}>{shortNumber(stats.revenue)}</Text>
           <Text style={styles.statLabel}>Doanh thu</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerReview')}>
+          <View style={styles.statIconValueRow}>
+            <Ionicons name="star" size={15} color={colors.warning} />
+            <Text style={[styles.statValue, { color: colors.warning }]}>{stats.rating}</Text>
+          </View>
+          <Text style={styles.statLabel}>Đánh giá</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -518,29 +513,12 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
     </View>
   );
 
-  const renderTools = () => (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Công cụ quản lý</Text>
-      </View>
-      <View style={styles.toolsGrid}>
-        <ToolButton icon="receipt-outline" label="Đơn hàng" color={colors.primary} onPress={() => goOrders()} />
-        <ToolButton icon="cube-outline" label="Sản phẩm" color={colors.secondary} onPress={() => navigation.navigate('SellerProducts')} />
-        <ToolButton icon="folder-open-outline" label="Danh mục" color="#8B5CF6" onPress={() => navigation.navigate('SellerCategories')} />
-        <ToolButton icon="pie-chart-outline" label="Doanh thu" color={colors.success} onPress={() => navigation.navigate('SellerRevenue')} />
-        <ToolButton icon="star-outline" label="Đánh giá" color={colors.warning} onPress={() => navigation.navigate('SellerReview')} />
-        <ToolButton icon="brush-outline" label="Trang trí" color="#EC4899" onPress={openShopDecoration} />
-      </View>
-    </View>
-  );
-
   const renderManagementContent = () => (
     <>
       {renderManagementStats()}
       {renderCategoryStrip()}
       {renderFlashSale()}
       {renderProductGrid('manage')}
-      {renderTools()}
     </>
   );
 
@@ -596,27 +574,6 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
         </Animated.View>
       )}
     </View>
-  );
-}
-
-function ToolButton({
-  icon,
-  label,
-  color,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  color: string;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity style={styles.toolButton} onPress={onPress}>
-      <View style={[styles.toolIconWrap, { backgroundColor: color + '14' }]}>
-        <Ionicons name={icon} size={22} color={color} />
-      </View>
-      <Text style={styles.toolLabel}>{label}</Text>
-    </TouchableOpacity>
   );
 }
 
@@ -891,6 +848,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  statIconValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
   statValue: {
     fontSize: 17,
     fontWeight: '900',
@@ -1110,30 +1073,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     fontSize: 10,
     fontWeight: '900',
-  },
-  toolsGrid: {
-    paddingHorizontal: spacing.md,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  toolButton: {
-    width: (SCREEN_WIDTH - 32 - 20) / 3,
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  toolIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 7,
-  },
-  toolLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '800',
   },
   scrollTopWrap: {
     position: 'absolute',
