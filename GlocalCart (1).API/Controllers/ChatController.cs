@@ -37,6 +37,7 @@ namespace GlocalCart.API.Controllers
                 .Include(c => c.Buyer)
                 .Include(c => c.Seller)
                 .Where(c => c.BuyerId == UserId || c.SellerId == UserId)
+                .Where(c => c.Messages.Any())
                 .OrderByDescending(c => c.UpdatedAt)
                 .Select(c => new ChatConversationDto
                 {
