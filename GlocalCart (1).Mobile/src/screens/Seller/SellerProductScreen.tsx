@@ -4,8 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
-import apiClient from '../../services/api/apiClient';
 import { resolveProductImage } from '../../utils/imageUtils';
+import { useAuth } from '../../context/AuthContext';
+import { fetchPagedItems } from '../../services/api/pagedApi';
 
 interface ProductItem {
     id: number;
@@ -13,6 +14,9 @@ interface ProductItem {
     price: number;
     availableItemCount: number;
     isActive: boolean;
+    isLocked?: boolean;
+    sellerName?: string;
+    sellerId?: number;
     mediaUrl?: string;
     categoryName?: string;
     images?: { id: number; imageUrl: string; isMain: boolean; hasImageData: boolean }[];
@@ -23,6 +27,8 @@ interface ProductItem {
 
 export default function SellerProductsScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'Admin';
     const [products, setProducts] = useState<ProductItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchText, setSearchText] = useState('');
@@ -31,15 +37,16 @@ export default function SellerProductsScreen({ navigation }: any) {
     useFocusEffect(
         useCallback(() => {
             loadProducts();
-        }, [])
+        }, [isAdmin])
     );
 
     const loadProducts = async () => {
         try {
             setLoading(true);
-            const res = await apiClient.get('/products/my-products?pageSize=100');
+            let items = await fetchPagedItems(isAdmin ? '/admin/products' : '/products/my-products', 100);
             // API trả về PagedResult: { items, totalCount, page, pageSize }
-            const items = (res as any)?.items || (res as any) || [];
+            if (isAdmin && items.length === 0) items = await fetchPagedItems('/products/my-products', 100);
+            if (isAdmin && items.length === 0) items = await fetchPagedItems('/products', 100);
             setProducts(Array.isArray(items) ? items : []);
         } catch (err: any) {
             console.log('[MyProducts Error]', err?.message);
@@ -54,6 +61,7 @@ export default function SellerProductsScreen({ navigation }: any) {
         : products;
 
     const getStatus = (item: ProductItem) => {
+        if (item.isLocked) return 'locked';
         if (!item.isActive) return 'hidden';
         if (item.availableItemCount === 0) return 'out_of_stock';
         return 'active';
@@ -83,10 +91,15 @@ export default function SellerProductsScreen({ navigation }: any) {
                         <Text style={styles.price}>{item.price.toLocaleString('vi-VN')}đ</Text>
                         <View style={styles.metricsRow}>
                             <Text style={styles.metricItem}>Kho: <Text style={{ fontWeight: '600', color: item.availableItemCount === 0 ? colors.danger : colors.text }}>{item.availableItemCount}</Text></Text>
+                            {isAdmin && (
+                                <Text style={styles.metricItem} numberOfLines={1}>
+                                    Seller: <Text style={{ fontWeight: '600', color: colors.text }}>{item.sellerName || item.sellerId || 'N/A'}</Text>
+                                </Text>
+                            )}
                         </View>
-                        <View style={[styles.statusBadge, status === 'active' ? styles.statusActive : status === 'out_of_stock' ? styles.statusOut : styles.statusHidden]}>
+                        <View style={[styles.statusBadge, status === 'active' ? styles.statusActive : status === 'out_of_stock' ? styles.statusOut : status === 'locked' ? styles.statusLocked : styles.statusHidden]}>
                             <Text style={styles.statusText}>
-                                {status === 'active' ? 'Đang bán' : status === 'out_of_stock' ? 'Hết hàng' : 'Đang ẩn'}
+                                {status === 'active' ? 'Đang bán' : status === 'out_of_stock' ? 'Hết hàng' : status === 'locked' ? 'Đã khóa' : 'Đang ẩn'}
                             </Text>
                         </View>
                     </View>
@@ -112,7 +125,7 @@ export default function SellerProductsScreen({ navigation }: any) {
                 <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Sản Phẩm Của Tôi</Text>
+                <Text style={styles.headerTitle}>{isAdmin ? 'Tất cả sản phẩm' : 'Sản Phẩm Của Tôi'}</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('SellerAddProduct')}><Ionicons name="add" size={28} color={colors.primary} /></TouchableOpacity>
             </View>
 
@@ -121,7 +134,7 @@ export default function SellerProductsScreen({ navigation }: any) {
                     <Ionicons name="search" size={20} color={colors.textMuted} />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Tìm sản phẩm của bạn..."
+                        placeholder={isAdmin ? 'Tìm tất cả sản phẩm...' : 'Tìm sản phẩm của bạn...'}
                         value={searchText}
                         onChangeText={setSearchText}
                     />
@@ -137,7 +150,7 @@ export default function SellerProductsScreen({ navigation }: any) {
                 <View style={styles.emptyContainer}>
                     <Ionicons name="cube-outline" size={60} color={colors.textMuted} />
                     <Text style={styles.emptyTitle}>
-                        {searchText ? 'Không tìm thấy sản phẩm' : 'Chưa có sản phẩm nào'}
+                        {searchText ? 'Không tìm thấy sản phẩm' : isAdmin ? 'Chưa có sản phẩm nào trong hệ thống' : 'Chưa có sản phẩm nào'}
                     </Text>
                     <Text style={styles.emptySubtitle}>
                         {searchText ? 'Thử từ khóa khác' : 'Nhấn nút + để thêm sản phẩm đầu tiên'}
@@ -185,6 +198,7 @@ const styles = StyleSheet.create({
     statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
     statusActive: { backgroundColor: colors.success + '20' },
     statusOut: { backgroundColor: colors.danger + '20' },
+    statusLocked: { backgroundColor: colors.danger + '20' },
     statusHidden: { backgroundColor: colors.textMuted + '30' },
     statusText: { fontSize: 11, fontWeight: '600', color: colors.text },
 

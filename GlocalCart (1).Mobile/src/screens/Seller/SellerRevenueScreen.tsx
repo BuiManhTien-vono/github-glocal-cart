@@ -13,6 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
+import { fetchPagedItems } from '../../services/api/pagedApi';
+import { useAuth } from '../../context/AuthContext';
 
 const ranges = [
   { key: 'today', label: 'Hôm nay', days: 1 },
@@ -23,37 +25,71 @@ const ranges = [
 
 const currency = (value: number) => `${Math.round(value).toLocaleString('vi-VN')}đ`;
 
-const getOrderItems = (order: any) => order?.items || order?.orderItems || [];
+const getOrderItems = (order: any) => order?.items || order?.Items || order?.orderItems || order?.OrderItems || [];
 
-const isRevenueOrder = (order: any) =>
-  order?.status === 'Complete' ||
-  order?.status === 'Delivered' ||
-  order?.shipment?.status === 'Delivered';
+const getPaymentStatus = (order: any) => order?.paymentStatus || order?.payment?.status;
+
+const isRevenueOrder = (order: any) => {
+  const isComplete =
+    order?.status === 'Complete' ||
+    order?.status === 'Delivered' ||
+    order?.shipment?.status === 'Delivered';
+  const paymentStatus = getPaymentStatus(order);
+  return isComplete && (!paymentStatus || paymentStatus === 'Completed');
+};
+
+const getOrderRevenue = (order: any, includeShipping: boolean) => {
+  if (includeShipping) return Number(order.totalAmount || 0);
+
+  const itemRevenue = getOrderItems(order).reduce((sum: number, item: any) => {
+    const quantity = Number(item.quantity || 0);
+    const price = Number(item.unitPrice ?? item.priceSnapshot ?? item.price ?? 0);
+    return sum + price * quantity;
+  }, 0);
+
+  if (itemRevenue > 0) return itemRevenue;
+  return Math.max(0, Number(order.totalAmount || 0) - Number(order.shippingFee || 0));
+};
 
 export default function SellerRevenueScreen({ navigation }: any): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
   const [orders, setOrders] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [adminRevenue, setAdminRevenue] = useState<any>(null);
   const [activeRange, setActiveRange] = useState('30d');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const selectedRange = ranges.find(item => item.key === activeRange) || ranges[2];
 
   const fetchData = useCallback(async () => {
     try {
-      const [ordersRes, productsRes]: any[] = await Promise.all([
-        apiClient.get('/orders/seller'),
-        apiClient.get('/products/my-products?pageSize=100'),
+      if (isAdmin) {
+        const revenue = await apiClient.get(`/admin/revenue?days=${selectedRange.days}`) as any;
+        setAdminRevenue(revenue);
+        setOrders([]);
+        setProducts([]);
+        return;
+      }
+
+      const ordersEndpoint = isAdmin ? '/admin/orders' : '/orders/seller';
+      const productsEndpoint = isAdmin ? '/admin/products' : '/products/my-products';
+      const [orderItems, productItems]: any[] = await Promise.all([
+        fetchPagedItems(ordersEndpoint, 50),
+        fetchPagedItems(productsEndpoint, 50),
       ]);
 
-      setOrders(ordersRes?.items || (Array.isArray(ordersRes) ? ordersRes : []));
-      setProducts(productsRes?.items || (Array.isArray(productsRes) ? productsRes : []));
+      setOrders(orderItems);
+      setProducts(productItems);
+      setAdminRevenue(null);
     } catch (error) {
       console.warn('Seller revenue fetch error:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isAdmin, selectedRange.days]);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,7 +98,6 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
     }, [fetchData])
   );
 
-  const selectedRange = ranges.find(item => item.key === activeRange) || ranges[2];
   const productLookup = useMemo(() => {
     const map: Record<string, any> = {};
     products.forEach(product => {
@@ -86,7 +121,18 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
   }, [orders, selectedRange.days]);
 
   const summary = useMemo(() => {
-    const totalRevenue = filteredOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+    if (isAdmin && adminRevenue) {
+      const totalRevenue = Number(adminRevenue.totalRevenue ?? adminRevenue.TotalRevenue ?? 0);
+      const totalOrders = Number(adminRevenue.totalOrders ?? adminRevenue.TotalOrders ?? 0);
+      return {
+        totalRevenue,
+        totalOrders,
+        totalItems: Number(adminRevenue.totalItems ?? adminRevenue.TotalItems ?? 0),
+        averageOrder: Number(adminRevenue.averageOrder ?? adminRevenue.AverageOrder ?? (totalOrders ? totalRevenue / totalOrders : 0)),
+      };
+    }
+
+    const totalRevenue = filteredOrders.reduce((sum, order) => sum + getOrderRevenue(order, isAdmin), 0);
     const totalOrders = filteredOrders.length;
     const totalItems = filteredOrders.reduce(
       (sum, order) => sum + getOrderItems(order).reduce((itemSum: number, item: any) => itemSum + Number(item.quantity || 0), 0),
@@ -99,9 +145,18 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
       totalItems,
       averageOrder: totalOrders ? totalRevenue / totalOrders : 0,
     };
-  }, [filteredOrders]);
+  }, [adminRevenue, filteredOrders, isAdmin]);
 
   const byProduct = useMemo(() => {
+    const adminByProduct = adminRevenue?.byProduct ?? adminRevenue?.ByProduct;
+    if (isAdmin && Array.isArray(adminByProduct)) {
+      return adminByProduct.map((item: any) => ({
+        name: item.name ?? item.Name ?? 'Sản phẩm',
+        quantity: Number(item.quantity ?? item.Quantity ?? 0),
+        revenue: Number(item.revenue ?? item.Revenue ?? 0),
+      }));
+    }
+
     const map: Record<string, { name: string; quantity: number; revenue: number }> = {};
 
     filteredOrders.forEach(order => {
@@ -125,9 +180,18 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
     });
 
     return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
-  }, [filteredOrders, productLookup]);
+  }, [adminRevenue, filteredOrders, isAdmin, productLookup]);
 
   const byCategory = useMemo(() => {
+    const adminByCategory = adminRevenue?.byCategory ?? adminRevenue?.ByCategory;
+    if (isAdmin && Array.isArray(adminByCategory)) {
+      return adminByCategory.map((item: any) => ({
+        name: item.name ?? item.Name ?? 'Chưa phân loại',
+        quantity: Number(item.quantity ?? item.Quantity ?? 0),
+        revenue: Number(item.revenue ?? item.Revenue ?? 0),
+      }));
+    }
+
     const map: Record<string, { name: string; quantity: number; revenue: number }> = {};
 
     filteredOrders.forEach(order => {
@@ -144,7 +208,7 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
     });
 
     return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
-  }, [filteredOrders, productLookup]);
+  }, [adminRevenue, filteredOrders, isAdmin, productLookup]);
 
   const maxCategoryRevenue = Math.max(...byCategory.map(item => item.revenue), 1);
   const maxProductRevenue = Math.max(...byProduct.map(item => item.revenue), 1);
@@ -191,7 +255,7 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Doanh thu Shop</Text>
+        <Text style={styles.headerTitle}>{isAdmin ? 'Doanh thu hệ thống' : 'Doanh thu Shop'}</Text>
         <View style={{ width: 40 }} />
       </View>
 

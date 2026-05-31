@@ -1,138 +1,143 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, Image, ActionSheetIOS, ActivityIndicator,
-  Keyboard,
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { colors } from '../../theme/colors';
-import { ChatMessage, Conversation, useChatStore } from '../../store/useChatStore';
-import { resolveProductImageUrl } from '../../utils/imageUtils';
+import { useAuth } from '../../context/AuthContext';
 import { onChatRealtime, startChatRealtime } from '../../services/realtime/chatRealtime';
+import { ChatId, ChatMessage, Conversation, useChatStore } from '../../store/useChatStore';
+import { colors } from '../../theme/colors';
+import { resolveProductImageUrl } from '../../utils/imageUtils';
+
+const isNumericId = (id: ChatId | null | undefined) => id != null && Number.isFinite(Number(id));
 
 export default function ChatDetailScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const {
-    conversationId: routeConversationId,
-    shopName = 'Shop',
-    shopId,
-    productId,
-  } = route.params || {};
+  const { user } = useAuth();
+  const params = route.params || {};
 
-  const [conversationId, setConversationId] = useState<number | null>(
-    routeConversationId ? Number(routeConversationId) : null
+  const routeConversationId = params.conversationId as ChatId | undefined;
+  const numericShopId = Number(params.shopId || 0);
+  const productId = params.productId ? Number(params.productId) : undefined;
+  const peerId = params.peerId != null ? String(params.peerId) : numericShopId > 0 ? String(numericShopId) : undefined;
+  const avatarUrl = params.avatarUrl;
+  const initialPeerName = params.peerName || params.shopName || 'Nguoi dung';
+  const directConversationId = useMemo(
+    () => String(routeConversationId || peerId || initialPeerName),
+    [routeConversationId, peerId, initialPeerName]
   );
-  const [headerTitle, setHeaderTitle] = useState(shopName);
-  const [message, setMessage] = useState('');
+
+  const [conversationId, setConversationId] = useState<ChatId | null>(routeConversationId || null);
+  const [headerTitle, setHeaderTitle] = useState(initialPeerName);
+  const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
+
+  const flatListRef = useRef<FlatList<ChatMessage>>(null);
   const inputRef = useRef<TextInput>(null);
+  const currentUserId = String(user?.id || 'me');
 
-  const { startConversation, getMessages, sendMessage, markAsRead, upsertConversation } = useChatStore();
+  const {
+    addMessage,
+    getConversation,
+    getMessages,
+    markAsRead,
+    sendMessage,
+    startConversation,
+    upsertConversation,
+  } = useChatStore();
 
-  useEffect(() => {
-    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
-      setIsKeyboardVisible(true);
-    });
-    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-      setIsKeyboardVisible(false);
-      inputRef.current?.blur();
-    });
+  const canStartBackendConversation = numericShopId > 0;
+  const canCompose = Boolean(conversationId || canStartBackendConversation || directConversationId);
 
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
-
-  const ensureConversation = async () => {
-    if (conversationId) return conversationId;
-    if (!shopId) throw new Error('Không tìm thấy thông tin shop.');
-
-    const conversation = await startConversation(Number(shopId), productId ? Number(productId) : undefined);
-    setConversationId(conversation.id);
-    setHeaderTitle(conversation.shopName || conversation.otherUserName || shopName);
-    return conversation.id;
+  const scrollToEnd = (animated = false) => {
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated }), 80);
   };
 
-  const loadMessages = async (id: number, showLoading = false) => {
+  const loadMessages = useCallback(async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
     try {
-      const data = await getMessages(id);
-      setMessages(data);
-      await markAsRead(id).catch(() => {});
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 50);
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.message || 'Không thể tải tin nhắn.');
-    } finally {
-      if (showLoading) setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let active = true;
-
-    const init = async () => {
-      try {
-        setIsLoading(true);
-        const id = conversationId;
-
-        if (!id && !shopId) {
-          Alert.alert('Lỗi', 'Không tìm thấy cuộc trò chuyện.');
-          navigation.goBack();
-          return;
-        }
-
-        if (id) {
-          await loadMessages(id, false);
-        } else {
-          setMessages([]);
-          setHeaderTitle(shopName);
-        }
-      } catch (error: any) {
-        Alert.alert('Lỗi', error?.message || 'Không thể mở chat.');
-        navigation.goBack();
-      } finally {
-        if (active) setIsLoading(false);
+      if (conversationId) {
+        const data = await getMessages(conversationId);
+        setMessages(data);
+        await markAsRead(conversationId).catch(() => {});
+        scrollToEnd(false);
+        return;
       }
-    };
 
-    init();
+      const localConversation = getConversation(directConversationId);
+      setMessages(localConversation?.messages || []);
+      scrollToEnd(false);
+    } catch (error: any) {
+      Alert.alert('Loi', error?.message || 'Khong the tai tin nhan.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [conversationId, directConversationId, getConversation, getMessages, markAsRead]);
 
-    return () => {
-      active = false;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadMessages(true);
+    }, [loadMessages])
+  );
 
   useEffect(() => {
     startChatRealtime().catch(() => {});
 
     const unsubscribeMessage = onChatRealtime('ReceiveMessage', (incoming: ChatMessage) => {
-      if (conversationId && incoming.conversationId !== conversationId) return;
+      if (!conversationId || String(incoming.conversationId) !== String(conversationId)) return;
+
       setMessages(prev => {
-        if (prev.some(item => item.id === incoming.id)) return prev;
+        if (prev.some(item => String(item.id) === String(incoming.id))) return prev;
         return [...prev, incoming];
       });
-      if (conversationId && !incoming.isMine) {
+
+      if (!incoming.isMine) {
         markAsRead(conversationId).catch(() => {});
       }
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
+      scrollToEnd(true);
     });
 
     const unsubscribeConversation = onChatRealtime('ConversationUpdated', (conversation: Conversation) => {
       upsertConversation(conversation);
+      if (conversationId && String(conversation.id) === String(conversationId)) {
+        setHeaderTitle(conversation.peerName || conversation.shopName || headerTitle);
+      }
     });
 
     return () => {
       unsubscribeMessage();
       unsubscribeConversation();
     };
-  }, [conversationId, markAsRead, upsertConversation]);
+  }, [conversationId, headerTitle, markAsRead, upsertConversation]);
+
+  const ensureConversation = async () => {
+    if (conversationId) return conversationId;
+
+    if (canStartBackendConversation) {
+      const conversation = await startConversation(numericShopId, productId);
+      setConversationId(conversation.id);
+      setHeaderTitle(conversation.peerName || conversation.shopName || initialPeerName);
+      return conversation.id;
+    }
+
+    return directConversationId;
+  };
 
   const formatTime = (value: string) => {
     const date = new Date(value);
@@ -140,105 +145,127 @@ export default function ChatDetailScreen({ navigation, route }: any) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const handleSendText = async () => {
-    if (!message.trim() || isSending) return;
+  const appendLocalMessage = async (message: ChatMessage) => {
+    setMessages(prev => [...prev, message]);
+    await addMessage({
+      id: directConversationId,
+      peerId,
+      peerName: headerTitle,
+      avatarUrl,
+      message,
+    });
+    scrollToEnd(true);
+  };
 
-    const text = message.trim();
-    setMessage('');
+  const handleSend = async (payload: { text?: string; imageUri?: string }) => {
+    if (isSending || (!payload.text?.trim() && !payload.imageUri)) return;
+
+    const text = payload.text?.trim();
     setIsSending(true);
     try {
       const targetConversationId = await ensureConversation();
-      const sent = await sendMessage(targetConversationId, text);
-      setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+
+      if (isNumericId(targetConversationId)) {
+        const sent = await sendMessage(targetConversationId, text, payload.imageUri);
+        setMessages(prev => prev.some(item => String(item.id) === String(sent.id)) ? prev : [...prev, sent]);
+        scrollToEnd(true);
+      } else {
+        await appendLocalMessage({
+          id: Date.now().toString(),
+          conversationId: targetConversationId,
+          senderId: currentUserId,
+          isMine: true,
+          text: text || null,
+          imageUri: payload.imageUri || null,
+          createdAt: new Date().toISOString(),
+        });
+      }
     } catch (error: any) {
-      setMessage(text);
-      Alert.alert('Lỗi', error?.message || 'Không thể gửi tin nhắn.');
+      Alert.alert('Loi', error?.message || 'Khong the gui tin nhan.');
+      if (text) setDraft(text);
     } finally {
       setIsSending(false);
     }
   };
 
-  const sendImage = async (uri: string) => {
-    if (isSending) return;
-
-    setIsSending(true);
-    try {
-      const targetConversationId = await ensureConversation();
-      const sent = await sendMessage(targetConversationId, undefined, uri);
-      setMessages(prev => prev.some(item => item.id === sent.id) ? prev : [...prev, sent]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch (error: any) {
-      Alert.alert('Lỗi', error?.message || 'Không thể gửi ảnh.');
-    } finally {
-      setIsSending(false);
-    }
+  const handleSendText = () => {
+    const text = draft.trim();
+    if (!text) return;
+    setDraft('');
+    handleSend({ text });
   };
 
   const pickImage = async (fromCamera: boolean) => {
+    if (isSending || !canCompose) return;
+
     const permission = fromCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert('Quyền truy cập', 'Vui lòng cấp quyền để tiếp tục.');
+      Alert.alert('Quyen truy cap', 'Vui long cap quyen de tiep tuc.');
       return;
     }
 
     const result = fromCamera
       ? await ImagePicker.launchCameraAsync({ quality: 0.8 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+      : await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
-      await sendImage(result.assets[0].uri);
+      await handleSend({ imageUri: result.assets[0].uri });
     }
   };
 
   const handleAttach = () => {
+    if (isSending || !canCompose) return;
+
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Hủy', 'Chụp ảnh', 'Chọn từ thư viện'], cancelButtonIndex: 0 },
+        { options: ['Huy', 'Chup anh', 'Chon tu thu vien'], cancelButtonIndex: 0 },
         idx => {
           if (idx === 1) pickImage(true);
           else if (idx === 2) pickImage(false);
         }
       );
-    } else {
-      Alert.alert('Gửi ảnh', 'Chọn nguồn ảnh', [
-        { text: 'Camera', onPress: () => pickImage(true) },
-        { text: 'Thư viện ảnh', onPress: () => pickImage(false) },
-        { text: 'Hủy', style: 'cancel' },
-      ]);
+      return;
     }
+
+    Alert.alert('Gui anh', 'Chon nguon anh', [
+      { text: 'Camera', onPress: () => pickImage(true) },
+      { text: 'Thu vien anh', onPress: () => pickImage(false) },
+      { text: 'Huy', style: 'cancel' },
+    ]);
   };
 
   const renderItem = ({ item }: { item: ChatMessage }) => {
-    const imageUrl = item.imageUrl ? resolveProductImageUrl(item.imageUrl) : null;
+    const isMine = item.isMine ?? String(item.senderId) === currentUserId;
+    const imageUri = item.imageUri || (item.imageUrl ? resolveProductImageUrl(item.imageUrl) : null);
 
     return (
-      <View style={[styles.messageRow, item.isMine ? styles.myMessageRow : styles.theirMessageRow]}>
-        {!item.isMine && (
+      <View style={[styles.messageRow, isMine ? styles.myMessageRow : styles.theirMessageRow]}>
+        {!isMine && (
           <View style={styles.avatarSmall}>
-            <Ionicons name="storefront-outline" size={14} color={colors.primary} />
+            <Ionicons name="person-outline" size={14} color={colors.primary} />
           </View>
         )}
-        <View style={[styles.messageBubble, item.isMine ? styles.myBubble : styles.theirBubble]}>
-          {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.sentImage} resizeMode="cover" />
+        <View style={[styles.messageBubble, isMine ? styles.myBubble : styles.theirBubble]}>
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.sentImage} resizeMode="cover" />
           ) : (
-            <Text style={[styles.messageText, item.isMine ? styles.myText : styles.theirText]}>
+            <Text style={[styles.messageText, isMine ? styles.myText : styles.theirText]}>
               {item.text}
             </Text>
           )}
-          <Text style={[styles.timeText, item.isMine && { color: 'rgba(255,255,255,0.7)' }]}>
+          <Text style={[styles.timeText, isMine && styles.myTimeText]}>
             {formatTime(item.createdAt)}
           </Text>
         </View>
       </View>
     );
   };
-
-  const canCompose = !!conversationId || !!shopId;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -248,7 +275,7 @@ export default function ChatDetailScreen({ navigation, route }: any) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <View style={styles.headerAvatar}>
-            <Ionicons name="storefront-outline" size={18} color={colors.primary} />
+            <Ionicons name="person-outline" size={18} color={colors.primary} />
           </View>
           <Text style={styles.headerTitle} numberOfLines={1}>{headerTitle}</Text>
         </View>
@@ -256,10 +283,8 @@ export default function ChatDetailScreen({ navigation, route }: any) {
       </View>
 
       <KeyboardAvoidingView
-        style={styles.keyboardWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : isKeyboardVisible ? 'height' : undefined}
-        keyboardVerticalOffset={0}
-        enabled={Platform.OS === 'ios' || isKeyboardVisible}
+        style={styles.chatArea}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {isLoading ? (
           <View style={styles.loadingState}>
@@ -273,11 +298,11 @@ export default function ChatDetailScreen({ navigation, route }: any) {
             keyExtractor={item => String(item.id)}
             contentContainerStyle={messages.length === 0 ? styles.emptyContent : styles.listContent}
             keyboardShouldPersistTaps="handled"
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            onContentSizeChange={() => scrollToEnd(false)}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Ionicons name="chatbubble-ellipses-outline" size={42} color="#bbb" />
-                <Text style={styles.emptyText}>Hãy bắt đầu cuộc trò chuyện</Text>
+                <Text style={styles.emptyText}>Hay bat dau cuoc tro chuyen</Text>
               </View>
             }
           />
@@ -285,18 +310,16 @@ export default function ChatDetailScreen({ navigation, route }: any) {
 
         <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <TouchableOpacity style={styles.attachBtn} onPress={handleAttach} disabled={isSending || !canCompose}>
-            <Ionicons name="add-circle" size={30} color={colors.primary} />
+            <Ionicons name="add-circle" size={30} color={isSending || !canCompose ? '#ccc' : colors.primary} />
           </TouchableOpacity>
 
           <TextInput
             ref={inputRef}
             style={styles.input}
-            placeholder="Nhập tin nhắn..."
+            placeholder="Nhap tin nhan..."
             placeholderTextColor="#aaa"
-            value={message}
-            onChangeText={setMessage}
-            onFocus={() => setIsKeyboardVisible(true)}
-            onBlur={() => setIsKeyboardVisible(false)}
+            value={draft}
+            onChangeText={setDraft}
             multiline
             maxLength={1000}
             textAlignVertical="center"
@@ -305,10 +328,10 @@ export default function ChatDetailScreen({ navigation, route }: any) {
 
           <TouchableOpacity
             onPress={handleSendText}
-            style={[styles.sendBtn, (!message.trim() || isSending || !canCompose) && styles.sendBtnDisabled]}
-            disabled={!message.trim() || isSending || !canCompose}
+            style={[styles.sendBtn, (!draft.trim() || isSending || !canCompose) && styles.sendBtnDisabled]}
+            disabled={!draft.trim() || isSending || !canCompose}
           >
-            <Ionicons name="send" size={22} color={message.trim() && !isSending && canCompose ? colors.primary : '#ccc'} />
+            <Ionicons name="send" size={22} color={draft.trim() && !isSending && canCompose ? colors.primary : '#ccc'} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -318,40 +341,44 @@ export default function ChatDetailScreen({ navigation, route }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f5' },
-  keyboardWrap: { flex: 1 },
-
+  chatArea: { flex: 1 },
   header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 0.5, borderBottomColor: '#eee',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: colors.white,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.borderLight,
   },
   backBtn: { padding: 4, marginRight: 8 },
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerAvatar: {
-    width: 34, height: 34, borderRadius: 17,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.primaryBg,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: '#333' },
+  headerTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: colors.text },
   headerSpacer: { width: 34 },
-
   listContent: { padding: 12, paddingBottom: 8 },
   emptyContent: { flexGrow: 1, padding: 12 },
   loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyText: { marginTop: 10, color: '#888', fontSize: 14 },
-
+  emptyText: { marginTop: 10, color: colors.textSecondary, fontSize: 14 },
   messageRow: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-end' },
   myMessageRow: { justifyContent: 'flex-end' },
   theirMessageRow: { justifyContent: 'flex-start', gap: 8 },
-
   avatarSmall: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.primaryBg,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-
   messageBubble: {
     maxWidth: '78%',
     paddingHorizontal: 13,
@@ -363,30 +390,38 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   theirBubble: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     borderBottomLeftRadius: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   messageText: { fontSize: 15, lineHeight: 21 },
-  myText: { color: '#fff' },
-  theirText: { color: '#333' },
+  myText: { color: colors.white },
+  theirText: { color: colors.text },
   timeText: {
-    fontSize: 10, color: 'rgba(0,0,0,0.35)',
-    alignSelf: 'flex-end', marginTop: 4,
+    fontSize: 10,
+    color: 'rgba(0,0,0,0.35)',
+    alignSelf: 'flex-end',
+    marginTop: 4,
   },
+  myTimeText: { color: 'rgba(255,255,255,0.7)' },
   sentImage: {
-    width: 200, height: 160, borderRadius: 10, overflow: 'hidden',
+    width: 200,
+    height: 160,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
-
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     paddingHorizontal: 8,
     paddingTop: 10,
     borderTopWidth: 0.5,
-    borderTopColor: '#ddd',
+    borderTopColor: colors.border,
     gap: 6,
   },
   attachBtn: { padding: 4 },
@@ -398,7 +433,7 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === 'ios' ? 10 : 7,
     fontSize: 15,
     maxHeight: 110,
-    color: '#333',
+    color: colors.text,
   },
   sendBtn: { padding: 6 },
   sendBtnDisabled: { opacity: 0.4 },

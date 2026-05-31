@@ -13,6 +13,7 @@ interface FavoriteProduct {
   sellerName?: string;
   averageRating?: number;
   stock?: number;
+  availableItemCount?: number;
 }
 
 interface FavoritesState {

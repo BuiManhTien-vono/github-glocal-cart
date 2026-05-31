@@ -76,8 +76,11 @@ export const addOrUpdateGuestCartItem = async (item: DbCartItem): Promise<void> 
     const items = await getGuestCartItems();
     const index = items.findIndex(i => i.productId === item.productId);
     if (index >= 0) {
-      items[index].quantity += item.quantity;
+      const maxStock = Number(items[index].availableStock || item.availableStock || 0);
+      const nextQuantity = items[index].quantity + item.quantity;
+      items[index].quantity = maxStock > 0 ? Math.min(nextQuantity, maxStock) : nextQuantity;
       items[index].subtotal = items[index].quantity * items[index].priceSnapshot;
+      items[index].availableStock = item.availableStock || items[index].availableStock;
     } else {
       items.push(item);
     }
@@ -89,9 +92,11 @@ export const addOrUpdateGuestCartItem = async (item: DbCartItem): Promise<void> 
   const existing = db.getFirstSync<{ quantity: number, priceSnapshot: number }>('SELECT quantity, priceSnapshot FROM GuestCart WHERE productId = ?', [item.productId]);
   
   if (existing) {
-    const newQuantity = existing.quantity + item.quantity;
+    const maxStock = Number(item.availableStock || 0);
+    const requestedQuantity = existing.quantity + item.quantity;
+    const newQuantity = maxStock > 0 ? Math.min(requestedQuantity, maxStock) : requestedQuantity;
     const newSubtotal = newQuantity * existing.priceSnapshot;
-    db.runSync('UPDATE GuestCart SET quantity = ?, subtotal = ? WHERE productId = ?', [newQuantity, newSubtotal, item.productId]);
+    db.runSync('UPDATE GuestCart SET quantity = ?, availableStock = ?, subtotal = ? WHERE productId = ?', [newQuantity, item.availableStock, newSubtotal, item.productId]);
   } else {
     db.runSync(
       'INSERT INTO GuestCart (id, productId, productName, productImage, sellerName, priceSnapshot, currentPrice, quantity, availableStock, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -105,18 +110,22 @@ export const updateGuestCartItemQuantity = async (itemId: number, quantity: numb
     const items = await getGuestCartItems();
     const index = items.findIndex(i => i.id === itemId);
     if (index >= 0) {
-      items[index].quantity = quantity;
-      items[index].subtotal = quantity * items[index].priceSnapshot;
+      const maxStock = Number(items[index].availableStock || 0);
+      const nextQuantity = maxStock > 0 ? Math.min(quantity, maxStock) : quantity;
+      items[index].quantity = nextQuantity;
+      items[index].subtotal = nextQuantity * items[index].priceSnapshot;
       await AsyncStorage.setItem(GUEST_CART_KEY, JSON.stringify(items));
     }
     return;
   }
   
   if (!db) return;
-  const existing = db.getFirstSync<{ priceSnapshot: number }>('SELECT priceSnapshot FROM GuestCart WHERE id = ?', [itemId]);
+  const existing = db.getFirstSync<{ priceSnapshot: number, availableStock: number }>('SELECT priceSnapshot, availableStock FROM GuestCart WHERE id = ?', [itemId]);
   if (existing) {
-    const newSubtotal = quantity * existing.priceSnapshot;
-    db.runSync('UPDATE GuestCart SET quantity = ?, subtotal = ? WHERE id = ?', [quantity, newSubtotal, itemId]);
+    const maxStock = Number(existing.availableStock || 0);
+    const nextQuantity = maxStock > 0 ? Math.min(quantity, maxStock) : quantity;
+    const newSubtotal = nextQuantity * existing.priceSnapshot;
+    db.runSync('UPDATE GuestCart SET quantity = ?, subtotal = ? WHERE id = ?', [nextQuantity, newSubtotal, itemId]);
   }
 };
 
