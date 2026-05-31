@@ -51,7 +51,6 @@ interface ChatState {
   markAsRead: (conversationId: ChatId) => Promise<void>;
   upsertConversation: (conversation: Conversation) => void;
 
-  // Compatibility for local/direct chat placeholders.
   addMessage: (payload: AddMessagePayload) => Promise<void>;
   getConversation: (conversationId: ChatId) => Conversation | undefined;
 }
@@ -102,7 +101,7 @@ const normalizeConversation = (item: any): Conversation => {
     item?.shopName ||
     item?.sellerName ||
     item?.buyerName ||
-    'Người dùng';
+    'Nguoi dung';
   const messages = Array.isArray(item?.messages) ? item.messages.map(normalizeMessage) : undefined;
 
   return {
@@ -187,7 +186,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       await get().addMessage({
         id: conversationId,
-        peerName: get().getConversation(conversationId)?.peerName || 'Người dùng',
+        peerName: get().getConversation(conversationId)?.peerName || 'Nguoi dung',
         message,
       });
       return message;
@@ -231,12 +230,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const existing = current.find(conversation => String(conversation.id) === String(id));
     const normalizedMessage = normalizeMessage({ ...message, conversationId: id });
     const messages = [...(existing?.messages || []), normalizedMessage];
-    const lastMessage = normalizedMessage.text || (normalizedMessage.imageUri ? '[Hình ảnh]' : '');
+    const lastMessage = normalizedMessage.text || (normalizedMessage.imageUri ? '[Hinh anh]' : '');
 
     const conversation: Conversation = {
       id,
       peerId: peerId || existing?.peerId,
-      peerName: peerName || existing?.peerName || 'Người dùng',
+      peerName: peerName || existing?.peerName || 'Nguoi dung',
       avatarUrl: avatarUrl || existing?.avatarUrl,
       lastMessage,
       unreadCount: existing?.unreadCount || 0,
