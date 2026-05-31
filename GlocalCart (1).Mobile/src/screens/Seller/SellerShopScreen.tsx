@@ -21,6 +21,7 @@ import apiClient from '../../services/api/apiClient';
 import { fetchPagedItems } from '../../services/api/pagedApi';
 import { resolveProductImage } from '../../utils/imageUtils';
 import { getCategoryIcon } from '../../utils/categoryIcon';
+import { useAuth } from '../../context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 208;
@@ -30,7 +31,6 @@ const GRID_ITEM_WIDTH = (SCREEN_WIDTH - 32 - PRODUCT_GAP) / 2;
 const PREVIEW_TABS = [
   { id: 'shop', label: 'Shop' },
   { id: 'products', label: 'Sản phẩm' },
-  { id: 'categories', label: 'Danh mục hàng' },
 ];
 
 const currency = (value: any) => `${Number(value || 0).toLocaleString('vi-VN')}đ`;
@@ -43,9 +43,30 @@ const shortNumber = (value: number) => {
 };
 
 const getOrderItems = (order: any) => order?.items || order?.orderItems || [];
+const getPaymentStatus = (order: any) => order?.paymentStatus || order?.payment?.status;
+const isRevenueOrder = (order: any) => {
+  const isComplete =
+    order?.status === 'Complete' ||
+    order?.status === 'Delivered' ||
+    order?.shipment?.status === 'Delivered';
+  const paymentStatus = getPaymentStatus(order);
+  return isComplete && (!paymentStatus || paymentStatus === 'Completed');
+};
+const getOrderRevenue = (order: any, includeShipping: boolean) => {
+  if (includeShipping) return Number(order.totalAmount || 0);
+  const itemRevenue = getOrderItems(order).reduce((sum: number, item: any) => {
+    const quantity = Number(item.quantity || 0);
+    const price = Number(item.unitPrice ?? item.priceSnapshot ?? item.price ?? 0);
+    return sum + price * quantity;
+  }, 0);
+  if (itemRevenue > 0) return itemRevenue;
+  return Math.max(0, Number(order.totalAmount || 0) - Number(order.shippingFee || 0));
+};
 
 export default function SellerShopScreen({ navigation }: any): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
   const scrollRef = useRef<any>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
   const topButtonOpacity = useRef(new Animated.Value(0)).current;
@@ -59,6 +80,7 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
 
   const shopData = {
@@ -68,7 +90,7 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
     followerCount: '15.2k',
   };
 
-  const headerHeight = insets.top + 58;
+  const headerHeight = insets.top + (isPreviewMode ? 46 : 58);
   const compactTrigger = COVER_HEIGHT - headerHeight - 6;
 
   const headerWhiteOpacity = scrollY.interpolate({
@@ -96,17 +118,31 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
 
   const loadData = useCallback(async () => {
     try {
-      const [productItems, orderItems, categoriesRes]: any[] = await Promise.all([
-        fetchPagedItems('/products/my-products'),
-        fetchPagedItems('/orders/seller'),
+      const [productsResult, ordersResult, categoriesResult, usersResult] = await Promise.allSettled([
+        fetchPagedItems(isAdmin ? '/admin/products' : '/products/my-products'),
+        fetchPagedItems(isAdmin ? '/admin/orders' : '/orders/seller'),
         apiClient.get('/categories'),
+        isAdmin ? fetchPagedItems('/admin/users') : Promise.resolve([]),
       ]);
 
+      let productItems: any[] = productsResult.status === 'fulfilled' ? productsResult.value : [];
+      if (isAdmin && productItems.length === 0) {
+        try {
+          productItems = await fetchPagedItems('/products');
+        } catch (fallbackError) {
+          console.warn('Admin products fallback error:', fallbackError);
+        }
+      }
+
+      const orderItems: any[] = ordersResult.status === 'fulfilled' ? ordersResult.value : [];
+      const userItems: any[] = usersResult.status === 'fulfilled' ? usersResult.value : [];
+      const categoriesRes: any = categoriesResult.status === 'fulfilled' ? categoriesResult.value : [];
       const categoryItems = categoriesRes?.items || categoriesRes?.data || (Array.isArray(categoriesRes) ? categoriesRes : []);
       const rootCategories = categoryItems.filter((cat: any) => !cat.parentCategoryId && !cat.parentId);
 
       setProducts(productItems);
       setOrders(orderItems);
+      setUsers(userItems);
       setCategories((rootCategories.length ? rootCategories : categoryItems).map((cat: any) => ({
         ...cat,
         icon: getCategoryIcon(cat.name, cat.icon),
@@ -117,7 +153,7 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useFocusEffect(
     useCallback(() => {
@@ -134,6 +170,12 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
     }).start();
   }, [showTopButton, topButtonOpacity]);
 
+  useEffect(() => {
+    if (isPreviewMode && activeTab === 'categories') {
+      setActiveTab('shop');
+    }
+  }, [activeTab, isPreviewMode]);
+
   const filteredProducts = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     if (!keyword) return products;
@@ -141,16 +183,12 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
   }, [products, query]);
 
   const completedOrders = useMemo(
-    () => orders.filter(order =>
-      order.status === 'Complete' ||
-      order.status === 'Delivered' ||
-      order.shipment?.status === 'Delivered'
-    ),
+    () => orders.filter(isRevenueOrder),
     [orders]
   );
 
   const stats = useMemo(() => {
-    const revenue = completedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+    const revenue = completedOrders.reduce((sum, order) => sum + getOrderRevenue(order, isAdmin), 0);
     const soldItems = completedOrders.reduce(
       (sum, order) => sum + getOrderItems(order).reduce((total: number, item: any) => total + Number(item.quantity || 0), 0),
       0
@@ -167,12 +205,13 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
       activeProducts: products.filter(product => product.isActive !== false && product.isLocked !== true).length,
       outOfStock: products.filter(product => Number(product.availableItemCount ?? product.stock ?? 0) <= 0).length,
       hiddenProducts: products.filter(product => product.isActive === false || product.isLocked === true).length,
+      totalUsers: users.length,
       revenue,
       soldItems,
       rating: averageRating.toFixed(1),
       reviewCount,
     };
-  }, [completedOrders, orders, products]);
+  }, [completedOrders, isAdmin, orders, products, users.length]);
 
   const flashProducts = filteredProducts.slice(0, 8);
   const bestProducts = [...filteredProducts]
@@ -234,7 +273,11 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
         {isPreviewMode ? (
           <>
             <Animated.View style={[styles.previewTabsInHeader, { opacity: compactOpacity }]}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.previewTabsHeaderScroll}
+              >
                 {PREVIEW_TABS.map(tab => (
                   <TouchableOpacity key={tab.id} style={styles.headerTab} onPress={() => setActiveTab(tab.id)}>
                     <Text style={[styles.headerTabText, activeTab === tab.id && styles.headerTabTextActive]} numberOfLines={1}>
@@ -358,8 +401,8 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
   );
 
   const renderManagementStats = () => (
-    <View style={styles.overlapWrap}>
-      <View style={styles.statsPanel}>
+    <View style={[styles.overlapWrap, styles.attachedTopWrap]}>
+      <View style={[styles.statsPanel, styles.attachedTopPanel]}>
         <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerProducts')}>
           <Text style={[styles.statValue, { color: colors.secondary }]}>{stats.activeProducts}</Text>
           <Text style={styles.statLabel}>Đang bán</Text>
@@ -368,9 +411,15 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
           <Text style={[styles.statValue, { color: colors.success }]}>{shortNumber(stats.revenue)}</Text>
           <Text style={styles.statLabel}>Doanh thu</Text>
         </TouchableOpacity>
+        {isAdmin && (
+          <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('Profile', { screen: 'AdminUsers' })}>
+            <Text style={[styles.statValue, { color: colors.info }]}>{stats.totalUsers}</Text>
+            <Text style={styles.statLabel}>Người dùng</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('SellerReview')}>
           <View style={styles.statIconValueRow}>
-            <Ionicons name="star" size={15} color={colors.warning} />
+            <Ionicons name="star" size={13} color={colors.warning} />
             <Text style={[styles.statValue, { color: colors.warning }]}>{stats.rating}</Text>
           </View>
           <Text style={styles.statLabel}>Đánh giá</Text>
@@ -380,8 +429,8 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
   );
 
   const renderPreviewTabs = () => (
-    <View style={styles.overlapWrap}>
-      <View style={styles.previewTabPanel}>
+    <View style={[styles.overlapWrap, styles.attachedTopWrap]}>
+      <View style={[styles.previewTabPanel, styles.attachedTopPanel]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewTabScroll}>
           {PREVIEW_TABS.map(tab => (
             <TouchableOpacity
@@ -496,6 +545,100 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
     </View>
   );
 
+  const renderPreviewFlashSale = () => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.flashTitleRow}>
+          <Ionicons name="flash" size={20} color="#EE4D2D" />
+          <Text style={styles.flashTitle}>FLASH SALE</Text>
+          <View style={styles.timerRow}>
+            <Text style={styles.timerBox}>02</Text>
+            <Text style={styles.timerSep}>:</Text>
+            <Text style={styles.timerBox}>45</Text>
+            <Text style={styles.timerSep}>:</Text>
+            <Text style={styles.timerBox}>30</Text>
+          </View>
+        </View>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.flashSaleScroll}>
+        {flashProducts.map((item, idx) => {
+          const discount = 15 + idx * 5;
+          const salePrice = Number(item.price || 0) * (1 - discount / 100);
+          const imageUri = resolveProductImage(item) || undefined;
+          const soldPct = 30 + idx * 12;
+
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.previewFlashCard}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('ProductDetail', { productId: item.id, product: item })}
+            >
+              <View style={styles.previewFlashImageWrap}>
+                <Image source={{ uri: imageUri }} style={styles.previewFlashImage} contentFit="cover" />
+                <View style={styles.discountBadge}><Text style={styles.discountText}>-{discount}%</Text></View>
+              </View>
+              <Text style={styles.previewFlashPrice}>{currency(salePrice)}</Text>
+              <View style={styles.previewSoldBar}>
+                <View style={[styles.previewSoldFill, { width: `${Math.min(soldPct, 100)}%` }]} />
+                <Text style={styles.previewSoldText}>Đã bán {soldPct}%</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
+  const renderPreviewBestSellers = () => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.bestTitleRow}>
+          <Ionicons name="trophy" size={18} color={colors.warning} />
+          <Text style={styles.sectionTitle}>Bán chạy nhất</Text>
+        </View>
+        <TouchableOpacity onPress={() => setActiveTab('products')}>
+          <Text style={styles.previewSeeAllText}>Xem tất cả ›</Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bestSellerScroll}>
+        {bestProducts.map((item, idx) => {
+          const imageUri = resolveProductImage(item) || undefined;
+
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.bestCard}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('ProductDetail', { productId: item.id, product: item })}
+            >
+              <View style={styles.bestRank}>
+                <Text style={styles.bestRankText}>#{idx + 1}</Text>
+              </View>
+              <Image source={{ uri: imageUri }} style={styles.bestImg} contentFit="cover" />
+              <Text style={styles.bestName} numberOfLines={2}>{item.name || 'Sản phẩm'}</Text>
+              <Text style={styles.bestPrice}>{currency(item.price)}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
+  const renderPreviewRecommended = () => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.bestTitleRow}>
+          <Ionicons name="sparkles" size={18} color={colors.primary} />
+          <Text style={styles.sectionTitle}>Gợi ý cho bạn</Text>
+        </View>
+      </View>
+      <View style={styles.productGrid}>
+        {filteredProducts.slice(0, 10).map(item => renderProductTile(item, 'preview'))}
+      </View>
+    </View>
+  );
+
   const renderProductGrid = (mode: 'manage' | 'preview') => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -527,14 +670,12 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
       {renderPreviewTabs()}
       {activeTab === 'shop' && (
         <>
-          {renderFlashSale()}
-          {renderBestSellers()}
-          {renderCategoryStrip()}
-          {renderProductGrid('preview')}
+          {flashProducts.length > 0 && renderPreviewFlashSale()}
+          {bestProducts.length > 0 && renderPreviewBestSellers()}
+          {filteredProducts.length > 0 && renderPreviewRecommended()}
         </>
       )}
       {activeTab === 'products' && renderProductGrid('preview')}
-      {activeTab === 'categories' && renderCategoryStrip()}
     </>
   );
 
@@ -668,9 +809,14 @@ const styles = StyleSheet.create({
   previewTabsInHeader: {
     flex: 1,
     minWidth: 0,
+    height: 34,
+    justifyContent: 'center',
+  },
+  previewTabsHeaderScroll: {
+    alignItems: 'center',
   },
   headerTab: {
-    height: 38,
+    height: 34,
     justifyContent: 'center',
     paddingHorizontal: 10,
     borderBottomWidth: 2,
@@ -678,7 +824,7 @@ const styles = StyleSheet.create({
   },
   headerTabText: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   headerTabTextActive: {
@@ -828,19 +974,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   overlapWrap: {
-    marginTop: 6,
-    paddingHorizontal: spacing.md,
+    marginTop: -20,
+    paddingHorizontal: 0,
     marginBottom: 8,
     zIndex: 4,
   },
+  attachedTopWrap: {
+    marginBottom: 0,
+  },
+  attachedTopPanel: {
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
   statsPanel: {
-    minHeight: 64,
+    minHeight: 52,
     borderRadius: 10,
     backgroundColor: colors.white,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingVertical: 9,
+    paddingVertical: 6,
     ...shadow.md,
   },
   statBox: {
@@ -855,17 +1010,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statValue: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '900',
   },
   statLabel: {
-    marginTop: 3,
+    marginTop: 2,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   previewTabPanel: {
-    minHeight: 58,
+    minHeight: 44,
     borderRadius: 10,
     backgroundColor: colors.white,
     justifyContent: 'center',
@@ -877,8 +1032,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   previewTabItem: {
-    height: 56,
-    paddingHorizontal: 16,
+    height: 44,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderBottomWidth: 3,
@@ -889,7 +1044,7 @@ const styles = StyleSheet.create({
   },
   previewTabText: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
   },
   previewTabTextActive: {
@@ -967,10 +1122,150 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     fontStyle: 'italic',
+    marginRight: 6,
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  timerBox: {
+    backgroundColor: '#222',
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  timerSep: {
+    color: '#222',
+    fontSize: 12,
+    fontWeight: '700',
   },
   horizontalProductScroll: {
     paddingHorizontal: spacing.md,
     gap: 10,
+  },
+  flashSaleScroll: {
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+  previewFlashCard: {
+    width: 110,
+    alignItems: 'center',
+  },
+  previewFlashImageWrap: {
+    width: 110,
+    height: 110,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 6,
+    position: 'relative',
+  },
+  previewFlashImage: {
+    width: '100%',
+    height: '100%',
+  },
+  discountBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: 'rgba(255,212,36,0.92)',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  discountText: {
+    color: '#EE4D2D',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  previewFlashPrice: {
+    color: '#EE4D2D',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  previewSoldBar: {
+    width: '90%',
+    height: 14,
+    backgroundColor: '#ffbda6',
+    borderRadius: 7,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  previewSoldFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#EE4D2D',
+  },
+  previewSoldText: {
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: '600',
+    zIndex: 1,
+  },
+  bestTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  previewSeeAllText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  bestSellerScroll: {
+    paddingHorizontal: 8,
+    gap: 8,
+  },
+  bestCard: {
+    width: 130,
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  bestRank: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: colors.warning,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderBottomRightRadius: 8,
+    zIndex: 2,
+  },
+  bestRankText: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  bestImg: {
+    width: '100%',
+    height: 120,
+    backgroundColor: colors.background,
+  },
+  bestName: {
+    color: colors.text,
+    fontSize: 12,
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    height: 36,
+  },
+  bestPrice: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '700',
+    padding: 6,
   },
   compactProductCard: {
     width: 118,

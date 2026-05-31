@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import React, { useEffect, useState, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator,
-  TouchableOpacity, Alert, StatusBar, Modal, Clipboard, Platform, Share,
+  View, Text, StyleSheet, ActivityIndicator,
+  TouchableOpacity, Alert, StatusBar, Modal, Platform, Share, Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
@@ -21,6 +21,10 @@ import { resolveProductImageUrl } from '../../utils/imageUtils';
 
 type ProductDetailRouteProp = RouteProp<{ params: { productId: number } }, 'params'>;
 
+const FOOTER_HEIGHT = 58;
+const HOME_TAB_BAR_GAP = 176.5;
+const getAvailableStock = (item: any) => Number(item?.availableItemCount ?? item?.stock ?? 0);
+
 export default function ProductDetailScreen() {
   const route = useRoute<ProductDetailRouteProp>();
   const navigation = useNavigation<any>();
@@ -32,12 +36,13 @@ export default function ProductDetailScreen() {
   const [discoveryProducts, setDiscoveryProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false); // 3-dot menu
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   const { addToCart } = useCartStore();
   const { isFavorite, toggleFavorite, loadFavorites } = useFavoritesStore();
   const { isFollowing, toggleFollow, loadFollowedShops } = useFollowShopStore();
 
-  // Shop mock info (sẽ lấy từ API sau)
+  // Seller user info from product payload.
   const shopId = product?.sellerId || 1;
   const shopName = product?.sellerName || 'Glocal Cart Official';
 
@@ -71,9 +76,10 @@ export default function ProductDetailScreen() {
 
   const handleAddToCart = async () => {
     if (!product) return;
-    if (product.stock <= 0) { Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.'); return; }
+    const stock = getAvailableStock(product);
+    if (stock <= 0) { Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.'); return; }
     try {
-      await addToCart(product, 1);
+      await addToCart({ ...product, stock, availableItemCount: stock }, 1);
       Alert.alert('Thành công', 'Đã thêm vào giỏ hàng!', [
         { text: 'Tiếp tục mua sắm', style: 'cancel' },
         { text: 'Đến giỏ hàng', onPress: () => navigation.navigate('Cart') },
@@ -85,7 +91,8 @@ export default function ProductDetailScreen() {
 
   const handleBuyNow = async () => {
     if (!product) return;
-    if (product.stock <= 0) { Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.'); return; }
+    const stock = getAvailableStock(product);
+    if (stock <= 0) { Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.'); return; }
     try {
       navigation.navigate('Checkout', { 
         selectedItems: [{
@@ -105,7 +112,7 @@ export default function ProductDetailScreen() {
     }
   };
 
-  // Chat ngay → ChatDetail với shop cụ thể
+  // Chat ngay -> ChatDetail với người bán.
   const handleChat = () => {
     if (!isLoggedIn) {
       Alert.alert('Yêu cầu đăng nhập', 'Bạn cần đăng nhập để chat với shop.', [
@@ -114,7 +121,10 @@ export default function ProductDetailScreen() {
       ]);
       return;
     }
-    navigation.navigate('ChatDetail', { shopId, shopName });
+    navigation.navigate('ChatDetail', {
+      peerId: shopId,
+      peerName: shopName,
+    });
   };
 
   // Toggle yêu thích
@@ -189,6 +199,17 @@ export default function ProductDetailScreen() {
   }
 
   const oldPrice = product.price * 1.2;
+  const productStock = getAvailableStock(product);
+  const headerBgOpacity = scrollY.interpolate({
+    inputRange: [0, 120],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const headerIconColor = scrollY.interpolate({
+    inputRange: [0, 120],
+    outputRange: ['#FFFFFF', colors.primary],
+    extrapolate: 'clamp',
+  });
 
   const imageUrls = (() => {
     const imgUrls = (product.images || [])
@@ -203,16 +224,21 @@ export default function ProductDetailScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 80 + insets.bottom }]}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: FOOTER_HEIGHT + insets.bottom + HOME_TAB_BAR_GAP }]}
       >
         {/* ─── Image Slider ─── */}
         <View style={styles.sliderContainer}>
           <ImageSlider images={imageUrls} />
 
           {/* Float header với SafeArea */}
-          <View style={[styles.floatHeader, { top: insets.top + 8 }]}>
+          <View style={[styles.floatHeader, { top: insets.top + 8, display: 'none' }]}>
             <TouchableOpacity style={styles.floatIconBtn} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
@@ -283,7 +309,7 @@ export default function ProductDetailScreen() {
               style={styles.shopAvatar}
             />
             <View style={styles.shopInfo}>
-              <Text style={styles.shopName} onPress={() => navigation.navigate('ShopView', { shopId })}>
+              <Text style={styles.shopName} onPress={() => navigation.navigate('ShopView', { shopId, shopName })}>
                 {shopName}
               </Text>
               <View style={styles.shopStatus}>
@@ -291,7 +317,7 @@ export default function ProductDetailScreen() {
               </View>
             </View>
             <View style={{ gap: 8 }}>
-              <TouchableOpacity style={styles.viewShopBtn} onPress={() => navigation.navigate('ShopView', { shopId })}>
+              <TouchableOpacity style={styles.viewShopBtn} onPress={() => navigation.navigate('ShopView', { shopId, shopName })}>
                 <Text style={styles.viewShopText}>Xem Shop</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -329,7 +355,7 @@ export default function ProductDetailScreen() {
           {[
             { label: 'Danh mục', value: 'Glocal Cart Mall > Thời trang > Khác' },
             { label: 'Thương hiệu', value: 'OEM' },
-            { label: 'Kho hàng', value: String(product.stock) },
+            { label: 'Kho hàng', value: String(productStock) },
             { label: 'Gửi từ', value: 'Hà Nội' },
           ].map(({ label, value }) => (
             <View key={label} style={styles.detailRow}>
@@ -352,10 +378,34 @@ export default function ProductDetailScreen() {
 
         {/* ─── Daily Discover ─── */}
         <DailyDiscover data={discoveryProducts} />
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <View style={[styles.fixedHeader, { height: insets.top + 52 }]}>
+        <Animated.View style={[styles.notchBackground, { height: insets.top, opacity: headerBgOpacity }]} />
+        <View style={[styles.fixedHeaderRow, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity style={styles.floatIconBtn} onPress={() => navigation.goBack()}>
+            <Animated.Text style={{ color: headerIconColor }}>
+              <Ionicons name="arrow-back" size={24} />
+            </Animated.Text>
+          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.floatIconBtn} onPress={() => navigation.navigate('Cart')}>
+              <Animated.Text style={{ color: headerIconColor }}>
+                <Ionicons name="cart-outline" size={24} />
+              </Animated.Text>
+              <CartBadge containerStyle={styles.cartBadge} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.floatIconBtn} onPress={() => setShowMenu(true)}>
+              <Animated.Text style={{ color: headerIconColor }}>
+                <Ionicons name="ellipsis-vertical" size={24} />
+              </Animated.Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
 
       {/* ─── Footer với SafeArea ─── */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom, minHeight: FOOTER_HEIGHT + insets.bottom }]}>
         <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
           <Ionicons name="chatbubbles-outline" size={22} color={colors.primary} />
           <Text style={styles.chatText}>Chat ngay</Text>
@@ -363,16 +413,16 @@ export default function ProductDetailScreen() {
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.addToCartBtn, product.stock <= 0 && styles.disabledBtn]}
+            style={[styles.addToCartBtn, productStock <= 0 && styles.disabledBtn]}
             onPress={handleAddToCart}
-            disabled={product.stock <= 0}
+            disabled={productStock <= 0}
           >
             <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.buyNowBtn, product.stock <= 0 && styles.disabledBtn]}
+            style={[styles.buyNowBtn, productStock <= 0 && styles.disabledBtn]}
             onPress={handleBuyNow}
-            disabled={product.stock <= 0}
+            disabled={productStock <= 0}
           >
             <Text style={styles.buyNowText}>Mua ngay</Text>
           </TouchableOpacity>
@@ -404,6 +454,26 @@ const styles = StyleSheet.create({
   scrollContent: {},
 
   sliderContainer: { position: 'relative' },
+  fixedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  notchBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+  },
+  fixedHeaderRow: {
+    height: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
   floatHeader: {
     position: 'absolute', left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16,

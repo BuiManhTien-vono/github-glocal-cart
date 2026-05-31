@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../../components/common/Header';
 import { Loading } from '../../components/common/Loading';
 import apiClient from '../../services/api/apiClient';
+import { fetchPagedItems } from '../../services/api/pagedApi';
 import { colors, spacing, fontSize, borderRadius, shadow } from '../../theme/colors';
 import { resolveProductImage } from '../../utils/imageUtils';
 
@@ -19,8 +20,10 @@ export default function AdminProductsScreen({ navigation }: any) {
 
   const fetchProducts = async () => {
     try {
-      const d = await apiClient.get('/products?pageSize=100') as any;
-      setProducts(d?.items || d || []);
+      let items = await fetchPagedItems('/admin/products', 100);
+      if (items.length === 0) items = await fetchPagedItems('/products/my-products', 100);
+      if (items.length === 0) items = await fetchPagedItems('/products', 100);
+      setProducts(items);
     } catch(e:any){ Alert.alert('Lỗi',e.message); }
     finally{ setLoading(false); setRefreshing(false); }
   };

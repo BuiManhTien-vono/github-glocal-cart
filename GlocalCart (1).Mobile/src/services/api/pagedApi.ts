@@ -3,7 +3,9 @@ import apiClient from './apiClient';
 export const extractItems = <T = any>(response: any): T[] => {
   if (Array.isArray(response)) return response;
   if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.Items)) return response.Items;
   if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.Data)) return response.Data;
   return [];
 };
 

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Animated, Dimensions, RefreshControl, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Animated, RefreshControl, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
@@ -11,8 +11,7 @@ import { resolveProductImage } from '../../utils/imageUtils';
 import { useAuth } from '../../context/AuthContext';
 import { useFollowShopStore } from '../../store/useFollowShopStore';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BANNER_HEIGHT = 180;
+const COVER_HEIGHT = 208;
 
 // ─── Mock Shop Data ───
 const MOCK_SHOP = {
@@ -30,31 +29,46 @@ const MOCK_SHOP = {
   // description: 'Chuyên cung cấp các sản phẩm công nghệ, thời trang, gia dụng chính hãng với giá tốt nhất.'
 };
 
-const MOCK_SHOP_CATEGORIES = [
-  { id: 'sc1', name: 'Điện thoại & Phụ kiện', productCount: 45, icon: 'phone-portrait-outline' },
-  { id: 'sc2', name: 'Laptop & Máy tính', productCount: 32, icon: 'laptop-outline' },
-  { id: 'sc3', name: 'Thời trang Nam', productCount: 68, icon: 'shirt-outline' },
-  { id: 'sc4', name: 'Thời trang Nữ', productCount: 54, icon: 'woman-outline' },
-  { id: 'sc5', name: 'Đồ gia dụng', productCount: 27, icon: 'home-outline' },
-  { id: 'sc6', name: 'Sách & Văn phòng phẩm', productCount: 19, icon: 'book-outline' },
-  { id: 'sc7', name: 'Mỹ phẩm', productCount: 11, icon: 'color-palette-outline' },
-];
-
 export default function ShopScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
   const { shopId } = route.params || {};
   const { isLoggedIn, setGuestMode } = useAuth();
   const { isFollowing, toggleFollow, loadFollowedShops } = useFollowShopStore();
   const currentShopId = Number(shopId || MOCK_SHOP.id);
+  const currentShopName = MOCK_SHOP.name;
 
   // ─── State ───
-  const [activeTab, setActiveTab] = useState<'shop' | 'products' | 'categories'>('shop');
+  const [activeTab, setActiveTab] = useState<'shop' | 'products'>('shop');
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [followCount, setFollowCount] = useState(MOCK_SHOP.followers);
+  const [showTopButton, setShowTopButton] = useState(false);
   const shopFollowed = isFollowing(currentShopId);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<any>(null);
+  const topButtonOpacity = useRef(new Animated.Value(0)).current;
+  const headerHeight = insets.top + 46;
+  const compactTrigger = COVER_HEIGHT - headerHeight - 6;
+
+  const headerWhiteOpacity = scrollY.interpolate({
+    inputRange: [0, 1, 88],
+    outputRange: [0, 0.18, 1],
+    extrapolate: 'clamp',
+  });
+
+  const compactOpacity = scrollY.interpolate({
+    inputRange: [compactTrigger - 24, compactTrigger],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const topIconColor = scrollY.interpolate({
+    inputRange: [0, 90],
+    outputRange: ['#FFFFFF', colors.primary],
+    extrapolate: 'clamp',
+  });
 
   const fetchProducts = async () => {
     try {
@@ -75,12 +89,27 @@ export default function ShopScreen({ route, navigation }: any) {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    if (route.params?.activeTab) {
-      setActiveTab(route.params.activeTab);
+    Animated.timing(topButtonOpacity, {
+      toValue: showTopButton ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [showTopButton, topButtonOpacity]);
+
+  useEffect(() => {
+    const requestedTab = route.params?.activeTab;
+    if (requestedTab === 'shop' || requestedTab === 'products') {
+      setActiveTab(requestedTab);
+    } else if (requestedTab === 'categories') {
+      setActiveTab('shop');
     }
   }, [route.params?.activeTab]);
 
   const onRefresh = () => { setRefreshing(true); fetchProducts(); };
+
+  const scrollToTop = () => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
 
   const handleFollow = async () => {
     if (!isLoggedIn) {
@@ -96,13 +125,28 @@ export default function ShopScreen({ route, navigation }: any) {
     try {
       await toggleFollow({
         id: currentShopId,
-        name: MOCK_SHOP.name,
+        name: currentShopName,
         logoUrl: MOCK_SHOP.logo,
       });
     } catch (error: any) {
       setFollowCount(prev => Math.max(0, wasFollowing ? prev + 1 : prev - 1));
       Alert.alert('Loi', error?.message || 'Khong the cap nhat theo doi shop.');
     }
+  };
+
+  const handleChat = () => {
+    if (!isLoggedIn) {
+      Alert.alert('Yêu cầu đăng nhập', 'Bạn cần đăng nhập để nhắn tin với người bán.', [
+        { text: 'Để sau', style: 'cancel' },
+        { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
+      ]);
+      return;
+    }
+
+    navigation.navigate('ChatDetail', {
+      peerId: currentShopId,
+      peerName: currentShopName,
+    });
   };
 
   // ─── Mock derived data ───
@@ -114,8 +158,102 @@ export default function ShopScreen({ route, navigation }: any) {
   const tabs = [
     { key: 'shop' as const, label: 'Shop' },
     { key: 'products' as const, label: 'Sản phẩm' },
-    { key: 'categories' as const, label: 'Danh mục' },
   ];
+
+  const renderFloatingHeader = () => (
+    <Animated.View pointerEvents="box-none" style={[styles.floatingHeader, { height: headerHeight }]}>
+      <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.white, opacity: headerWhiteOpacity }]} />
+      <View style={[styles.headerRow, { paddingTop: insets.top }]}>
+        <TouchableOpacity style={styles.floatBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Animated.View style={[styles.previewTabsInHeader, { opacity: compactOpacity }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewTabsHeaderScroll}>
+            {tabs.map(tab => (
+              <TouchableOpacity key={tab.key} style={styles.headerTab} onPress={() => setActiveTab(tab.key)}>
+                <Text style={[styles.headerTabText, activeTab === tab.key && styles.headerTabTextActive]} numberOfLines={1}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </Animated.View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('Search')}>
+            <Animated.Text style={{ color: topIconColor }}>
+              <Ionicons name="search" size={22} />
+            </Animated.Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('Cart')}>
+            <Animated.Text style={{ color: topIconColor }}>
+              <Ionicons name="cart-outline" size={22} />
+            </Animated.Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerIconBtn}>
+            <Animated.Text style={{ color: topIconColor }}>
+              <Ionicons name="ellipsis-vertical" size={22} />
+            </Animated.Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Animated.View>
+  );
+
+  const renderCover = () => (
+    <View style={[styles.cover, { paddingTop: insets.top + 54 }]}>
+      <Image source={{ uri: MOCK_SHOP.banner }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+      <View style={styles.coverOverlay} />
+      <View style={styles.shopInfoLine}>
+        <Image source={{ uri: MOCK_SHOP.logo }} style={styles.shopLogo} />
+        <View style={styles.shopMeta}>
+          <TouchableOpacity onPress={() => navigation.navigate('ShopDetail')} activeOpacity={0.8} style={styles.shopNameLink}>
+            <View style={styles.shopNameRow}>
+              <Text style={styles.shopName} numberOfLines={1}>{currentShopName}</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.white} />
+            </View>
+          </TouchableOpacity>
+          <View style={styles.shopStatRow}>
+            <Ionicons name="star" size={12} color="#FACC15" />
+            <Text style={styles.shopStatText}>{MOCK_SHOP.rating}</Text>
+            <Text style={styles.shopStatText}>|</Text>
+            <Text style={styles.shopStatText}>{followCount >= 1000 ? `${(followCount / 1000).toFixed(1)}k` : followCount} Theo dõi</Text>
+          </View>
+        </View>
+        <View style={styles.shopActions}>
+          <TouchableOpacity style={[styles.followBtn, shopFollowed && styles.followBtnActive]} onPress={handleFollow}>
+            <Ionicons name={shopFollowed ? 'checkmark' : 'add'} size={15} color={colors.white} />
+            <Text style={styles.followBtnText}>
+              {shopFollowed ? 'Đang theo dõi' : 'Theo dõi'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
+            <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.white} />
+            <Text style={styles.chatBtnText}>Nhắn tin</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderPreviewTabs = () => (
+    <View style={styles.overlapWrap}>
+      <View style={styles.previewTabPanel}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewTabScroll}>
+          {tabs.map(tab => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.previewTabItem, activeTab === tab.key && styles.previewTabItemActive]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Text style={[styles.previewTabText, activeTab === tab.key && styles.previewTabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  );
 
   // ─── Render Shop Tab ───
   const renderShopTab = () => (
@@ -135,9 +273,6 @@ export default function ShopScreen({ route, navigation }: any) {
                 <Text style={styles.timerBox}>30</Text>
               </View>
             </View>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>Xem tất cả ›</Text>
-            </TouchableOpacity>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10 }}>
             {flashSaleProducts.map((item, idx) => {
@@ -233,31 +368,6 @@ export default function ShopScreen({ route, navigation }: any) {
     </View>
   );
 
-  // ─── Render Categories Tab ───
-  const renderCategoriesTab = () => (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Danh mục của Shop</Text>
-      </View>
-      {MOCK_SHOP_CATEGORIES.map(cat => (
-        <TouchableOpacity
-          key={cat.id}
-          style={styles.catRow}
-          onPress={() => navigation.navigate('Category', { categoryId: cat.id, categoryName: cat.name })}
-        >
-          <View style={styles.catIconCircle}>
-            <Ionicons name={cat.icon as any} size={22} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.catRowName}>{cat.name}</Text>
-            <Text style={styles.catRowCount}>{cat.productCount} sản phẩm</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
   if (isLoading && !refreshing) {
     return (
       <View style={[styles.loadingWrap, { paddingTop: insets.top }]}>
@@ -268,96 +378,45 @@ export default function ShopScreen({ route, navigation }: any) {
 
   return (
     <Animated.View style={[styles.root, { opacity: fadeAnim }]}>
-      <ScrollView
+      <Animated.ScrollView
+        ref={scrollRef}
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} progressViewOffset={headerHeight} />}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          {
+            useNativeDriver: false,
+            listener: (event: any) => {
+              const shouldShow = event.nativeEvent.contentOffset.y > 320;
+              setShowTopButton(prev => prev === shouldShow ? prev : shouldShow);
+            },
+          }
+        )}
       >
         {/* ═══ BANNER + SHOP INFO AREA (~20% top) ═══ */}
-        <View style={styles.bannerArea}>
-          {/* Background banner image */}
-          <Image source={{ uri: MOCK_SHOP.banner }} style={styles.bannerImage} />
-          <View style={styles.bannerOverlay} />
-
-          {/* Floating header */}
-          <View style={[styles.floatHeader, { paddingTop: insets.top + 4 }]}>
-            <TouchableOpacity style={styles.floatBtn} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={22} color="#fff" />
-            </TouchableOpacity>
-            <View style={styles.floatHeaderRight}>
-              <TouchableOpacity style={styles.floatBtn} onPress={() => navigation.navigate('Search')}>
-                <Ionicons name="search" size={22} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.floatBtn} onPress={() => navigation.navigate('Cart')}>
-                <Ionicons name="cart-outline" size={22} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.floatBtn}>
-                <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Shop Info Card (overlapping the banner bottom) */}
-          <View style={styles.shopInfoCard}>
-            <View style={styles.shopInfoRight}>
-              <Image source={{ uri: MOCK_SHOP.logo }} style={styles.shopLogo} />
-              <View style={styles.shopMeta}>
-                <TouchableOpacity onPress={() => navigation.navigate('ShopDetail')}>
-                  <View style={styles.shopNameRow}>
-                    <Text style={styles.shopName}>{MOCK_SHOP.name}</Text>
-                    <Ionicons name="chevron-forward" size={14} color={colors.text} />
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.shopStatRow}>
-                  <Ionicons name="star" size={13} color="#FFD700" />
-                  <Text style={styles.shopStatText}>{MOCK_SHOP.rating}</Text>
-                  <Text style={styles.shopStatDivider}>|</Text>
-                  <Ionicons name="people-outline" size={13} color={colors.textSecondary} />
-                  <Text style={styles.shopStatText}>{followCount >= 1000 ? `${(followCount / 1000).toFixed(1)}k` : followCount} Theo dõi</Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.shopActions}>
-              <TouchableOpacity style={[styles.followBtn, shopFollowed && styles.followBtnActive]} onPress={handleFollow}>
-                <Ionicons name={shopFollowed ? 'checkmark' : 'add'} size={14} color={shopFollowed ? colors.primary : '#fff'} />
-                <Text style={[styles.followBtnText, shopFollowed && styles.followBtnTextActive]}>
-                  {shopFollowed ? 'Đang theo dõi' : 'Theo dõi'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.chatBtn}>
-                <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.primary} />
-                <Text style={styles.chatBtnText}>Nhắn tin</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        {renderCover()}
 
         {/* ═══ TABS BAR (sticky) ═══ */}
-        <View style={styles.tabBarContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar} contentContainerStyle={styles.tabBarContent}>
-            {tabs.map(tab => (
-              <TouchableOpacity
-                key={tab.key}
-                style={[styles.tabItem, activeTab === tab.key && styles.tabItemActive]}
-                onPress={() => setActiveTab(tab.key)}
-              >
-                <Text style={[styles.tabLabel, activeTab === tab.key && styles.tabLabelActive]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+        <View style={styles.content}>
+          {renderPreviewTabs()}
 
         {/* ═══ TAB CONTENT ═══ */}
-        <View style={styles.tabContent}>
           {activeTab === 'shop' && renderShopTab()}
           {activeTab === 'products' && renderProductsTab()}
-          {activeTab === 'categories' && renderCategoriesTab()}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+      {renderFloatingHeader()}
+      <Animated.View
+        pointerEvents={showTopButton ? 'auto' : 'none'}
+        style={[styles.topButtonWrap, { bottom: Math.max(insets.bottom, 12) + 18, opacity: topButtonOpacity }]}
+      >
+        <TouchableOpacity style={styles.topButton} onPress={scrollToTop} activeOpacity={0.85}>
+          <Ionicons name="arrow-up" size={22} color={colors.white} />
+        </TouchableOpacity>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -370,20 +429,7 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, backgroundColor: colors.background },
 
   // ─── Banner Area ───
-  bannerArea: { position: 'relative' },
-  bannerImage: { width: '100%', height: BANNER_HEIGHT + 60, resizeMode: 'cover' },
-  bannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-  },
-
   // ─── Floating Header ───
-  floatHeader: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 12, zIndex: 10,
-  },
-  floatHeaderRight: { flexDirection: 'row', gap: 4 },
   floatBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.3)',
@@ -391,76 +437,152 @@ const styles = StyleSheet.create({
   },
 
   // ─── Shop Info Card ───
-  shopInfoCard: {
-    position: 'absolute', bottom: -30, left: 12, right: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  // ─── Tabs ───
+
+  // ─── Tab Content ───
+  scrollContent: { paddingBottom: 100 },
+  content: { backgroundColor: colors.background },
+  topButtonWrap: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 40,
+  },
+  topButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
     alignItems: 'center',
+    justifyContent: 'center',
     ...shadow.md,
   },
-  shopActions: { flexDirection: 'column', gap: 6, marginRight: 10, width: 100 },
-  followBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
-    backgroundColor: colors.primary,
-    paddingVertical: 6,
-    borderRadius: 4,
-    width: '100%',
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
   },
-  followBtnActive: { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.primary },
-  followBtnText: { fontSize: 11, fontWeight: '600', color: '#fff' },
-  followBtnTextActive: { color: colors.primary },
-  chatBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
-    backgroundColor: '#fff',
-    borderWidth: 1, borderColor: colors.primary,
-    paddingVertical: 6,
-    borderRadius: 4,
-    width: '100%',
-  },
-  chatBtnText: { fontSize: 11, fontWeight: '500', color: colors.primary },
-  shopInfoRight: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'flex-end' },
-  shopLogo: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: colors.primary, marginRight: 8 },
-  shopMeta: { flex: 1 },
-  shopNameRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 4 },
-  shopName: { fontSize: 14, fontWeight: '400', color: colors.text },
-  shopStatRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  shopStatText: { fontSize: 12, color: colors.textSecondary },
-  shopStatDivider: { color: colors.border, marginHorizontal: 4 },
-
-  // ─── Tabs ───
-  tabBarContainer: {
-    width: '100%',
-    backgroundColor: '#fff',
-    marginTop: 36,
-    elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2,
-  },
-  tabBar: {
-    width: '100%',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  tabBarContent: {
+  headerRow: {
+    height: '100%',
     flexDirection: 'row',
-    paddingHorizontal: 8,
-  },
-  tabItem: {
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    paddingVertical: 14,
     alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  headerIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewTabsInHeader: {
+    flex: 1,
+    minWidth: 0,
+    height: 34,
+    justifyContent: 'center',
+  },
+  previewTabsHeaderScroll: { alignItems: 'center' },
+  headerTab: {
+    height: 34,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  tabItemActive: { borderBottomColor: colors.primary },
-  tabLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, textAlign: 'center' },
-  tabLabelActive: { color: colors.primary, fontWeight: '700' },
-
-  // ─── Tab Content ───
-  tabContent: { paddingBottom: 20 },
+  headerTabText: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  headerTabTextActive: { color: colors.primary },
+  cover: {
+    height: COVER_HEIGHT,
+    overflow: 'hidden',
+    justifyContent: 'flex-start',
+  },
+  coverOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.34)',
+  },
+  shopInfoLine: {
+    marginTop: 6,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 58,
+  },
+  shopLogo: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: colors.white,
+    backgroundColor: colors.white,
+    marginRight: 10,
+  },
+  shopMeta: { flex: 1, justifyContent: 'center' },
+  shopNameLink: { alignSelf: 'flex-start', maxWidth: '100%' },
+  shopNameRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 5 },
+  shopName: {
+    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.white,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowRadius: 3,
+  },
+  shopStatRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  shopStatText: { fontSize: 12, fontWeight: '600', color: colors.white },
+  shopActions: { width: 92, gap: 7 },
+  followBtn: {
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  followBtnActive: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  followBtnText: { fontSize: 12, fontWeight: '800', color: colors.white },
+  chatBtn: {
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  chatBtnText: { fontSize: 12, fontWeight: '800', color: colors.white },
+  overlapWrap: { marginTop: -20, marginBottom: 0, zIndex: 4 },
+  previewTabPanel: {
+    minHeight: 44,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    ...shadow.md,
+  },
+  previewTabScroll: { alignItems: 'center', paddingHorizontal: 6 },
+  previewTabItem: {
+    height: 44,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  previewTabItemActive: { borderBottomColor: colors.primary },
+  previewTabText: { fontSize: 13, fontWeight: '700', color: colors.text },
+  previewTabTextActive: { color: colors.primary },
 
   // ─── Section ───
   section: { backgroundColor: '#fff', marginTop: 8, paddingVertical: 14 },
@@ -504,20 +626,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 4, paddingTop: 4,
   },
-
-  // ─── Categories List ───
-  catRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 14,
-    paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.borderLight,
-  },
-  catIconCircle: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: colors.primaryBg,
-    alignItems: 'center', justifyContent: 'center',
-    marginRight: 14,
-  },
-  catRowName: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 2 },
-  catRowCount: { fontSize: 12, color: colors.textSecondary },
 
   // ─── Empty ───
   emptyWrap: { padding: 48, alignItems: 'center', gap: 12 },

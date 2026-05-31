@@ -287,7 +287,9 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<bool> UpdateOrderStatusAsync(int sellerId, int orderId, UpdateOrderStatusDto dto)
         {
-            var order = await _db.Orders.Include(o => o.OrderItems).Include(o => o.Payment)
+            var order = await _db.Orders
+                .Include(o => o.OrderItems).ThenInclude(oi => oi.Product)
+                .Include(o => o.Payment)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
@@ -302,6 +304,16 @@ namespace GlocalCart.API.Services.Implementations
 
             if (newStatus != OrderStatus.Canceled)
                 OrderBusinessRules.EnsureSellerCanFulfill(order.Payment);
+
+            if (newStatus == OrderStatus.Canceled)
+            {
+                if (order.Status == OrderStatus.Canceled)
+                    return true;
+                if (order.Status is OrderStatus.Shipped or OrderStatus.Complete)
+                    throw new InvalidOperationException("Khong the huy don da van chuyen/hoan tat.");
+
+                RestoreOrderStock(order);
+            }
 
             order.Status = newStatus;
             _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = newStatus, Note = dto.Note ?? $"Seller cập nhật: {newStatus}" });
@@ -321,12 +333,14 @@ namespace GlocalCart.API.Services.Implementations
             if (!order.OrderItems.Any(oi => oi.SellerId == sellerId))
                 throw new UnauthorizedAccessException("Bạn không có quyền.");
 
+            if (order.Status == OrderStatus.Canceled)
+                return true;
+
             if (order.Status == OrderStatus.Shipped || order.Status == OrderStatus.Complete)
                 throw new InvalidOperationException("Không thể từ chối đơn đã vận chuyển.");
 
             order.Status = OrderStatus.Canceled;
-            foreach (var item in order.OrderItems.Where(oi => oi.SellerId == sellerId))
-                item.Product.AvailableItemCount += item.Quantity;
+            RestoreOrderStock(order);
 
             _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Canceled, Note = $"Seller từ chối: {dto.Reason}" });
 
@@ -840,6 +854,14 @@ namespace GlocalCart.API.Services.Implementations
             } : null,
             Shipment = o.Shipment != null ? MapShipmentDto(o.Shipment) : null
         };
+
+        private static void RestoreOrderStock(Order order)
+        {
+            foreach (var item in order.OrderItems)
+            {
+                item.Product.AvailableItemCount += item.Quantity;
+            }
+        }
 
         private static ShipmentInfoDto MapShipmentDto(Shipment s) => new()
         {

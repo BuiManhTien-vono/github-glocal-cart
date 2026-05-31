@@ -10,6 +10,13 @@ import { colors, spacing } from '../../theme/colors';
 import { ChatBadge } from '../../components/common/ChatBadge';
 import apiClient from '../../services/api/apiClient';
 
+const ADMIN_SUPPORT_CHAT = {
+  conversationId: 'admin-support',
+  peerId: 'admin',
+  peerName: 'GlocalCart Admin',
+  avatarUrl: 'https://ui-avatars.com/api/?name=GC+Admin&background=2563EB&color=fff&size=80&bold=true',
+};
+
 // --- Custom Switch Component ---
 function CustomSwitch({ value, onValueChange }: { value: boolean; onValueChange: (v: boolean) => void }) {
   return (
@@ -342,7 +349,17 @@ function LanguageModal({ visible, selected, onSelect, onClose }: { visible: bool
 
 // --- Trung tâm hỗ trợ Modal ---
 function SupportCenterModal({ visible, onClose, navigation }: { visible: boolean; onClose: () => void; navigation: any }) {
+  const { isLoggedIn } = useAuth();
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+
+  const openAdminSupportChat = () => {
+    if (!isLoggedIn) {
+      Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để chat với CSKH.');
+      return;
+    }
+    onClose();
+    navigation.navigate('ChatDetail', ADMIN_SUPPORT_CHAT);
+  };
 
   const faqs = [
     {
@@ -412,10 +429,7 @@ function SupportCenterModal({ visible, onClose, navigation }: { visible: boolean
 
             <TouchableOpacity
               style={m.contactCard}
-              onPress={() => {
-                onClose();
-                navigation.navigate('ChatList');
-              }}
+              onPress={openAdminSupportChat}
             >
               <Ionicons name="chatbubbles-outline" size={22} color={colors.primary} />
               <View style={{ flex: 1, marginLeft: 12 }}>

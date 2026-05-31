@@ -13,6 +13,7 @@ namespace GlocalCart.API.Controllers
     {
         private readonly IProductService _productService;
         private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        private bool IsAdmin => User.IsInRole("Admin");
 
         public ProductsController(IProductService productService) { _productService = productService; }
 
@@ -99,7 +100,7 @@ namespace GlocalCart.API.Controllers
         [HttpPut("{id}")]
         [Authorize(Roles = "Seller,Admin")]
         public async Task<IActionResult> UpdateProduct(int id, [FromBody] UpdateProductDto dto) =>
-            Ok(ApiResponse.Ok(await _productService.UpdateProductAsync(UserId, id, dto), "Cập nhật sản phẩm thành công."));
+            Ok(ApiResponse.Ok(await _productService.UpdateProductAsync(UserId, id, dto, IsAdmin), "Cập nhật sản phẩm thành công."));
 
         /// <summary>
         /// Seller ẩn/hiện sản phẩm
@@ -108,7 +109,7 @@ namespace GlocalCart.API.Controllers
         [Authorize(Roles = "Seller,Admin")]
         public async Task<IActionResult> ToggleVisibility(int id)
         {
-            await _productService.ToggleVisibilityAsync(UserId, id);
+            await _productService.ToggleVisibilityAsync(UserId, id, IsAdmin);
             return Ok(ApiResponse.Ok("Đã cập nhật trạng thái hiển thị."));
         }
 
@@ -119,7 +120,7 @@ namespace GlocalCart.API.Controllers
         [Authorize(Roles = "Seller,Admin")]
         public async Task<IActionResult> UpdateStock(int id, [FromBody] UpdateStockDto dto)
         {
-            await _productService.UpdateStockAsync(UserId, id, dto.AvailableItemCount);
+            await _productService.UpdateStockAsync(UserId, id, dto.AvailableItemCount, IsAdmin);
             return Ok(ApiResponse.Ok("Đã cập nhật tồn kho."));
         }
 
@@ -129,7 +130,7 @@ namespace GlocalCart.API.Controllers
         [HttpGet("my-products")]
         [Authorize(Roles = "Seller,Admin")]
         public async Task<IActionResult> GetMyProducts([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
-            Ok(ApiResponse.Ok(await _productService.GetMyProductsAsync(UserId, page, pageSize)));
+            Ok(ApiResponse.Ok(await _productService.GetMyProductsAsync(UserId, page, pageSize, IsAdmin)));
     }
 }
 

@@ -24,6 +24,8 @@ export default function FavoritesScreen() {
       resolveProductImageUrl(item.mediaUrl) ||
       resolveProductImageUrl(item.productImage) ||
       resolveProductImageUrl(item.imageUrls?.[0]);
+    const stock = Number(item.availableItemCount ?? item.stock ?? 0);
+    const hasStock = item.availableItemCount != null || item.stock != null;
 
     return (
       <TouchableOpacity
@@ -45,7 +47,7 @@ export default function FavoritesScreen() {
           <View style={styles.ratingRow}>
             <Ionicons name="star" size={12} color="#F59E0B" />
             <Text style={styles.rating}>{Number(item.averageRating || 0).toFixed(1)}</Text>
-            {typeof item.stock === 'number' && <Text style={styles.sold}>| Còn {item.stock}</Text>}
+            {hasStock && <Text style={styles.sold}>| Còn {stock}</Text>}
           </View>
         </View>
         <TouchableOpacity

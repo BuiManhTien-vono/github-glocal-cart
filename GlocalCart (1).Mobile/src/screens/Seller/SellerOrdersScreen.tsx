@@ -210,6 +210,9 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
                     </View>
                 </View>
                 <View style={styles.actionRow}>
+                    <TouchableOpacity style={styles.outlineBtn} onPress={() => navigation.navigate('SellerOrderDetail', { orderId: item.id, order: item })}>
+                        <Text style={styles.outlineBtnText}>Xem chi tiết</Text>
+                    </TouchableOpacity>
                     {statusText === 'Chờ xác nhận' && (
                         <>
                             <TouchableOpacity style={styles.denyBtn} onPress={() => handleDeny(item.id)}>
@@ -219,11 +222,6 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
                                 <Text style={styles.approveBtnText}>Tạo vận đơn</Text>
                             </TouchableOpacity>
                         </>
-                    )}
-                    {statusText !== 'Chờ xác nhận' && (
-                        <TouchableOpacity style={styles.outlineBtn} onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}>
-                            <Text style={styles.outlineBtnText}>Xem chi tiết</Text>
-                        </TouchableOpacity>
                     )}
                 </View>
             </View>
@@ -298,7 +296,7 @@ const styles = StyleSheet.create({
     totalText: { fontSize: 13, color: colors.textSecondary },
     totalPrice: { fontSize: 16, fontWeight: '700', color: colors.primary },
 
-    actionRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+    actionRow: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 10 },
     denyBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, backgroundColor: colors.borderLight },
     denyBtnText: { color: colors.text, fontWeight: '600' },
     approveBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, backgroundColor: colors.primary },
