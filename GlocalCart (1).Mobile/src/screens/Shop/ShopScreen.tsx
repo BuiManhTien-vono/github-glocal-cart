@@ -23,7 +23,6 @@ import { resolveProductImage } from '../../utils/imageUtils';
 const COVER_HEIGHT = 208;
 
 const DEFAULT_SHOP = {
-  id: 1,
   name: 'Glocal Cart Official Store',
   logo: 'https://ui-avatars.com/api/?name=GC&background=FF6B35&color=fff&size=80&bold=true',
   banner: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&h=300&fit=crop',

@@ -54,7 +54,6 @@ const ADMIN_CONTACT: ChatContact = {
 };
 
 const normalizeText = (value: any) => (typeof value === 'string' ? value.trim() : '');
-
 const itemKey = (peerId?: string, fallback?: string) => (peerId ? `peer-${peerId}` : fallback || '');
 
 export default function ChatListScreen({ navigation }: any) {
