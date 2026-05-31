@@ -33,6 +33,8 @@ const calculateTotals = (items: CartItem[]) => {
   return { totalAmount, totalItems };
 };
 
+const getAvailableStock = (product: any) => Number(product?.availableItemCount ?? product?.stock ?? 0);
+
 export const useCartStore = create<CartState>((set, get) => ({
   items: [],
   totalAmount: 0,
@@ -79,7 +81,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           priceSnapshot: product.price,
           currentPrice: product.price,
           quantity: quantity,
-          availableStock: product.stock,
+          availableStock: getAvailableStock(product),
           subtotal: product.price * quantity,
         };
         await addOrUpdateGuestCartItem(item);

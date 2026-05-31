@@ -102,6 +102,47 @@ namespace GlocalCart.API.Controllers
         }
 
         // === PRODUCTS ===
+        [HttpGet("products")]
+        public async Task<IActionResult> GetAllProducts([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var result = await _db.Products
+                .AsNoTracking()
+                .Include(p => p.Seller)
+                .Include(p => p.Category)
+                .Include(p => p.Images)
+                .Include(p => p.Reviews)
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new ProductResponseDto
+                {
+                    Id = p.Id,
+                    SellerId = p.SellerId,
+                    SellerName = p.Seller.FullName,
+                    CategoryId = p.CategoryId,
+                    CategoryName = p.Category.Name,
+                    Name = p.Name,
+                    Description = p.Description,
+                    Price = p.Price,
+                    AvailableItemCount = p.AvailableItemCount,
+                    IsActive = p.IsActive,
+                    IsLocked = p.IsLocked,
+                    MediaUrl = p.MediaUrl,
+                    CreatedAt = p.CreatedAt,
+                    Images = p.Images.OrderBy(i => i.DisplayOrder).Select(i => new ProductImageDto
+                    {
+                        Id = i.Id,
+                        ImageUrl = i.ImageUrl,
+                        DisplayOrder = i.DisplayOrder,
+                        IsMain = i.IsMain,
+                        HasImageData = i.ImageData != null
+                    }).ToList(),
+                    AverageRating = p.Reviews.Any() ? p.Reviews.Average(r => r.Rating) : 0,
+                    ReviewCount = p.Reviews.Count
+                })
+                .ToPagedResultAsync(page, pageSize);
+
+            return Ok(ApiResponse.Ok(result));
+        }
+
         [HttpPatch("products/{id}/lock")]
         public async Task<IActionResult> ToggleProductLock(int id)
         {
@@ -117,13 +158,41 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> GetAllOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             var result = await _db.Orders
-                .Include(o => o.Buyer).Include(o => o.Payment)
+                .Include(o => o.Buyer)
+                .Include(o => o.Payment)
+                .Include(o => o.Shipment)
+                .Include(o => o.OrderItems).ThenInclude(oi => oi.Product).ThenInclude(p => p.Category)
+                .Include(o => o.OrderItems).ThenInclude(oi => oi.Seller)
                 .OrderByDescending(o => o.OrderDate)
                 .Select(o => new
                 {
-                    o.Id, o.OrderNumber, Status = o.Status.ToString(), o.OrderDate, o.TotalAmount,
+                    o.Id, o.OrderNumber, Status = o.Status.ToString(), o.OrderDate, o.TotalAmount, o.ShippingFee,
                     BuyerName = o.Buyer.FullName, BuyerEmail = o.Buyer.Email,
-                    PaymentStatus = o.Payment != null ? o.Payment.Status.ToString() : "N/A"
+                    PaymentStatus = o.Payment != null ? o.Payment.Status.ToString() : "N/A",
+                    Payment = o.Payment != null ? new
+                    {
+                        Method = o.Payment.Method.ToString(),
+                        Status = o.Payment.Status.ToString(),
+                        Amount = o.Payment.Amount,
+                        TransactionRef = o.Payment.TransactionRef
+                    } : null,
+                    Shipment = o.Shipment != null ? new
+                    {
+                        Status = o.Shipment.Status.ToString(),
+                        DeliveredAt = o.Shipment.DeliveredAt
+                    } : null,
+                    Items = o.OrderItems.Select(oi => new
+                    {
+                        oi.Id,
+                        oi.ProductId,
+                        ProductName = oi.Product.Name,
+                        SellerId = oi.SellerId,
+                        SellerName = oi.Seller.FullName,
+                        CategoryName = oi.Product.Category != null ? oi.Product.Category.Name : null,
+                        oi.Quantity,
+                        oi.UnitPrice,
+                        Subtotal = oi.UnitPrice * oi.Quantity
+                    }).ToList()
                 }).ToPagedResultAsync(page, pageSize);
             return Ok(ApiResponse.Ok(result));
         }
@@ -148,13 +217,88 @@ namespace GlocalCart.API.Controllers
             var totalSellers = await _db.Users.CountAsync(u => u.IsSeller);
             var totalProducts = await _db.Products.CountAsync();
             var totalOrders = await _db.Orders.CountAsync();
-            var totalRevenue = await _db.Payments.Where(p => p.Status == PaymentStatus.Completed).SumAsync(p => p.Amount);
+            var completedRevenueOrders = _db.Orders
+                .Where(o => o.Status == OrderStatus.Complete
+                    && o.Payment != null
+                    && o.Payment.Status == PaymentStatus.Completed);
+            var totalRevenue = await completedRevenueOrders.SumAsync(o => o.TotalAmount);
+            var productRevenue = await _db.OrderItems
+                .Where(oi => oi.Order.Status == OrderStatus.Complete
+                    && oi.Order.Payment != null
+                    && oi.Order.Payment.Status == PaymentStatus.Completed)
+                .SumAsync(oi => oi.UnitPrice * oi.Quantity);
+            var shippingRevenue = await completedRevenueOrders.SumAsync(o => o.ShippingFee);
+            var completedOrders = await completedRevenueOrders.CountAsync();
             var pendingOrders = await _db.Orders.CountAsync(o => o.Status == OrderStatus.Pending);
 
             return Ok(ApiResponse.Ok(new
             {
                 totalUsers, totalSellers, totalProducts, totalOrders,
-                totalRevenue, pendingOrders
+                totalRevenue, productRevenue, shippingRevenue, completedOrders, pendingOrders
+            }));
+        }
+
+        [HttpGet("revenue")]
+        public async Task<IActionResult> GetRevenue([FromQuery] int days = 30)
+        {
+            var start = days > 0 ? DateTime.UtcNow.Date.AddDays(-days + 1) : (DateTime?)null;
+            var revenueOrders = _db.Orders
+                .Where(o => o.Status == OrderStatus.Complete
+                    && o.Payment != null
+                    && o.Payment.Status == PaymentStatus.Completed);
+
+            if (start.HasValue)
+                revenueOrders = revenueOrders.Where(o => o.OrderDate >= start.Value);
+
+            var totalRevenue = await revenueOrders.SumAsync(o => o.TotalAmount);
+            var totalOrders = await revenueOrders.CountAsync();
+            var totalItems = await _db.OrderItems
+                .Where(oi => oi.Order.Status == OrderStatus.Complete
+                    && oi.Order.Payment != null
+                    && oi.Order.Payment.Status == PaymentStatus.Completed
+                    && (!start.HasValue || oi.Order.OrderDate >= start.Value))
+                .SumAsync(oi => oi.Quantity);
+
+            var byProduct = await _db.OrderItems
+                .Where(oi => oi.Order.Status == OrderStatus.Complete
+                    && oi.Order.Payment != null
+                    && oi.Order.Payment.Status == PaymentStatus.Completed
+                    && (!start.HasValue || oi.Order.OrderDate >= start.Value))
+                .GroupBy(oi => new { oi.ProductId, oi.Product.Name })
+                .Select(g => new
+                {
+                    Name = g.Key.Name,
+                    Quantity = g.Sum(oi => oi.Quantity),
+                    Revenue = g.Sum(oi => oi.UnitPrice * oi.Quantity)
+                })
+                .OrderByDescending(x => x.Revenue)
+                .Take(8)
+                .ToListAsync();
+
+            var byCategory = await _db.OrderItems
+                .Where(oi => oi.Order.Status == OrderStatus.Complete
+                    && oi.Order.Payment != null
+                    && oi.Order.Payment.Status == PaymentStatus.Completed
+                    && (!start.HasValue || oi.Order.OrderDate >= start.Value))
+                .GroupBy(oi => oi.Product.Category.Name)
+                .Select(g => new
+                {
+                    Name = g.Key,
+                    Quantity = g.Sum(oi => oi.Quantity),
+                    Revenue = g.Sum(oi => oi.UnitPrice * oi.Quantity)
+                })
+                .OrderByDescending(x => x.Revenue)
+                .Take(8)
+                .ToListAsync();
+
+            return Ok(ApiResponse.Ok(new
+            {
+                totalRevenue,
+                totalOrders,
+                totalItems,
+                averageOrder = totalOrders > 0 ? totalRevenue / totalOrders : 0,
+                byCategory,
+                byProduct
             }));
         }
     }

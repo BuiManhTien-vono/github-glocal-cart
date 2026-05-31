@@ -78,32 +78,59 @@ namespace GlocalCart.API.Services.Implementations
         public async Task<ShipperStatsDto> GetStatsAsync(int shipperId)
         {
             var now = DateTime.UtcNow;
-            var today = now.Date;
-            var monthStart = new DateTime(now.Year, now.Month, 1);
+            var (todayStartUtc, tomorrowStartUtc, monthStartUtc) = GetVietnamStatsUtcRange(now);
 
             var owned = QueryShipments().Where(s => s.ShipperId == shipperId);
             var completed = owned.Where(s => s.Status == ShipmentStatus.Delivered && s.DeliveredAt != null);
+            var completedToday = completed.Where(s => s.DeliveredAt >= todayStartUtc && s.DeliveredAt < tomorrowStartUtc);
+            var activeToday = owned.Where(s =>
+                (s.Status == ShipmentStatus.Accepted
+                    || s.Status == ShipmentStatus.Shipped
+                    || s.Status == ShipmentStatus.Arrived
+                    || s.Status == ShipmentStatus.OnHold)
+                && ((s.AssignedAt != null && s.AssignedAt >= todayStartUtc && s.AssignedAt < tomorrowStartUtc)
+                    || (s.AcceptedAt != null && s.AcceptedAt >= todayStartUtc && s.AcceptedAt < tomorrowStartUtc)
+                    || (s.PickedUpAt != null && s.PickedUpAt >= todayStartUtc && s.PickedUpAt < tomorrowStartUtc)
+                    || (s.ArrivedAt != null && s.ArrivedAt >= todayStartUtc && s.ArrivedAt < tomorrowStartUtc)));
             var totalAssigned = await owned.CountAsync();
             var completedCount = await completed.CountAsync();
 
             return new ShipperStatsDto
             {
-                TodayCompleted = await completed.CountAsync(s => s.DeliveredAt >= today),
-                TodayIncome = await completed.Where(s => s.DeliveredAt >= today).SumAsync(s => s.Order.ShippingFee),
-                MonthCompleted = await completed.CountAsync(s => s.DeliveredAt >= monthStart),
-                MonthIncome = await completed.Where(s => s.DeliveredAt >= monthStart).SumAsync(s => s.Order.ShippingFee),
-                ActiveShipments = await owned.CountAsync(s =>
-                    s.Status == ShipmentStatus.Accepted
-                    || s.Status == ShipmentStatus.Shipped
-                    || s.Status == ShipmentStatus.Arrived
-                    || s.Status == ShipmentStatus.OnHold),
-                PendingCodAmount = await owned
-                    .Where(s => s.Status == ShipmentStatus.Arrived
-                        && s.Order.Payment != null
+                TodayCompleted = await completedToday.CountAsync(),
+                TodayIncome = await completedToday.SumAsync(s => s.Order.ShippingFee),
+                MonthCompleted = await completed.CountAsync(s => s.DeliveredAt >= monthStartUtc),
+                MonthIncome = await completed.Where(s => s.DeliveredAt >= monthStartUtc).SumAsync(s => s.Order.ShippingFee),
+                ActiveShipments = await activeToday.CountAsync(),
+                PendingCodAmount = await activeToday
+                    .Where(s => s.Order.Payment != null
+                        && s.Order.Payment.Method == PaymentMethod.CashOnDelivery
                         && s.Order.Payment.Status != PaymentStatus.Completed)
                     .SumAsync(s => s.Order.TotalAmount),
                 SuccessRate = totalAssigned == 0 ? 100 : Math.Round((decimal)completedCount / totalAssigned * 100, 1)
             };
+        }
+
+        private static (DateTime TodayStartUtc, DateTime TomorrowStartUtc, DateTime MonthStartUtc) GetVietnamStatsUtcRange(DateTime utcNow)
+        {
+            TimeZoneInfo vietnamTimeZone;
+            try
+            {
+                vietnamTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                vietnamTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh");
+            }
+
+            var localToday = TimeZoneInfo.ConvertTimeFromUtc(utcNow, vietnamTimeZone).Date;
+            var localTomorrow = localToday.AddDays(1);
+            var localMonthStart = new DateTime(localToday.Year, localToday.Month, 1);
+            return (
+                TimeZoneInfo.ConvertTimeToUtc(localToday, vietnamTimeZone),
+                TimeZoneInfo.ConvertTimeToUtc(localTomorrow, vietnamTimeZone),
+                TimeZoneInfo.ConvertTimeToUtc(localMonthStart, vietnamTimeZone)
+            );
         }
 
         public async Task<bool> UpdateLocationAsync(int shipperId, ShipperLocationUpdateDto dto)

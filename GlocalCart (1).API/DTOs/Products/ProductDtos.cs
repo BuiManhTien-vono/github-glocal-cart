@@ -15,6 +15,7 @@ namespace GlocalCart.API.DTOs.Products
         public decimal Price { get; set; }
         public int AvailableItemCount { get; set; }
         public bool IsActive { get; set; }
+        public bool IsLocked { get; set; }
         public string? MediaUrl { get; set; }
         public List<ProductImageDto> Images { get; set; } = new();
         public double AverageRating { get; set; }

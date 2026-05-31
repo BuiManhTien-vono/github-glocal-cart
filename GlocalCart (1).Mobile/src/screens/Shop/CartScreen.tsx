@@ -57,6 +57,8 @@ function CartItemRow({
     inputRange: [0, 1],
     outputRange: [0, -(SCREEN_WIDTH * 0.42)],
   });
+  const availableStock = Number(item.availableStock ?? item.availableItemCount ?? item.stock ?? 0);
+  const canIncrease = availableStock <= 0 || item.quantity < availableStock;
 
   return (
     <View style={styles.cartItemOuter}>
@@ -89,7 +91,11 @@ function CartItemRow({
                 <Ionicons name="remove" size={16} color="#666" />
               </TouchableOpacity>
               <Text style={styles.qtyText}>{item.quantity}</Text>
-              <TouchableOpacity style={styles.qtyBtn} onPress={() => onUpdateQty(item.quantity + 1)}>
+              <TouchableOpacity
+                style={[styles.qtyBtn, !canIncrease && styles.qtyBtnDisabled]}
+                disabled={!canIncrease}
+                onPress={() => onUpdateQty(item.quantity + 1)}
+              >
                 <Ionicons name="add" size={16} color="#666" />
               </TouchableOpacity>
             </View>
@@ -457,6 +463,7 @@ const styles = StyleSheet.create({
   itemPrice: { fontSize: 15, color: '#EE4D2D', fontWeight: '500' },
   quantityControl: { flexDirection: 'row', alignItems: 'center', borderWidth: 0.5, borderColor: '#ccc', borderRadius: 2 },
   qtyBtn: { padding: 4, paddingHorizontal: 8 },
+  qtyBtnDisabled: { opacity: 0.35 },
   qtyText: { paddingHorizontal: 10, fontSize: 13, borderLeftWidth: 0.5, borderRightWidth: 0.5, borderColor: '#ccc' },
 
   slideActions: {

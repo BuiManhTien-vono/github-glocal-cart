@@ -40,6 +40,24 @@ namespace GlocalCart.API.Controllers
             return Ok(ApiResponse.Ok(shops));
         }
 
+        [HttpGet("sellers")]
+        public async Task<IActionResult> GetSellers()
+        {
+            var sellers = await _db.Users
+                .Where(u => u.IsSeller)
+                .OrderBy(u => u.FullName)
+                .Select(u => new
+                {
+                    id = u.Id,
+                    name = string.IsNullOrWhiteSpace(u.FullName) ? (u.UserName ?? $"Seller #{u.Id}") : u.FullName,
+                    avatarUrl = (string?)null,
+                    productCount = _db.Products.Count(p => p.SellerId == u.Id && p.IsActive && !p.IsLocked)
+                })
+                .ToListAsync();
+
+            return Ok(ApiResponse.Ok(sellers));
+        }
+
         [HttpPost("{shopId:int}/follow")]
         public async Task<IActionResult> FollowShop(int shopId)
         {

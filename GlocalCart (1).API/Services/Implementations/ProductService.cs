@@ -182,11 +182,11 @@ namespace GlocalCart.API.Services.Implementations
             return (image.ImageData, image.ContentType ?? "image/webp");
         }
 
-        public async Task<ProductResponseDto> UpdateProductAsync(int sellerId, int productId, UpdateProductDto dto)
+        public async Task<ProductResponseDto> UpdateProductAsync(int sellerId, int productId, UpdateProductDto dto, bool isAdmin = false)
         {
             var product = await _db.Products
                 .Include(p => p.Images)
-                .FirstOrDefaultAsync(p => p.Id == productId && p.SellerId == sellerId)
+                .FirstOrDefaultAsync(p => p.Id == productId && (isAdmin || p.SellerId == sellerId))
                 ?? throw new KeyNotFoundException("Không tìm thấy sản phẩm hoặc bạn không có quyền.");
 
             if (dto.Name != null) product.Name = dto.Name;
@@ -248,9 +248,9 @@ namespace GlocalCart.API.Services.Implementations
             return await GetProductByIdForOwnerAsync(product.Id);
         }
 
-        public async Task<bool> ToggleVisibilityAsync(int sellerId, int productId)
+        public async Task<bool> ToggleVisibilityAsync(int sellerId, int productId, bool isAdmin = false)
         {
-            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId && p.SellerId == sellerId)
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId && (isAdmin || p.SellerId == sellerId))
                 ?? throw new KeyNotFoundException("Không tìm thấy sản phẩm.");
             product.IsActive = !product.IsActive;
             product.UpdatedAt = DateTime.UtcNow;
@@ -258,9 +258,9 @@ namespace GlocalCart.API.Services.Implementations
             return true;
         }
 
-        public async Task<bool> UpdateStockAsync(int sellerId, int productId, int newStock)
+        public async Task<bool> UpdateStockAsync(int sellerId, int productId, int newStock, bool isAdmin = false)
         {
-            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId && p.SellerId == sellerId)
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId && (isAdmin || p.SellerId == sellerId))
                 ?? throw new KeyNotFoundException("Không tìm thấy sản phẩm.");
             product.AvailableItemCount = newStock;
             product.UpdatedAt = DateTime.UtcNow;
@@ -268,11 +268,11 @@ namespace GlocalCart.API.Services.Implementations
             return true;
         }
 
-        public async Task<PagedResult<ProductResponseDto>> GetMyProductsAsync(int sellerId, int page, int pageSize)
+        public async Task<PagedResult<ProductResponseDto>> GetMyProductsAsync(int sellerId, int page, int pageSize, bool isAdmin = false)
         {
             var query = _db.Products
                 .Include(p => p.Seller).Include(p => p.Category).Include(p => p.Images).Include(p => p.Reviews)
-                .Where(p => p.SellerId == sellerId)
+                .Where(p => isAdmin || p.SellerId == sellerId)
                 .OrderByDescending(p => p.CreatedAt)
                 .Select(p => MapToDto(p));
 
@@ -313,7 +313,7 @@ namespace GlocalCart.API.Services.Implementations
             Id = p.Id, SellerId = p.SellerId, SellerName = p.Seller.FullName,
             CategoryId = p.CategoryId, CategoryName = p.Category.Name,
             Name = p.Name, Description = p.Description, Price = p.Price,
-            AvailableItemCount = p.AvailableItemCount, IsActive = p.IsActive,
+            AvailableItemCount = p.AvailableItemCount, IsActive = p.IsActive, IsLocked = p.IsLocked,
             MediaUrl = p.MediaUrl, CreatedAt = p.CreatedAt,
             Images = p.Images.OrderBy(i => i.DisplayOrder).Select(i => new ProductImageDto
             {
