@@ -19,19 +19,18 @@ export default function PaymentWaitingScreen({ navigation, route }: any) {
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        // Prevent going back using hardware back button or gesture while pending
+        startPolling();
+        return stopPolling;
+    }, [orderId]);
+
+    useEffect(() => {
         const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
             if (status === 'pending') {
                 e.preventDefault();
             }
         });
 
-        startPolling();
-
-        return () => {
-            unsubscribe();
-            stopPolling();
-        };
+        return unsubscribe;
     }, [navigation, status]);
 
     useEffect(() => {

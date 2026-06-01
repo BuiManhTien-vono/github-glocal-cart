@@ -1,17 +1,16 @@
 import { Platform } from "react-native";
 
-// IP của máy tính chạy Backend API
-// Cần khớp giữa apiClient và imageUtils
-// CÁCH TÌMA IP: chạy `ipconfig` trên Windows hoặc `ifconfig` trên Mac/Linux
-// Tìm "IPv4 Address" hoặc "inet addr" (không phải 127.0.0.1 hoặc ::1)
-export const API_HOST = "192.168.1.6"; // IP của máy Backend
+// Web runs on the same computer as the API, so localhost is correct there.
+// Expo Go on a physical phone must use the backend computer's Wi-Fi IPv4 address.
+const LAN_API_HOST = "192.168.1.3";
+
+export const API_HOST = Platform.OS === "web" ? "localhost" : LAN_API_HOST;
 export const API_PORT = "5100";
 
 export const BASE_URL = `http://${API_HOST}:${API_PORT}`;
 
 export const API_URL = `${BASE_URL}/api`;
 
-// Debug: Log the URL being used
 if (__DEV__) {
   console.log(`[Config] Using API_URL: ${API_URL}`);
   console.log(`[Config] BASE_URL: ${BASE_URL}`);

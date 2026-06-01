@@ -12,12 +12,16 @@ namespace GlocalCart.API.DTOs.Payments
 
     public class PaymentInitiateResponseDto
     {
+        public string BillId { get; set; } = string.Empty;
         public string MerchantId { get; set; } = string.Empty;
         public string OrderId { get; set; } = string.Empty;
         public decimal Amount { get; set; }
         public long Timestamp { get; set; }
         public string Signature { get; set; } = string.Empty;
         public string VietQrUrl { get; set; } = string.Empty;
+        public string BankId { get; set; } = string.Empty;
+        public string BankAccount { get; set; } = string.Empty;
+        public string AccountName { get; set; } = string.Empty;
     }
 
     public class WebhookRequestDto

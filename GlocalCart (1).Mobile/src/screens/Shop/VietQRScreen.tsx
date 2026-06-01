@@ -41,18 +41,7 @@ export default function VietQRScreen({ navigation, route }: any) {
         setIsConfirming(true);
         try {
             await paymentApi.confirmTransfer(orderId);
-            Alert.alert('Thành công', 'Đơn hàng đã được ghi nhận thanh toán.', [
-                {
-                    text: 'Xem đơn hàng',
-                    onPress: () => navigation.replace('MainTabs', {
-                        screen: 'Profile',
-                        params: {
-                            screen: 'OrderDetail',
-                            params: { orderId, fromPayment: true },
-                        },
-                    }),
-                },
-            ]);
+            navigation.replace('PaymentWaiting', { orderId });
         } catch (error: any) {
             Alert.alert('Lỗi', error.message || 'Có lỗi xảy ra khi xác nhận. Vui lòng thử lại.');
             setIsConfirming(false);

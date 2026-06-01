@@ -24,11 +24,11 @@ namespace GlocalCart.API.Helpers
 
         public static bool CanInitiateBankPayment(Payment payment) =>
             RequiresBankConfirmation(payment) &&
-            payment.Status is PaymentStatus.Unpaid or PaymentStatus.Failed;
+            payment.Status is PaymentStatus.Unpaid or PaymentStatus.Pending or PaymentStatus.Failed;
 
         public static bool CanConfirmTransfer(Payment payment) =>
             RequiresBankConfirmation(payment) &&
-            payment.Status is PaymentStatus.Unpaid or PaymentStatus.Failed;
+            payment.Status is PaymentStatus.Unpaid or PaymentStatus.Pending or PaymentStatus.Failed;
 
         public static void EnsureSellerCanFulfill(Payment? payment)
         {

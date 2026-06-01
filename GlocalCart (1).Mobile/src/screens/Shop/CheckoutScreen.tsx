@@ -340,12 +340,12 @@ export default function CheckoutScreen({ navigation, route }: any): React.JSX.El
 
   const handleConfirmWebQr = async () => {
     if (!createdOrderId) return;
+    const orderId = createdOrderId;
     setIsConfirmingQr(true);
     try {
-      await paymentApi.confirmTransfer(createdOrderId);
+      await paymentApi.confirmTransfer(orderId);
       setShowQrModal(false);
-      window.alert('Thanh toán thành công. Hệ thống đang chờ người bán xác nhận.');
-      navigateToOrderDetail(createdOrderId);
+      navigation.replace('PaymentWaiting', { orderId });
     } catch (error: any) {
       window.alert(error?.message || 'Có lỗi xảy ra khi xác nhận thanh toán.');
     } finally {

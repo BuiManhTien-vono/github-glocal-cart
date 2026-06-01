@@ -16,6 +16,20 @@ namespace GlocalCart.BankGateway.Controllers
 
         public GatewayController(GatewayService gatewayService) => _gatewayService = gatewayService;
 
+        [HttpPost("create-bill")]
+        public IActionResult CreateBill([FromBody] CreateBillRequest request)
+        {
+            try
+            {
+                ApplySignatureHeader(request);
+                return Ok(_gatewayService.CreateBill(request));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
         /// <summary>
         /// Nhận yêu cầu xác minh chuyển khoản từ GlocalCart API.
         /// Mô phỏng: Merchant gửi thông tin giao dịch → Ngân hàng nhận và xử lý.
@@ -26,6 +40,7 @@ namespace GlocalCart.BankGateway.Controllers
         {
             try
             {
+                ApplySignatureHeader(request);
                 var result = _gatewayService.ProcessTransfer(request);
                 return Accepted(new
                 {
@@ -115,6 +130,22 @@ namespace GlocalCart.BankGateway.Controllers
                 mode = bool.Parse(autoApprove) ? "Auto-Approve" : "Manual",
                 timestamp = DateTime.UtcNow
             });
+        }
+
+        private void ApplySignatureHeader(CreateBillRequest request)
+        {
+            if (Request.Headers.TryGetValue("X-Signature", out var signature))
+            {
+                request.Signature = signature.ToString();
+            }
+        }
+
+        private void ApplySignatureHeader(TransferRequest request)
+        {
+            if (Request.Headers.TryGetValue("X-Signature", out var signature))
+            {
+                request.Signature = signature.ToString();
+            }
         }
     }
 }

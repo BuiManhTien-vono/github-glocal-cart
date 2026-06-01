@@ -22,12 +22,16 @@ namespace GlocalCart.BankGateway.Services
 
         // In-memory "database" — mô phỏng bảng giao dịch của ngân hàng
         private static readonly ConcurrentDictionary<string, TransactionRecord> _transactions = new();
+        private static readonly ConcurrentDictionary<string, BillRecord> _bills = new();
 
         private readonly string _secretKey;
         private readonly string _glocalCartApiUrl;
         private readonly int _delayMs;
         private readonly bool _autoApprove;
         private readonly string _gatewayName;
+        private readonly string _bankId;
+        private readonly string _bankAccount;
+        private readonly string _accountName;
 
         public GatewayService(IConfiguration config, IHttpClientFactory httpClientFactory, ILogger<GatewayService> logger)
         {
@@ -37,10 +41,65 @@ namespace GlocalCart.BankGateway.Services
 
             var settings = config.GetSection("GatewaySettings");
             _secretKey = settings["SecretKey"] ?? "default_secret";
-            _glocalCartApiUrl = settings["GlocalCartApiUrl"] ?? "http://localhost:5000";
+            _glocalCartApiUrl = settings["GlocalCartApiUrl"] ?? "http://localhost:5100";
             _delayMs = int.TryParse(settings["AutoProcessDelayMs"], out var d) ? d : 5000;
             _autoApprove = bool.TryParse(settings["AutoApprove"], out var a) ? a : true;
             _gatewayName = settings["GatewayName"] ?? "VietBank Simulator";
+            _bankId = settings["BankId"] ?? "mb";
+            _bankAccount = settings["BankAccount"] ?? "0968085005";
+            _accountName = settings["AccountName"] ?? "BUI MANH TIEN";
+        }
+
+        public CreateBillResponse CreateBill(CreateBillRequest request)
+        {
+            if (!VerifyBillSignature(request))
+            {
+                _logger.LogWarning("[{Gateway}] Invalid create-bill signature for order {OrderId}",
+                    _gatewayName, request.OrderId);
+                throw new InvalidOperationException("Chu ky create-bill khong hop le.");
+            }
+
+            var billId = $"BILL-{request.OrderId}";
+            var bill = _bills.AddOrUpdate(
+                request.OrderId,
+                _ => new BillRecord
+                {
+                    BillId = billId,
+                    MerchantId = request.MerchantId,
+                    OrderId = request.OrderId,
+                    Amount = request.Amount,
+                    Status = "CREATED",
+                    CreatedAt = DateTime.UtcNow
+                },
+                (_, existing) =>
+                {
+                    if (existing.Amount != request.Amount || existing.MerchantId != request.MerchantId)
+                    {
+                        throw new InvalidOperationException("Bill da ton tai nhung khong khop so tien hoac merchant.");
+                    }
+
+                    return existing;
+                });
+
+            var description = Uri.EscapeDataString($"Thanh toan {request.OrderId}");
+            var qrUrl =
+                $"https://img.vietqr.io/image/{_bankId}-{_bankAccount}-compact2.png?amount={(int)request.Amount}&addInfo={description}&accountName={Uri.EscapeDataString(_accountName)}";
+
+            _logger.LogInformation("[{Gateway}] Created bill {BillId} for order {OrderId}",
+                _gatewayName, bill.BillId, bill.OrderId);
+
+            return new CreateBillResponse
+            {
+                BillId = bill.BillId,
+                MerchantId = bill.MerchantId,
+                OrderId = bill.OrderId,
+                Amount = bill.Amount,
+                Timestamp = request.Timestamp,
+                VietQrUrl = qrUrl,
+                BankId = _bankId,
+                BankAccount = _bankAccount,
+                AccountName = _accountName
+            };
         }
 
         /// <summary>
@@ -57,6 +116,15 @@ namespace GlocalCart.BankGateway.Services
             }
 
             // 2. Tạo transaction ID nội bộ
+            if (!_bills.TryGetValue(request.OrderId, out var bill)
+                || bill.MerchantId != request.MerchantId
+                || bill.Amount != request.Amount)
+            {
+                throw new InvalidOperationException("Khong tim thay bill hop le cho giao dich nay.");
+            }
+
+            bill.Status = "PROCESSING";
+
             var transactionId = "BANK-" + Guid.NewGuid().ToString("N")[..12].ToUpper();
 
             // 3. Lưu bản ghi giao dịch
@@ -139,6 +207,10 @@ namespace GlocalCart.BankGateway.Services
                 // Cập nhật trạng thái
                 record.Status = status;
                 record.ProcessedAt = DateTime.UtcNow;
+                if (_bills.TryGetValue(record.OrderId, out var bill))
+                {
+                    bill.Status = status;
+                }
 
                 // Tạo webhook payload
                 var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -161,14 +233,17 @@ namespace GlocalCart.BankGateway.Services
                 var webhookUrl = $"{_glocalCartApiUrl}/api/payments/webhook";
 
                 var json = JsonSerializer.Serialize(payload);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-                content.Headers.Add("X-Signature", signature);
+                using var request = new HttpRequestMessage(HttpMethod.Post, webhookUrl)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Add("X-Signature", signature);
 
                 _logger.LogInformation(
                     "📡 [{Gateway}] Gửi webhook → {Url} | TxId: {TxId} | Status: {Status}",
                     _gatewayName, webhookUrl, transactionId, status);
 
-                var response = await client.PostAsync(webhookUrl, content);
+                var response = await client.SendAsync(request);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
@@ -201,9 +276,30 @@ namespace GlocalCart.BankGateway.Services
         /// </summary>
         private bool VerifyMerchantSignature(TransferRequest request)
         {
-            var rawData = $"{request.MerchantId}|{request.OrderId}|{(int)request.Amount}|{request.Timestamp}";
+            return VerifySignature(request.MerchantId, request.OrderId, request.Amount, request.Timestamp, request.Signature);
+        }
+
+        private bool VerifyBillSignature(CreateBillRequest request)
+        {
+            return VerifySignature(request.MerchantId, request.OrderId, request.Amount, request.Timestamp, request.Signature);
+        }
+
+        private bool VerifySignature(string merchantId, string orderId, decimal amount, long timestamp, string signature)
+        {
+            var callbackTime = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+            if (DateTimeOffset.UtcNow - callbackTime > TimeSpan.FromMinutes(15)
+                || callbackTime - DateTimeOffset.UtcNow > TimeSpan.FromMinutes(5))
+            {
+                return false;
+            }
+
+            var rawData = $"{merchantId}|{orderId}|{(int)amount}|{timestamp}";
             var expected = GenerateHmacHash(rawData, _secretKey);
-            return request.Signature == expected;
+            var expectedBytes = Encoding.UTF8.GetBytes(expected);
+            var actualBytes = Encoding.UTF8.GetBytes(signature.ToLowerInvariant());
+
+            return expectedBytes.Length == actualBytes.Length
+                && CryptographicOperations.FixedTimeEquals(expectedBytes, actualBytes);
         }
 
         /// <summary>

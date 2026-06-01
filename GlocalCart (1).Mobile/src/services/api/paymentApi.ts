@@ -1,12 +1,16 @@
 import apiClient from './apiClient';
 
 export interface PaymentInitiateResponse {
+  billId: string;
   merchantId: string;
   orderId: string;
   amount: number;
   timestamp: number;
   signature: string;
   vietQrUrl: string;
+  bankId: string;
+  bankAccount: string;
+  accountName: string;
 }
 
 export interface PaymentStatusResponse {
