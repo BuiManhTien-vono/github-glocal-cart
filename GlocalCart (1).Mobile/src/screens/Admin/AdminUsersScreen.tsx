@@ -24,10 +24,10 @@ export default function AdminUsersScreen({ navigation }: any) {
   };
 
   const handleToggleStatus = async (userId:number,currentStatus:string) => {
-    const newStatus = currentStatus==='Active'?'Banned':'Active';
+    const newStatus = currentStatus==='Active'?'Blocked':'Active';
     Alert.alert(
-      newStatus==='Banned'?'Khóa tài khoản':'Mở khóa tài khoản',
-      newStatus==='Banned'?'Người dùng sẽ không thể đăng nhập.':'Người dùng sẽ có thể đăng nhập lại.',
+      newStatus==='Blocked'?'Khóa tài khoản':'Mở khóa tài khoản',
+      newStatus==='Blocked'?'Người dùng sẽ không thể đăng nhập.':'Người dùng sẽ có thể đăng nhập lại.',
       [{text:'Hủy',style:'cancel'},{text:'Xác nhận',onPress:async()=>{
         try{ await apiClient.patch(`/admin/users/${userId}/status`,{status:newStatus}); fetchUsers();
           Alert.alert('✅',`Đã chuyển sang ${newStatus}.`);

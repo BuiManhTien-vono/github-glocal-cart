@@ -238,10 +238,6 @@ export default function NotificationsScreen({ navigation }: any): React.JSX.Elem
   const handleNotificationPress = async (item: NotificationItem) => {
     await markRead(item.id);
 
-    if (activeTab === 'orders') {
-      return;
-    }
-
     if (!item.isOrder || !item.orderId) {
       navigation.navigate('NotificationContent', { notification: item });
       return;

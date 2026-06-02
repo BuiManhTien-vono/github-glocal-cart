@@ -47,6 +47,16 @@ namespace GlocalCart.API.Models
         [MaxLength(500)]
         public string? MediaUrl { get; set; }
 
+        /// <summary>
+        /// Sản phẩm có tham gia Flash Sale hay không
+        /// </summary>
+        public bool IsFlashSale { get; set; } = false;
+
+        /// <summary>
+        /// Phần trăm giảm giá khi tham gia Flash Sale (0-90%)
+        /// </summary>
+        public int FlashSaleDiscount { get; set; } = 0;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

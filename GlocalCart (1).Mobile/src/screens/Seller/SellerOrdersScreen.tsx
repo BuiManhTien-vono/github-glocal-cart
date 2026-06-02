@@ -66,13 +66,17 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const fetchOrders = useCallback(async () => {
     try {
+      setErrorMessage('');
       const data: any = await apiClient.get('/orders/seller');
-      setOrders(data?.items || []);
-    } catch (error) {
+      setOrders(Array.isArray(data) ? data : data?.items || []);
+    } catch (error: any) {
       console.warn('fetch seller orders error', error);
+      setOrders([]);
+      setErrorMessage(error?.message || 'Không thể tải danh sách đơn hàng.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -270,8 +274,13 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
         ListEmptyComponent={() => (
           <View style={styles.emptyBox}>
-            <Ionicons name="document-text-outline" size={60} color={colors.borderLight} />
-            <Text style={styles.emptyText}>Không có đơn hàng nào.</Text>
+            <Ionicons name={errorMessage ? 'alert-circle-outline' : 'document-text-outline'} size={60} color={errorMessage ? colors.danger : colors.borderLight} />
+            <Text style={styles.emptyText}>{errorMessage || 'Không có đơn hàng nào.'}</Text>
+            {!!errorMessage && (
+              <TouchableOpacity style={styles.retryBtn} onPress={fetchOrders}>
+                <Text style={styles.retryBtnText}>Thử lại</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       />
@@ -343,4 +352,6 @@ const styles = StyleSheet.create({
   outlineBtnText: { color: colors.textSecondary, fontWeight: '700' },
   emptyBox: { alignItems: 'center', padding: 40 },
   emptyText: { marginTop: 12, color: colors.textSecondary },
+  retryBtn: { marginTop: 14, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10 },
+  retryBtnText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
 });

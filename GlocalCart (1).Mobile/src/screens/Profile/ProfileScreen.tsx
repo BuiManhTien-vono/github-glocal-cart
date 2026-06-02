@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, Animated, Modal, TextInput, Dimensions, Platform,
+  Alert, Animated, Modal, TextInput, Dimensions,
   Linking, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,11 +63,6 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const handleLogout = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Bạn có chắc muốn đăng xuất?')) logout();
-      return;
-    }
-
     Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
       { text: 'Hủy', style: 'cancel' },
       { text: 'Đăng xuất', style: 'destructive', onPress: logout },
@@ -84,19 +79,6 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const handleActivateSeller = async () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Bạn muốn trở thành Người bán trên GlocalCart?\n\nSau khi kích hoạt, bạn có thể đăng bán sản phẩm và quản lý cửa hàng.')) {
-        try {
-          await apiClient.post('/users/activate-seller');
-          updateUser({ ...user!, isSeller: true, role: 'Seller' });
-          window.alert('🎉 Chúc mừng! Bạn đã trở thành Người bán thành công.');
-        } catch (err: any) {
-          window.alert('Lỗi: ' + err.message);
-        }
-      }
-      return;
-    }
-
     Alert.alert(
       'Đăng Ký Bán Hàng',
       'Bạn muốn trở thành Người bán trên GlocalCart?\n\nSau khi kích hoạt, bạn có thể đăng bán sản phẩm và quản lý cửa hàng.',

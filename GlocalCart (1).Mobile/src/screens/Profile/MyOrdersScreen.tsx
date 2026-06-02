@@ -57,7 +57,7 @@ export default function MyOrdersScreen({ route, navigation }: any): React.JSX.El
 
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<any>(null);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('Cash');
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
 
   const [confirmReceiptVisible, setConfirmReceiptVisible] = useState(false);
   const [selectedOrderForReceipt, setSelectedOrderForReceipt] = useState<any>(null);
@@ -136,7 +136,7 @@ export default function MyOrdersScreen({ route, navigation }: any): React.JSX.El
 
   const openPaymentModal = useCallback((order: any) => {
     setSelectedOrderForPayment(order);
-    setSelectedMethod('Cash');
+    setSelectedMethod(null);
     setPaymentModalVisible(true);
   }, []);
 
@@ -247,6 +247,10 @@ export default function MyOrdersScreen({ route, navigation }: any): React.JSX.El
 
   const submitPaymentChoice = async () => {
     if (!selectedOrderForPayment) return;
+    if (!selectedMethod) {
+      Alert.alert('Thông báo', 'Vui lòng chọn phương thức thanh toán.');
+      return;
+    }
 
     try {
       if (selectedMethod === 'Cash') {
@@ -565,7 +569,10 @@ export default function MyOrdersScreen({ route, navigation }: any): React.JSX.El
                   </View>
                 )}
 
-                <TouchableOpacity style={st.submitPayBtn} onPress={submitPaymentChoice}>
+                <TouchableOpacity
+                  style={[st.submitPayBtn, !selectedMethod && { opacity: 0.55 }]}
+                  onPress={submitPaymentChoice}
+                >
                   <Text style={st.submitPayBtnText}>Tôi đã thanh toán</Text>
                 </TouchableOpacity>
               </View>

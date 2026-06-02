@@ -22,6 +22,7 @@ import { fetchPagedItems } from '../../services/api/pagedApi';
 import { resolveProductImage } from '../../utils/imageUtils';
 import { getCategoryIcon } from '../../utils/categoryIcon';
 import { useAuth } from '../../context/AuthContext';
+import { getFlashSalePricing, getFlashSaleSoldPercentage } from '../../utils/flashSalePricing';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_HEIGHT = 208;
@@ -213,7 +214,7 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
     };
   }, [completedOrders, isAdmin, orders, products, users.length]);
 
-  const flashProducts = filteredProducts.slice(0, 8);
+  const flashProducts = filteredProducts.filter(item => getFlashSalePricing(item).hasDiscount).slice(0, 8);
   const bestProducts = [...filteredProducts]
     .sort((a, b) => Number(b.soldCount || b.sales || 0) - Number(a.soldCount || a.sales || 0))
     .slice(0, 8);
@@ -480,6 +481,7 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
     const imageUri = resolveProductImage(item) || undefined;
     const stock = Number(item.availableItemCount ?? item.stock ?? 0);
     const hidden = item.isActive === false || item.isLocked === true;
+    const pricing = getFlashSalePricing(item);
 
     return (
       <TouchableOpacity
@@ -492,10 +494,10 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
       >
         <Image source={{ uri: imageUri }} style={layout === 'compact' ? styles.compactProductImage : styles.productImage} contentFit="cover" />
         {hidden && <Text style={styles.hiddenBadge}>Ẩn</Text>}
-        {layout === 'compact' && <Text style={styles.flashBadge}>SALE</Text>}
+        {layout === 'compact' && pricing.hasDiscount && <Text style={styles.flashBadge}>SALE</Text>}
         <View style={styles.productBody}>
           <Text style={styles.productName} numberOfLines={2}>{item.name || 'Sản phẩm'}</Text>
-          <Text style={styles.productPrice}>{currency(item.price)}</Text>
+          <Text style={styles.productPrice}>{currency(pricing.hasDiscount ? pricing.salePrice : item.price)}</Text>
           {mode === 'manage' ? (
             <View style={styles.manageMetaRow}>
               <Text style={[styles.stockText, stock <= 0 && { color: colors.danger }]}>Kho: {stock}</Text>
@@ -561,11 +563,10 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
         </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.flashSaleScroll}>
-        {flashProducts.map((item, idx) => {
-          const discount = 15 + idx * 5;
-          const salePrice = Number(item.price || 0) * (1 - discount / 100);
+        {flashProducts.map((item) => {
+          const pricing = getFlashSalePricing(item);
           const imageUri = resolveProductImage(item) || undefined;
-          const soldPct = 30 + idx * 12;
+          const soldPct = getFlashSaleSoldPercentage(item);
 
           return (
             <TouchableOpacity
@@ -576,12 +577,12 @@ export default function SellerShopScreen({ navigation }: any): React.JSX.Element
             >
               <View style={styles.previewFlashImageWrap}>
                 <Image source={{ uri: imageUri }} style={styles.previewFlashImage} contentFit="cover" />
-                <View style={styles.discountBadge}><Text style={styles.discountText}>-{discount}%</Text></View>
+                <View style={styles.discountBadge}><Text style={styles.discountText}>-{pricing.discountPercent}%</Text></View>
               </View>
-              <Text style={styles.previewFlashPrice}>{currency(salePrice)}</Text>
+              <Text style={styles.previewFlashPrice}>{currency(pricing.salePrice)}</Text>
               <View style={styles.previewSoldBar}>
                 <View style={[styles.previewSoldFill, { width: `${Math.min(soldPct, 100)}%` }]} />
-                <Text style={styles.previewSoldText}>Đã bán {soldPct}%</Text>
+                <Text style={styles.previewSoldText}>{soldPct > 0 ? `Đã bán ${soldPct}%` : 'Đang mở bán'}</Text>
               </View>
             </TouchableOpacity>
           );

@@ -45,30 +45,32 @@ export const useFollowShopStore = create<FollowShopState>((set, get) => ({
 
   followShop: async (shop: FollowedShop) => {
     if (get().isFollowing(shop.id)) return;
-    const updated = [...get().followedShops, shop];
-    set({ followedShops: updated });
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     try {
       await apiClient.post(`/shops/${shop.id}/follow`);
-      await get().loadFollowedShops();
+      const updated = [...get().followedShops, shop];
+      set({ followedShops: updated });
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      get().loadFollowedShops();
     } catch (error) {
       console.log('followShop sync failed:', error);
+      throw error;
     }
   },
 
   unfollowShop: async (shopId: number) => {
-    const updated = get().followedShops.filter(s => s.id !== shopId);
-    set({ followedShops: updated });
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     try {
       try {
         await apiClient.delete(`/shops/${shopId}/follow`);
       } catch {
         await apiClient.post(`/shops/${shopId}/unfollow`);
       }
-      await get().loadFollowedShops();
+      const updated = get().followedShops.filter(s => s.id !== shopId);
+      set({ followedShops: updated });
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      get().loadFollowedShops();
     } catch (error) {
       console.log('unfollowShop sync failed:', error);
+      throw error;
     }
   },
 

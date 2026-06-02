@@ -24,6 +24,12 @@ export default function ReportProductScreen({ navigation, route }: any) {
   const [submitting, setSubmitting] = useState(false);
 
   const handleReport = (reason: string) => {
+    const numericProductId = Number(productId);
+    if (!Number.isFinite(numericProductId) || numericProductId <= 0) {
+      Alert.alert('Lỗi', 'Không xác định được sản phẩm cần tố cáo.');
+      return;
+    }
+
     Alert.alert(
       'Xác nhận tố cáo',
       `Bạn muốn tố cáo sản phẩm với lý do:\n"${reason}"?`,
@@ -35,18 +41,16 @@ export default function ReportProductScreen({ navigation, route }: any) {
           onPress: async () => {
             setSubmitting(true);
             try {
-              await apiClient.post(`/products/${productId}/report`, { reason });
+              await apiClient.post(`/products/${numericProductId}/report`, { reason });
               Alert.alert(
-                '✅ Đã gửi tố cáo',
+                'Đã gửi tố cáo',
                 'Cảm ơn bạn đã giúp chúng tôi cải thiện chất lượng sản phẩm trên GlocalCart.',
                 [{ text: 'OK', onPress: () => navigation.goBack() }]
               );
-            } catch {
-              // API chưa có, vẫn thông báo thành công với người dùng
+            } catch (error: any) {
               Alert.alert(
-                '✅ Đã ghi nhận',
-                'Tố cáo của bạn đã được ghi nhận. Chúng tôi sẽ xem xét và xử lý sớm nhất.',
-                [{ text: 'OK', onPress: () => navigation.goBack() }]
+                'Lỗi',
+                error?.message || 'Không thể gửi tố cáo. Vui lòng thử lại sau.'
               );
             } finally {
               setSubmitting(false);

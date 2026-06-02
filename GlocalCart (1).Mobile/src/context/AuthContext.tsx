@@ -68,7 +68,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userJson = await getSecureItem('auth_user');
       if (token && userJson) {
         const user = JSON.parse(userJson);
-        setState({ user, token, isLoading: false, isLoggedIn: true, isGuestMode: false });
+        try {
+          const profile = await apiClient.get('/users/profile') as any;
+          const freshUser = profile ? { ...user, ...profile } : user;
+          await setSecureItem('auth_user', JSON.stringify(freshUser));
+          setState({ user: freshUser, token, isLoading: false, isLoggedIn: true, isGuestMode: false });
+        } catch (error: any) {
+          if (error?.status === 401) {
+            await removeSecureItem('auth_token');
+            await removeSecureItem('auth_user');
+            setState({ user: null, token: null, isLoading: false, isLoggedIn: false, isGuestMode: false });
+            return;
+          }
+
+          setState({ user, token, isLoading: false, isLoggedIn: true, isGuestMode: false });
+        }
       } else {
         setState((prev) => ({ ...prev, isLoading: false }));
       }

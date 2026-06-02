@@ -195,6 +195,26 @@ namespace GlocalCart.API.Services.Implementations
             if (dto.AvailableItemCount.HasValue) product.AvailableItemCount = dto.AvailableItemCount.Value;
             if (dto.CategoryId.HasValue) product.CategoryId = dto.CategoryId.Value;
             if (dto.MediaUrl != null) product.MediaUrl = dto.MediaUrl;
+
+            // Xử lý Flash Sale
+            if (dto.IsFlashSale.HasValue)
+            {
+                // Không cho phép bật Flash Sale khi sản phẩm hết hàng
+                if (dto.IsFlashSale.Value && product.AvailableItemCount <= 0)
+                    throw new InvalidOperationException("Không thể bật Flash Sale cho sản phẩm hết hàng.");
+                
+                product.IsFlashSale = dto.IsFlashSale.Value;
+            }
+
+            if (dto.FlashSaleDiscount.HasValue)
+            {
+                // Chỉ cập nhật discount nếu Flash Sale đang bật hoặc sẽ bật
+                if (product.IsFlashSale || dto.IsFlashSale == true)
+                {
+                    product.FlashSaleDiscount = Math.Min(Math.Max(dto.FlashSaleDiscount.Value, 0), 90);
+                }
+            }
+
             product.UpdatedAt = DateTime.UtcNow;
 
             // Đồng bộ danh sách ảnh
@@ -314,7 +334,8 @@ namespace GlocalCart.API.Services.Implementations
             CategoryId = p.CategoryId, CategoryName = p.Category.Name,
             Name = p.Name, Description = p.Description, Price = p.Price,
             AvailableItemCount = p.AvailableItemCount, IsActive = p.IsActive, IsLocked = p.IsLocked,
-            MediaUrl = p.MediaUrl, CreatedAt = p.CreatedAt,
+            MediaUrl = p.MediaUrl, IsFlashSale = p.IsFlashSale, FlashSaleDiscount = p.FlashSaleDiscount,
+            CreatedAt = p.CreatedAt,
             Images = p.Images.OrderBy(i => i.DisplayOrder).Select(i => new ProductImageDto
             {
                 Id = i.Id, ImageUrl = i.ImageUrl, DisplayOrder = i.DisplayOrder,

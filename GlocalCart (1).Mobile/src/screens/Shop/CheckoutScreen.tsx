@@ -61,7 +61,7 @@ const PAYMENT_METHOD_CODES = {
 export default function CheckoutScreen({ navigation, route }: any): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { items, clearCart, fetchCart, removeFromCart } = useCartStore();
+  const { items, clearCart, fetchCart } = useCartStore();
 
   const checkoutItems = useMemo(() => {
     const selected = route.params?.selectedItems;
@@ -117,7 +117,13 @@ export default function CheckoutScreen({ navigation, route }: any): React.JSX.El
   const clearPurchasedItems = async () => {
     if (route.params?.isBuyNow) return;
     if (route.params?.selectedItems?.length) {
-      await Promise.all(route.params.selectedItems.map((item: any) => removeFromCart(item.id)));
+      const selectedProductIds = new Set(route.params.selectedItems.map((item: any) => String(getItemProductId(item))));
+      const cartData: any = await apiClient.get('/cart');
+      const currentCartItems = cartData?.items || [];
+      const purchasedCartItems = currentCartItems.filter((item: any) => selectedProductIds.has(String(getItemProductId(item))));
+      if (purchasedCartItems.length > 0) {
+        await Promise.all(purchasedCartItems.map((item: any) => apiClient.delete(`/cart/${item.id}`)));
+      }
       return;
     }
     await clearCart();

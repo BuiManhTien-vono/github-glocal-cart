@@ -23,44 +23,54 @@ interface TrackingStep {
 
 export default function ShipmentTrackingScreen({ navigation, route }: any) {
   const { orderId, notification, orderUpdate } = route?.params || {};
+  const numericOrderId = Number(orderId);
+  const hasRealOrderId = Number.isFinite(numericOrderId) && numericOrderId > 0;
   const [order, setOrder] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUsingMock, setIsUsingMock] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    if (orderId && typeof orderId === 'number') {
+    if (hasRealOrderId) {
       fetchOrderDetails();
-    } else {
-      // Fallback to mock if orderId is missing or is string (e.g. from mock notifications)
+    } else if (notification || orderUpdate) {
       useMockData();
+    } else {
+      setOrder(null);
+      setErrorMessage('Không tìm thấy thông tin đơn hàng cần theo dõi.');
+      setIsLoading(false);
     }
   }, [orderId]);
 
   const fetchOrderDetails = async () => {
     try {
       setIsLoading(true);
-      const data: any = await apiClient.get(`/orders/${orderId}`);
+      setErrorMessage('');
+      const data: any = await apiClient.get(`/orders/${numericOrderId}`);
       if (data) {
         setOrder(data);
         setIsUsingMock(false);
       } else {
-        useMockData();
+        setOrder(null);
+        setErrorMessage('Không tìm thấy thông tin vận chuyển của đơn hàng này.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.log('Error fetching order details for tracking:', error);
-      useMockData();
+      setOrder(null);
+      setIsUsingMock(false);
+      setErrorMessage(error?.message || 'Không thể tải thông tin vận chuyển. Vui lòng thử lại.');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!orderId || typeof orderId !== 'number') return;
+    if (!hasRealOrderId) return;
 
     startDeliveryRealtime();
     const refreshIfCurrentOrder = (payload: any) => {
-      if (!payload.orderId || payload.orderId === orderId) {
+      if (!payload.orderId || Number(payload.orderId) === numericOrderId) {
         fetchOrderDetails();
       }
     };
@@ -96,6 +106,7 @@ export default function ShipmentTrackingScreen({ navigation, route }: any) {
     };
     setOrder(mockOrder);
     setIsUsingMock(true);
+    setErrorMessage('');
     setIsLoading(false);
   };
 
@@ -119,6 +130,19 @@ export default function ShipmentTrackingScreen({ navigation, route }: any) {
       <View style={[styles.container, styles.center, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Đang tải thông tin vận chuyển...</Text>
+      </View>
+    );
+  }
+
+  if (errorMessage || !order) {
+    return (
+      <View style={[styles.container, styles.center, { paddingTop: insets.top }]}>
+        <Ionicons name="alert-circle-outline" size={56} color={colors.danger} />
+        <Text style={styles.errorTitle}>Không thể tải vận chuyển</Text>
+        <Text style={styles.errorSubtitle}>{errorMessage || 'Không tìm thấy thông tin vận chuyển.'}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={hasRealOrderId ? fetchOrderDetails : () => navigation.goBack()}>
+          <Text style={styles.retryBtnText}>{hasRealOrderId ? 'Thử lại' : 'Quay lại'}</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -334,6 +358,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F7' },
   center: { justifyContent: 'center', alignItems: 'center', padding: 20 },
   loadingText: { marginTop: 12, color: colors.textSecondary, fontSize: 14 },
+  errorTitle: { marginTop: 14, color: colors.text, fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  errorSubtitle: { marginTop: 8, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  retryBtn: { marginTop: 18, borderRadius: 8, backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 12 },
+  retryBtnText: { color: colors.white, fontSize: 14, fontWeight: '700' },
   
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

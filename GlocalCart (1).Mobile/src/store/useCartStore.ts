@@ -110,6 +110,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       }
     } catch (error) {
       console.log('updateQuantity error:', error);
+      throw error;
     }
   },
 
@@ -127,6 +128,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       }
     } catch (error) {
       console.log('removeFromCart error:', error);
+      throw error;
     }
   },
 
@@ -142,6 +144,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       }
     } catch (error) {
       console.log('clearCart error:', error);
+      throw error;
     }
   },
 

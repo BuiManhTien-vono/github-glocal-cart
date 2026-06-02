@@ -515,10 +515,6 @@ export default function AccountSettingsScreen({ navigation }: any) {
   };
 
   const handleLogout = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Bạn có chắc muốn đăng xuất?')) logout();
-      return;
-    }
     Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
       { text: 'Hủy', style: 'cancel' },
       { text: 'Đăng xuất', style: 'destructive', onPress: logout },

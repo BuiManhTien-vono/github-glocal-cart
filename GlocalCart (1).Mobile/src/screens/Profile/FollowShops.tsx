@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
@@ -26,7 +26,11 @@ export const FollowedShopsScreen = ({ navigation }: any) => {
   }, [isLoggedIn, loadFollowedShops]);
 
   const handleUnfollow = async (shopId: number) => {
-    await unfollowShop(shopId);
+    try {
+      await unfollowShop(shopId);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error?.message || 'Không thể bỏ theo dõi shop.');
+    }
   };
 
   const renderItem = ({ item }: { item: Shop }) => (

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../theme/colors';
 import { resolveProductImage } from '../../utils/imageUtils';
+import { getFlashSalePricing, getFlashSaleSoldPercentage } from '../../utils/flashSalePricing';
 
 export const FlashSale = ({ data }: { data: any[] }) => {
   const navigation = useNavigation<any>();
@@ -25,7 +26,11 @@ export const FlashSale = ({ data }: { data: any[] }) => {
   const minutes = Math.floor((timeLeft % 3600) / 60);
   const seconds = timeLeft % 60;
 
-  if (!data || data.length === 0) return null;
+  const saleItems = (data || [])
+    .map((item) => ({ item, pricing: getFlashSalePricing(item) }))
+    .filter(({ pricing }) => pricing.hasDiscount);
+
+  if (saleItems.length === 0) return null;
 
   return (
     <View style={styles.container}>
@@ -47,32 +52,28 @@ export const FlashSale = ({ data }: { data: any[] }) => {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollArea}>
-        {data.map((item, index) => {
-          // Fake discount data
-          const discount = 20 + (index * 5); // 20%, 25%, 30%...
-          const discountedPrice = item.price * (1 - discount / 100);
-          // Use a deterministic value based on item.id so it remains static during timer re-renders
-          const soldPercentage = ((item.id * 13) % 60) + 25; // range 25% to 85%
+        {saleItems.map(({ item, pricing }) => {
+          const soldPercentage = getFlashSaleSoldPercentage(item);
           const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/150';
 
           return (
             <TouchableOpacity 
               key={item.id} 
               style={styles.card}
-              onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}
+              onPress={() => navigation.navigate('ProductDetail', { productId: item.id, product: item })}
             >
               <View style={styles.imageBox}>
                 <Image source={{ uri: mainImage }} style={styles.image} />
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>-{discount}%</Text>
+                  <Text style={styles.badgeText}>-{pricing.discountPercent}%</Text>
                 </View>
               </View>
               <Text style={styles.price} numberOfLines={1}>
-                ₫{discountedPrice.toLocaleString('vi-VN')}
+                ₫{pricing.salePrice.toLocaleString('vi-VN')}
               </Text>
               <View style={styles.progressBarBg}>
                 <View style={[styles.progressBarFill, { width: `${soldPercentage}%` }]} />
-                <Text style={styles.progressText}>Đang bán chạy</Text>
+                <Text style={styles.progressText}>{soldPercentage > 0 ? 'Đang bán chạy' : 'Đang mở bán'}</Text>
               </View>
             </TouchableOpacity>
           );

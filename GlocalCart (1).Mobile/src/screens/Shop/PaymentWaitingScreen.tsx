@@ -9,16 +9,22 @@ const POLL_INTERVAL = 5000; // 5 seconds
 const TIMEOUT_DURATION = 10 * 60 * 1000; // 10 minutes
 
 export default function PaymentWaitingScreen({ navigation, route }: any) {
-    const { orderId } = route.params;
+    const orderId = route?.params?.orderId;
     const insets = useSafeAreaInsets();
     
     // Status: 'pending' (loading), 'success' (green tick), 'failed' (red X)
     const [status, setStatus] = useState<'pending' | 'success' | 'failed'>('pending');
+    const [statusError, setStatusError] = useState('');
     
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
+        if (!orderId) {
+            setStatusError('Không tìm thấy thông tin đơn hàng.');
+            setStatus('failed');
+            return stopPolling;
+        }
         startPolling();
         return stopPolling;
     }, [orderId]);
@@ -64,6 +70,7 @@ export default function PaymentWaitingScreen({ navigation, route }: any) {
     const checkPaymentStatus = async () => {
         try {
             const data = await paymentApi.getStatus(orderId);
+            setStatusError('');
             
             if (data.isPaid || data.status === 'Completed') {
                 stopPolling();
@@ -74,11 +81,15 @@ export default function PaymentWaitingScreen({ navigation, route }: any) {
             }
         } catch (error) {
             console.log('Error checking payment status:', error);
-            // We don't fail immediately on network error, keep polling until timeout
+            setStatusError('Tạm thời không thể kiểm tra trạng thái thanh toán. Hệ thống sẽ thử lại sau vài giây.');
         }
     };
 
     const handleRetry = () => {
+        if (!orderId) {
+            navigation.goBack();
+            return;
+        }
         navigation.replace('VietQR', { orderId });
     };
 
@@ -102,6 +113,7 @@ export default function PaymentWaitingScreen({ navigation, route }: any) {
                         <Text style={styles.subtitle}>
                             Hệ thống đang kiểm tra giao dịch của bạn. Vui lòng không thoát khỏi màn hình này.
                         </Text>
+                        {!!statusError && <Text style={styles.inlineError}>{statusError}</Text>}
                     </>
                 )}
 
@@ -120,7 +132,7 @@ export default function PaymentWaitingScreen({ navigation, route }: any) {
                         <Ionicons name="close-circle" size={100} color={colors.danger} style={styles.icon} />
                         <Text style={[styles.title, { color: colors.danger }]}>Thanh toán thất bại</Text>
                         <Text style={styles.subtitle}>
-                            Không nhận được xác nhận thanh toán hoặc giao dịch đã quá hạn.
+                            {statusError || 'Không nhận được xác nhận thanh toán hoặc giao dịch đã quá hạn.'}
                         </Text>
                     </>
                 )}
@@ -167,6 +179,13 @@ const styles = StyleSheet.create({
         color: colors.textSecondary, 
         textAlign: 'center',
         lineHeight: 22 
+    },
+    inlineError: {
+        marginTop: 16,
+        color: colors.danger,
+        fontSize: 13,
+        textAlign: 'center',
+        lineHeight: 19,
     },
     bottomBar: { 
         backgroundColor: colors.white, 
