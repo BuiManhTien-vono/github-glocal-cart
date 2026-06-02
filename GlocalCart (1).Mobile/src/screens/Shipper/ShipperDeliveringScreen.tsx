@@ -16,6 +16,10 @@ import {
   onDeliveryRealtime,
   startDeliveryRealtime,
 } from "../../services/realtime/deliveryRealtime";
+import {
+  hasActiveShipmentCountdown,
+  tickShipmentCountdown,
+} from "../../utils/shipperShipmentTiming";
 const PAGE_SIZE = 20;
 
 function getCountdownLabel(shipment: Shipment) {
@@ -143,6 +147,24 @@ export default function ShipperDeliveringScreen() {
     });
     return unsubscribe;
   }, [navigation, loadData]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setDeliveringShipments((current) => {
+        let changed = false;
+        const next = current.map((shipment) => {
+          if (!hasActiveShipmentCountdown(shipment)) return shipment;
+          const updated = tickShipmentCountdown(shipment);
+          if (updated !== shipment) changed = true;
+          return updated;
+        });
+
+        return changed ? next : current;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const runAction = async (shipment: Shipment, type: string) => {
     if (submittingId || type === "noop") return;

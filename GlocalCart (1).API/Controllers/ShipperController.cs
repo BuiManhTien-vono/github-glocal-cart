@@ -33,8 +33,11 @@ namespace GlocalCart.API.Controllers
             Ok(ApiResponse.Ok(await _shipperService.GetMyShipmentsAsync(UserId, page, pageSize)));
 
         [HttpGet("shipments/completed")]
-        public async Task<IActionResult> GetCompleted([FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
-            Ok(ApiResponse.Ok(await _shipperService.GetCompletedShipmentsAsync(UserId, page, pageSize)));
+        public async Task<IActionResult> GetCompleted(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? period = null) =>
+            Ok(ApiResponse.Ok(await _shipperService.GetCompletedShipmentsAsync(UserId, page, pageSize, period)));
 
         [HttpGet("stats")]
         public async Task<IActionResult> GetStats() =>

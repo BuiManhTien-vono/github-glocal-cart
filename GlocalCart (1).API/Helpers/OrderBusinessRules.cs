@@ -15,7 +15,7 @@ namespace GlocalCart.API.Helpers
         public static bool CanFulfillOrder(Payment? payment)
         {
             if (payment == null) return false;
-            if (payment.Method == PaymentMethod.CreditCard) return true;
+            if (payment.Method is PaymentMethod.CashOnDelivery or PaymentMethod.CreditCard) return true;
             return payment.Status == PaymentStatus.Completed;
         }
 

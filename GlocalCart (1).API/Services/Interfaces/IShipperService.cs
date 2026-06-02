@@ -7,7 +7,7 @@ namespace GlocalCart.API.Services.Interfaces
     {
         Task<PagedResult<ShipperShipmentDto>> GetAvailableShipmentsAsync(int shipperId, int page, int pageSize);
         Task<PagedResult<ShipperShipmentDto>> GetMyShipmentsAsync(int shipperId, int page, int pageSize);
-        Task<PagedResult<ShipperShipmentDto>> GetCompletedShipmentsAsync(int shipperId, int page, int pageSize);
+        Task<PagedResult<ShipperShipmentDto>> GetCompletedShipmentsAsync(int shipperId, int page, int pageSize, string? period = null);
         Task<ShipperStatsDto> GetStatsAsync(int shipperId);
         Task<bool> UpdateLocationAsync(int shipperId, ShipperLocationUpdateDto dto);
         Task<ShipperShipmentDto> GetShipmentDetailAsync(int shipperId, int shipmentId);

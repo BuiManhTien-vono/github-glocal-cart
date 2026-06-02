@@ -113,6 +113,43 @@ namespace GlocalCart.API.Services.Implementations
                 ?? throw new KeyNotFoundException("Khong tim thay hoi thoai.");
         }
 
+        public async Task<ChatConversationDto> StartSupportConversationAsync(int userId)
+        {
+            var adminId = await (
+                from user in _db.Users
+                join userRole in _db.UserRoles on user.Id equals userRole.UserId
+                join role in _db.Roles on userRole.RoleId equals role.Id
+                where role.NormalizedName == "ADMIN" && user.Id != userId
+                orderby user.Id
+                select user.Id
+            ).FirstOrDefaultAsync();
+
+            if (adminId <= 0)
+            {
+                throw new KeyNotFoundException("Khong tim thay tai khoan admin ho tro.");
+            }
+
+            var conversation = await _db.ChatConversations
+                .FirstOrDefaultAsync(c => c.BuyerId == userId && c.SellerId == adminId);
+
+            if (conversation == null)
+            {
+                var now = DateTime.UtcNow;
+                conversation = new ChatConversation
+                {
+                    BuyerId = userId,
+                    SellerId = adminId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                _db.ChatConversations.Add(conversation);
+                await _db.SaveChangesAsync();
+            }
+
+            return await BuildConversationDtoForUser(conversation.Id, userId)
+                ?? throw new KeyNotFoundException("Khong tim thay hoi thoai ho tro.");
+        }
+
         public async Task<IReadOnlyList<ChatMessageDto>> GetMessagesAsync(
             int userId,
             int conversationId,

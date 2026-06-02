@@ -34,6 +34,13 @@ namespace GlocalCart.API.Controllers
             return Ok(ApiResponse.Ok(conversation));
         }
 
+        [HttpPost("support")]
+        public async Task<IActionResult> StartSupportConversation()
+        {
+            var conversation = await _chatService.StartSupportConversationAsync(UserId);
+            return Ok(ApiResponse.Ok(conversation));
+        }
+
         [HttpGet("conversations/{conversationId:int}/messages")]
         public async Task<IActionResult> GetMessages(
             int conversationId,

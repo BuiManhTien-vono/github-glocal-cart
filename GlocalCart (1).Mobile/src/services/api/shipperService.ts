@@ -48,13 +48,20 @@ export interface Shipment {
 export interface ShipperStats {
   todayCompleted: number;
   todayIncome: number;
+  todayFailed: number;
   monthCompleted: number;
   monthIncome: number;
+  monthFailed: number;
+  allCompleted: number;
+  allIncome: number;
+  allFailed: number;
   activeShipments: number;
   pendingCodAmount: number;
   successRate: number;
   rating: number;
 }
+
+export type CompletedShipmentPeriod = 'today' | 'month' | 'all';
 
 export interface ShipperActionPayload {
   note?: string;
@@ -76,8 +83,8 @@ export const shipperService = {
     return apiClient.get(`/shipper/shipments/mine?page=${page}&pageSize=${pageSize}`);
   },
 
-  getCompletedShipments: async (page = 1, pageSize = 20) => {
-    return apiClient.get(`/shipper/shipments/completed?page=${page}&pageSize=${pageSize}`);
+  getCompletedShipments: async (page = 1, pageSize = 20, period: CompletedShipmentPeriod = 'all') => {
+    return apiClient.get(`/shipper/shipments/completed?page=${page}&pageSize=${pageSize}&period=${period}`);
   },
 
   getStats: async (): Promise<ShipperStats> => {

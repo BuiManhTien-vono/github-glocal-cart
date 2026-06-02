@@ -22,6 +22,10 @@ import {
   startDeliveryRealtime,
 } from "../../services/realtime/deliveryRealtime";
 import { formatDistanceMeters } from "../../utils/shippingDistance";
+import {
+  hasActiveShipmentCountdown,
+  tickShipmentCountdown,
+} from "../../utils/shipperShipmentTiming";
 
 type FooterAction = { label: string; type: string; disabled?: boolean };
 type Coordinate = { latitude: number; longitude: number };
@@ -315,6 +319,17 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
       offPayment();
     };
   }, [shipmentId]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setShipment((current) => {
+        if (!current || !hasActiveShipmentCountdown(current)) return current;
+        return tickShipmentCountdown(current);
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const footerAction = useMemo(() => getFooterAction(shipment), [shipment]);
 

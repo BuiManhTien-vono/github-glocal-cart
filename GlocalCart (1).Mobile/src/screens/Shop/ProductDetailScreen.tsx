@@ -18,6 +18,7 @@ import { DailyDiscover } from '../../components/shop/DailyDiscover';
 import { CartBadge } from '../../components/common/CartBadge';
 import { colors } from '../../theme/colors';
 import { resolveProductImageUrl } from '../../utils/imageUtils';
+import { showLoginRequired } from '../../utils/loginRequired';
 
 type ProductDetailRouteProp = RouteProp<{ params: { productId: number } }, 'params'>;
 
@@ -91,6 +92,11 @@ export default function ProductDetailScreen() {
 
   const handleBuyNow = async () => {
     if (!product) return;
+    if (!isLoggedIn) {
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để mua hàng và tiếp tục thanh toán.');
+      return;
+    }
+
     const stock = getAvailableStock(product);
     if (stock <= 0) { Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.'); return; }
     try {
@@ -115,10 +121,7 @@ export default function ProductDetailScreen() {
   // Chat ngay -> ChatDetail với người bán.
   const handleChat = () => {
     if (!isLoggedIn) {
-      Alert.alert('Yêu cầu đăng nhập', 'Bạn cần đăng nhập để chat với shop.', [
-        { text: 'Để sau', style: 'cancel' },
-        { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-      ]);
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để chat với shop.');
       return;
     }
     if (!shopId) {
@@ -138,10 +141,7 @@ export default function ProductDetailScreen() {
   // Toggle yêu thích
   const handleToggleFavorite = async () => {
     if (!isLoggedIn) {
-      Alert.alert('Yêu cầu đăng nhập', 'Bạn cần đăng nhập để lưu yêu thích.', [
-        { text: 'Để sau', style: 'cancel' },
-        { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-      ]);
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để lưu sản phẩm yêu thích.');
       return;
     }
     if (product) await toggleFavorite(product);
@@ -149,10 +149,7 @@ export default function ProductDetailScreen() {
 
   const handleToggleFollowShop = async () => {
     if (!isLoggedIn) {
-      Alert.alert('Yeu cau dang nhap', 'Ban can dang nhap de theo doi shop.', [
-        { text: 'De sau', style: 'cancel' },
-        { text: 'Dang nhap', onPress: () => setGuestMode(false) },
-      ]);
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để theo dõi shop.');
       return;
     }
 
@@ -457,6 +454,7 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
         </View>
       </Modal>
+
     </View>
   );
 }

@@ -33,6 +33,7 @@ export default function ChatDetailScreen({ navigation, route }: any) {
   const routeConversationId = params.conversationId as ChatId | undefined;
   const numericShopId = Number(params.shopId || 0);
   const productId = params.productId ? Number(params.productId) : undefined;
+  const isSupportConversation = Boolean(params.supportAdmin);
   const peerId = params.peerId != null ? String(params.peerId) : numericShopId > 0 ? String(numericShopId) : undefined;
   const avatarUrl = params.avatarUrl;
   const initialPeerName = params.peerName || params.shopName || 'Nguoi dung';
@@ -59,11 +60,12 @@ export default function ChatDetailScreen({ navigation, route }: any) {
     markAsRead,
     sendMessage,
     startConversation,
+    startSupportConversation,
     upsertConversation,
   } = useChatStore();
 
   const canStartBackendConversation = numericShopId > 0;
-  const canCompose = Boolean(conversationId || canStartBackendConversation || directConversationId);
+  const canCompose = Boolean(conversationId || canStartBackendConversation || isSupportConversation || directConversationId);
 
   const scrollToEnd = (animated = false) => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated }), 80);
@@ -95,6 +97,25 @@ export default function ChatDetailScreen({ navigation, route }: any) {
       loadMessages(true);
     }, [loadMessages])
   );
+
+  useEffect(() => {
+    if (!isSupportConversation || conversationId) return;
+
+    let active = true;
+    startSupportConversation()
+      .then(conversation => {
+        if (!active) return;
+        setConversationId(conversation.id);
+        setHeaderTitle(conversation.peerName || conversation.shopName || initialPeerName);
+      })
+      .catch(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [conversationId, initialPeerName, isSupportConversation, startSupportConversation]);
 
   useEffect(() => {
     startChatRealtime().catch(() => {});
@@ -131,6 +152,13 @@ export default function ChatDetailScreen({ navigation, route }: any) {
 
     if (canStartBackendConversation) {
       const conversation = await startConversation(numericShopId, productId);
+      setConversationId(conversation.id);
+      setHeaderTitle(conversation.peerName || conversation.shopName || initialPeerName);
+      return conversation.id;
+    }
+
+    if (isSupportConversation) {
+      const conversation = await startSupportConversation();
       setConversationId(conversation.id);
       setHeaderTitle(conversation.peerName || conversation.shopName || initialPeerName);
       return conversation.id;

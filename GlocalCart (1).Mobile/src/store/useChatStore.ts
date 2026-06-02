@@ -46,6 +46,7 @@ interface ChatState {
 
   fetchConversations: () => Promise<void>;
   startConversation: (sellerId: number, productId?: number) => Promise<Conversation>;
+  startSupportConversation: () => Promise<Conversation>;
   getMessages: (conversationId: ChatId) => Promise<ChatMessage[]>;
   sendMessage: (conversationId: ChatId, text?: string, imageUri?: string) => Promise<ChatMessage>;
   markAsRead: (conversationId: ChatId) => Promise<void>;
@@ -157,6 +158,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sellerId,
       productId,
     }));
+
+    const conversations = upsertConversationInList(get().conversations, conversation);
+    set({ conversations, totalUnreadCount: totalUnread(conversations) });
+    return conversation;
+  },
+
+  startSupportConversation: async () => {
+    const conversation = normalizeConversation(await apiClient.post('/chat/support'));
 
     const conversations = upsertConversationInList(get().conversations, conversation);
     set({ conversations, totalUnreadCount: totalUnread(conversations) });

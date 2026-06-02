@@ -60,7 +60,7 @@ namespace GlocalCart.API.Controllers
         public async Task<IActionResult> RejectOrder(int id, [FromBody] RejectOrderDto dto)
         {
             await _orderService.RejectOrderAsync(UserId, id, dto);
-            return Ok(ApiResponse.Ok("Đã từ chối đơn hàng."));
+            return Ok(ApiResponse.Ok("Da huy don hang."));
         }
 
         // === SHIPMENT ===

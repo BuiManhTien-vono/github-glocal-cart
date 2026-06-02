@@ -53,6 +53,10 @@ const isSingleShopError = (error: any) => {
 
 const getItemShopKey = (item: any) =>
   String(item.sellerId ?? item.shopId ?? item.sellerName ?? item.shopName ?? 'default-shop');
+const PAYMENT_METHOD_CODES = {
+  cod: 2,
+  bank: 1,
+} as const;
 
 export default function CheckoutScreen({ navigation, route }: any): React.JSX.Element {
   const insets = useSafeAreaInsets();
@@ -256,7 +260,9 @@ export default function CheckoutScreen({ navigation, route }: any): React.JSX.El
 
     setIsPlacingOrder(true);
     try {
-      const paymentMethodCode = selectedPayment === 'bank' ? 1 : 0;
+      const paymentMethodCode = selectedPayment === 'bank'
+        ? PAYMENT_METHOD_CODES.bank
+        : PAYMENT_METHOD_CODES.cod;
       const orderData = {
         shippingAddressId: selectedAddress.id,
         paymentMethod: paymentMethodCode,
