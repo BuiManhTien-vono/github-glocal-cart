@@ -19,6 +19,7 @@ import apiClient from '../../services/api/apiClient';
 import { useFollowShopStore } from '../../store/useFollowShopStore';
 import { borderRadius, colors, shadow, spacing } from '../../theme/colors';
 import { resolveProductImage } from '../../utils/imageUtils';
+import { showLoginRequired } from '../../utils/loginRequired';
 
 const COVER_HEIGHT = 208;
 
@@ -121,10 +122,7 @@ export default function ShopScreen({ route, navigation }: any) {
 
   const requireLogin = (message: string) => {
     if (isLoggedIn) return false;
-    Alert.alert('Yeu cau dang nhap', message, [
-      { text: 'De sau', style: 'cancel' },
-      { text: 'Dang nhap', onPress: () => setGuestMode(false) },
-    ]);
+    showLoginRequired(() => setGuestMode(false), message);
     return true;
   };
 
@@ -138,7 +136,7 @@ export default function ShopScreen({ route, navigation }: any) {
   };
 
   const handleFollow = async () => {
-    if (requireLogin('Ban can dang nhap de theo doi shop.')) return;
+    if (requireLogin('Bạn cần đăng nhập để theo dõi shop.')) return;
     if (!targetShopId) {
       Alert.alert('Khong the theo doi', 'Shop nay chua co thong tin nguoi ban.');
       return;
@@ -160,7 +158,7 @@ export default function ShopScreen({ route, navigation }: any) {
   };
 
   const handleChat = () => {
-    if (requireLogin('Ban can dang nhap de nhan tin voi nguoi ban.')) return;
+    if (requireLogin('Bạn cần đăng nhập để nhắn tin với người bán.')) return;
     if (!targetShopId) {
       Alert.alert('Khong the mo chat', 'Shop nay chua co thong tin nguoi ban.');
       return;

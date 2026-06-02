@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { colors, spacing } from '../../theme/colors';
 import { ChatBadge } from '../../components/common/ChatBadge';
 import apiClient from '../../services/api/apiClient';
+import { showLoginRequired } from '../../utils/loginRequired';
 
 const ADMIN_SUPPORT_CHAT = {
   conversationId: 'admin-support',
@@ -349,12 +350,12 @@ function LanguageModal({ visible, selected, onSelect, onClose }: { visible: bool
 
 // --- Trung tâm hỗ trợ Modal ---
 function SupportCenterModal({ visible, onClose, navigation }: { visible: boolean; onClose: () => void; navigation: any }) {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, setGuestMode } = useAuth();
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   const openAdminSupportChat = () => {
     if (!isLoggedIn) {
-      Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để chat với CSKH.');
+      showLoginRequired(() => setGuestMode(false), 'Vui lòng đăng nhập để chat với CSKH.');
       return;
     }
     onClose();

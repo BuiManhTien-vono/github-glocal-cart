@@ -15,6 +15,7 @@ namespace GlocalCart.API.DTOs.Shipper
         public DateTime? ShipmentDate { get; set; }
         public DateTime? EstimatedArrival { get; set; }
         public DateTime? AssignedAt { get; set; }
+        public DateTime? DeliveredAt { get; set; }
         public string BuyerName { get; set; } = string.Empty;
         public string BuyerPhone { get; set; } = string.Empty;
         public string DeliveryAddress { get; set; } = string.Empty;
@@ -55,8 +56,13 @@ namespace GlocalCart.API.DTOs.Shipper
     {
         public int TodayCompleted { get; set; }
         public decimal TodayIncome { get; set; }
+        public int TodayFailed { get; set; }
         public int MonthCompleted { get; set; }
         public decimal MonthIncome { get; set; }
+        public int MonthFailed { get; set; }
+        public int AllCompleted { get; set; }
+        public decimal AllIncome { get; set; }
+        public int AllFailed { get; set; }
         public int ActiveShipments { get; set; }
         public decimal PendingCodAmount { get; set; }
         public decimal SuccessRate { get; set; }

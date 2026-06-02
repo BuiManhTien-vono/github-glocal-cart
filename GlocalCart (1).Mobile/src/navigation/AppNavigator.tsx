@@ -167,7 +167,10 @@ function ProfileStack() {
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const usesSellerInterface = user?.isSeller || user?.role === 'Seller' || user?.role === 'Admin';
+  const role = String(user?.role || '').toLowerCase();
+  const isAdmin = role === 'admin';
+  const isSeller = role === 'seller';
+  const usesSellerInterface = Boolean(user?.isSeller || isSeller || isAdmin);
 
   return (
     <Tab.Navigator
@@ -264,6 +267,7 @@ function ShipperStack() {
       <Stack.Screen name="ShipperTabs" component={ShipperTabs} />
       <Stack.Screen name="ShipperShipmentDetail" component={ShipperShipmentDetailScreen} />
       <Stack.Screen name="ShipperChangePassword" component={ShipperChangePasswordScreen} />
+      <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
     </Stack.Navigator>
   );
 }
@@ -293,6 +297,7 @@ function AppStack() {
       <Stack.Screen name="VietQR" component={VietQRScreen} />
       <Stack.Screen name="PaymentWaiting" component={PaymentWaitingScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="SellerOrderDetail" component={SellerOrderDetailScreen} />
+      <Stack.Screen name="SellerCreateShipment" component={SellerCreateShipmentScreen} />
     </Stack.Navigator>
   );
 }
@@ -300,12 +305,13 @@ function AppStack() {
 // ─── Root Navigator ───
 export default function AppNavigator() {
   const { isLoggedIn, isGuestMode, isLoading, user } = useAuth();
+  const role = String(user?.role || '').toLowerCase();
 
   if (isLoading) return <Loading message="Đang khởi tạo..." />;
 
   // Cả logged-in và guest đều dùng AppStack (kiểm tra quyền trong từng màn hình)
   if (isLoggedIn || isGuestMode) {
-    if (user?.role === 'Shipper') {
+    if (role === 'shipper') {
       return <ShipperStack />;
     }
     return <AppStack />;

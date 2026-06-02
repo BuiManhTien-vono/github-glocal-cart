@@ -9,13 +9,14 @@ using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace GlocalCart.API.Services.Implementations
 {
     public class ShipperService : IShipperService
     {
         private const string FallbackShopAddress = "72 Le Loi, Phuong Ben Thanh, Quan 1, TP Ho Chi Minh, Viet Nam";
-        private const int MaxAvailablePickupDistanceMeters = 10_000;
+        private const int MaxAvailableEndpointDistanceMeters = 10_000;
         private static readonly TimeSpan ShipperLocationFreshness = TimeSpan.FromMinutes(15);
         private static readonly GeoPoint FallbackShopCoordinate = new(10.7743, 106.7017);
         private readonly record struct GeoPoint(double Latitude, double Longitude);
@@ -47,7 +48,7 @@ namespace GlocalCart.API.Services.Implementations
                 .ToListAsync();
 
             var visibleShipments = shipments
-                .Where(s => IsWithinPickupRadius(s, shipperLocation))
+                .Where(s => IsWithinAvailableRoute(s, shipperLocation))
                 .ToList();
 
             return ToShipmentPage(visibleShipments, page, pageSize);
@@ -66,13 +67,22 @@ namespace GlocalCart.API.Services.Implementations
             return await ToShipmentPageAsync(query, page, pageSize);
         }
 
-        public async Task<PagedResult<ShipperShipmentDto>> GetCompletedShipmentsAsync(int shipperId, int page, int pageSize)
+        public async Task<PagedResult<ShipperShipmentDto>> GetCompletedShipmentsAsync(int shipperId, int page, int pageSize, string? period = null)
         {
             var query = QueryShipments()
-                .Where(s => s.ShipperId == shipperId && s.Status == ShipmentStatus.Delivered)
-                .OrderByDescending(s => s.DeliveredAt);
+                .Where(s => s.ShipperId == shipperId && s.Status == ShipmentStatus.Delivered);
 
-            return await ToShipmentPageAsync(query, page, pageSize);
+            var normalizedPeriod = period?.Trim().ToLowerInvariant();
+            if (normalizedPeriod == "today" || normalizedPeriod == "month")
+            {
+                var (todayStartUtc, tomorrowStartUtc, monthStartUtc) = GetVietnamStatsUtcRange(DateTime.UtcNow);
+                var fromUtc = normalizedPeriod == "today" ? todayStartUtc : monthStartUtc;
+                query = query.Where(s => s.DeliveredAt != null
+                    && s.DeliveredAt >= fromUtc
+                    && s.DeliveredAt < tomorrowStartUtc);
+            }
+
+            return await ToShipmentPageAsync(query.OrderByDescending(s => s.DeliveredAt), page, pageSize);
         }
 
         public async Task<ShipperStatsDto> GetStatsAsync(int shipperId)
@@ -81,8 +91,20 @@ namespace GlocalCart.API.Services.Implementations
             var (todayStartUtc, tomorrowStartUtc, monthStartUtc) = GetVietnamStatsUtcRange(now);
 
             var owned = QueryShipments().Where(s => s.ShipperId == shipperId);
-            var completed = owned.Where(s => s.Status == ShipmentStatus.Delivered && s.DeliveredAt != null);
-            var completedToday = completed.Where(s => s.DeliveredAt >= todayStartUtc && s.DeliveredAt < tomorrowStartUtc);
+            var completed = owned.Where(s => s.Status == ShipmentStatus.Delivered);
+            var completedWithDeliveredAt = completed.Where(s => s.DeliveredAt != null);
+            var completedToday = completedWithDeliveredAt.Where(s => s.DeliveredAt >= todayStartUtc && s.DeliveredAt < tomorrowStartUtc);
+            var completedThisMonth = completedWithDeliveredAt.Where(s => s.DeliveredAt >= monthStartUtc && s.DeliveredAt < tomorrowStartUtc);
+            var failedLogs = _db.ShipmentLogs
+                .Where(l => l.Status == ShipmentStatus.OnHold && l.Shipment.ShipperId == shipperId);
+            var failedToday = failedLogs
+                .Where(l => l.CreatedAt >= todayStartUtc && l.CreatedAt < tomorrowStartUtc)
+                .Select(l => l.ShipmentId)
+                .Distinct();
+            var failedThisMonth = failedLogs
+                .Where(l => l.CreatedAt >= monthStartUtc && l.CreatedAt < tomorrowStartUtc)
+                .Select(l => l.ShipmentId)
+                .Distinct();
             var activeToday = owned.Where(s =>
                 (s.Status == ShipmentStatus.Accepted
                     || s.Status == ShipmentStatus.Shipped
@@ -99,8 +121,13 @@ namespace GlocalCart.API.Services.Implementations
             {
                 TodayCompleted = await completedToday.CountAsync(),
                 TodayIncome = await completedToday.SumAsync(s => s.Order.ShippingFee),
-                MonthCompleted = await completed.CountAsync(s => s.DeliveredAt >= monthStartUtc),
-                MonthIncome = await completed.Where(s => s.DeliveredAt >= monthStartUtc).SumAsync(s => s.Order.ShippingFee),
+                TodayFailed = await failedToday.CountAsync(),
+                MonthCompleted = await completedThisMonth.CountAsync(),
+                MonthIncome = await completedThisMonth.SumAsync(s => s.Order.ShippingFee),
+                MonthFailed = await failedThisMonth.CountAsync(),
+                AllCompleted = completedCount,
+                AllIncome = await completed.SumAsync(s => s.Order.ShippingFee),
+                AllFailed = await failedLogs.Select(l => l.ShipmentId).Distinct().CountAsync(),
                 ActiveShipments = await activeToday.CountAsync(),
                 PendingCodAmount = await activeToday
                     .Where(s => s.Order.Payment != null
@@ -221,13 +248,33 @@ namespace GlocalCart.API.Services.Implementations
                 .FirstOrDefaultAsync(l => l.ShipperId == shipperId && l.UpdatedAt >= cutoff);
         }
 
-        private static bool IsWithinPickupRadius(Shipment shipment, ShipperLocation location)
+        private static bool IsWithinAvailableRoute(Shipment shipment, ShipperLocation location)
         {
-            var pickupCoordinate = ResolveAddressCoordinate(GetPickupAddress(shipment)) ?? FallbackShopCoordinate;
-            var shipperCoordinate = new GeoPoint(location.Latitude, location.Longitude);
-            var distanceMeters = CalculateDistanceMeters(shipperCoordinate, pickupCoordinate);
+            var pickupAddress = GetPickupAddress(shipment);
+            var pickupCoordinate = pickupAddress == null
+                ? FallbackShopCoordinate
+                : ResolveAddressCoordinate(pickupAddress, allowCityFallback: true);
+            var deliveryCoordinate = ResolveAddressCoordinate(shipment.Order.ShippingAddress, allowCityFallback: true);
 
-            return distanceMeters.HasValue && distanceMeters.Value <= MaxAvailablePickupDistanceMeters;
+            var shipperCoordinate = new GeoPoint(location.Latitude, location.Longitude);
+
+            if (pickupCoordinate.HasValue)
+            {
+                return IsWithinAvailableRadius(shipperCoordinate, pickupCoordinate.Value);
+            }
+
+            if (deliveryCoordinate.HasValue)
+            {
+                return IsWithinAvailableRadius(shipperCoordinate, deliveryCoordinate.Value);
+            }
+
+            return true;
+        }
+
+        private static bool IsWithinAvailableRadius(GeoPoint shipperCoordinate, GeoPoint endpoint)
+        {
+            var distanceMeters = CalculateDistanceMeters(shipperCoordinate, endpoint);
+            return distanceMeters.HasValue && distanceMeters.Value <= MaxAvailableEndpointDistanceMeters;
         }
 
         public async Task<ShipperShipmentDto> GetShipmentDetailAsync(int shipperId, int shipmentId)
@@ -245,7 +292,7 @@ namespace GlocalCart.API.Services.Implementations
             if (isAvailable)
             {
                 var shipperLocation = await GetFreshShipperLocationAsync(shipperId);
-                if (shipperLocation == null || !IsWithinPickupRadius(shipment, shipperLocation))
+                if (shipperLocation == null || !IsWithinAvailableRoute(shipment, shipperLocation))
                     throw new UnauthorizedAccessException("Vận đơn này nằm ngoài bán kính nhận đơn của bạn.");
             }
 
@@ -266,7 +313,7 @@ namespace GlocalCart.API.Services.Implementations
                 throw new InvalidOperationException("Đơn hàng chưa được seller xác nhận.");
 
             var shipperLocation = await GetFreshShipperLocationAsync(shipperId);
-            if (shipperLocation == null || !IsWithinPickupRadius(shipment, shipperLocation))
+            if (shipperLocation == null || !IsWithinAvailableRoute(shipment, shipperLocation))
                 throw new UnauthorizedAccessException("Bạn chỉ có thể nhận đơn có điểm lấy hàng trong bán kính 10 km.");
 
             var shipper = await _db.Users.FindAsync(shipperId)
@@ -673,7 +720,7 @@ namespace GlocalCart.API.Services.Implementations
                 : formattedAddress;
         }
 
-        private static GeoPoint? ResolveAddressCoordinate(UserAddress? address)
+        private static GeoPoint? ResolveAddressCoordinate(UserAddress? address, bool allowCityFallback = true)
         {
             if (address == null) return null;
 
@@ -681,14 +728,16 @@ namespace GlocalCart.API.Services.Implementations
                 address.StreetAddress,
                 address.State,
                 address.City,
-                address.Country);
+                address.Country,
+                allowCityFallback);
         }
 
         private static GeoPoint? ResolveAddressCoordinate(
             string streetAddress,
             string state,
             string city,
-            string country)
+            string country,
+            bool allowCityFallback = true)
         {
             var combined = NormalizeForSearch($"{streetAddress} {state} {city} {country}");
             var compact = combined.Replace(".", string.Empty).Replace(" ", string.Empty);
@@ -700,21 +749,38 @@ namespace GlocalCart.API.Services.Implementations
                 || combined.Contains("saigon");
             if (isHoChiMinh)
             {
-                var isDistrict1 = combined.Contains("quan 1")
-                    || combined.Contains("district 1")
-                    || compact.Contains("q1");
+                var isDistrict1 = HasDistrict(combined, compact, 1);
                 if (isDistrict1 && combined.Contains("le loi"))
                 {
                     return CoordinateOnLeLoiDistrict1(ReadLeadingNumber(streetAddress));
                 }
 
                 if (isDistrict1) return new GeoPoint(10.7758, 106.7019);
-                if (combined.Contains("quan 3") || compact.Contains("q3")) return new GeoPoint(10.7840, 106.6848);
-                if (combined.Contains("quan 7") || compact.Contains("q7")) return new GeoPoint(10.7325, 106.7219);
-                if (combined.Contains("quan 10") || compact.Contains("q10")) return new GeoPoint(10.7731, 106.6679);
-                if (combined.Contains("thu duc")) return new GeoPoint(10.8494, 106.7537);
+                if (HasDistrict(combined, compact, 2)) return new GeoPoint(10.7873, 106.7498);
+                if (HasDistrict(combined, compact, 3)) return new GeoPoint(10.7840, 106.6848);
+                if (HasDistrict(combined, compact, 4)) return new GeoPoint(10.7578, 106.7050);
+                if (HasDistrict(combined, compact, 5)) return new GeoPoint(10.7540, 106.6634);
+                if (HasDistrict(combined, compact, 6)) return new GeoPoint(10.7460, 106.6358);
+                if (HasDistrict(combined, compact, 7)) return new GeoPoint(10.7325, 106.7219);
+                if (HasDistrict(combined, compact, 8)) return new GeoPoint(10.7247, 106.6286);
+                if (HasDistrict(combined, compact, 9)) return new GeoPoint(10.8428, 106.8287);
+                if (HasDistrict(combined, compact, 10)) return new GeoPoint(10.7731, 106.6679);
+                if (HasDistrict(combined, compact, 11)) return new GeoPoint(10.7629, 106.6501);
+                if (HasDistrict(combined, compact, 12)) return new GeoPoint(10.8672, 106.6413);
+                if (ContainsAny(combined, "binh thanh")) return new GeoPoint(10.8106, 106.7091);
+                if (ContainsAny(combined, "phu nhuan")) return new GeoPoint(10.7993, 106.6805);
+                if (ContainsAny(combined, "tan binh")) return new GeoPoint(10.8016, 106.6522);
+                if (ContainsAny(combined, "tan phu")) return new GeoPoint(10.7916, 106.6273);
+                if (ContainsAny(combined, "go vap", "govap")) return new GeoPoint(10.8387, 106.6653);
+                if (ContainsAny(combined, "binh tan")) return new GeoPoint(10.7653, 106.6038);
+                if (ContainsAny(combined, "thu duc")) return new GeoPoint(10.8494, 106.7537);
+                if (ContainsAny(combined, "nha be", "nhabe")) return new GeoPoint(10.6953, 106.7405);
+                if (ContainsAny(combined, "binh chanh", "binhchanh")) return new GeoPoint(10.6874, 106.5939);
+                if (ContainsAny(combined, "hoc mon", "hocmon")) return new GeoPoint(10.8830, 106.5866);
+                if (ContainsAny(combined, "cu chi", "cuchi")) return new GeoPoint(10.9739, 106.4933);
+                if (ContainsAny(combined, "can gio", "cangio")) return new GeoPoint(10.4112, 106.9547);
 
-                return new GeoPoint(10.7769, 106.7009);
+                return allowCityFallback ? new GeoPoint(10.7769, 106.7009) : null;
             }
 
             if (combined.Contains("ha noi") || combined.Contains("hanoi"))
@@ -723,20 +789,41 @@ namespace GlocalCart.API.Services.Implementations
                 if (combined.Contains("ba dinh")) return new GeoPoint(21.0367, 105.8342);
                 if (combined.Contains("dong da")) return new GeoPoint(21.0181, 105.8293);
                 if (combined.Contains("cau giay")) return new GeoPoint(21.0362, 105.7906);
+                if (combined.Contains("hai ba trung")) return new GeoPoint(21.0091, 105.8607);
+                if (combined.Contains("thanh xuan")) return new GeoPoint(20.9935, 105.8056);
+                if (combined.Contains("ha dong")) return new GeoPoint(20.9714, 105.7788);
+                if (combined.Contains("long bien")) return new GeoPoint(21.0479, 105.8836);
+                if (combined.Contains("tay ho")) return new GeoPoint(21.0684, 105.8230);
+                if (combined.Contains("nam tu liem")) return new GeoPoint(21.0122, 105.7608);
+                if (combined.Contains("bac tu liem")) return new GeoPoint(21.0718, 105.7747);
 
-                return new GeoPoint(21.0278, 105.8342);
+                return allowCityFallback ? new GeoPoint(21.0278, 105.8342) : null;
             }
 
             if (combined.Contains("da nang") || combined.Contains("danang"))
             {
                 if (combined.Contains("hai chau")) return new GeoPoint(16.0678, 108.2208);
                 if (combined.Contains("son tra")) return new GeoPoint(16.1065, 108.2529);
+                if (combined.Contains("thanh khe")) return new GeoPoint(16.0704, 108.1906);
+                if (combined.Contains("ngu hanh son")) return new GeoPoint(16.0168, 108.2530);
+                if (combined.Contains("cam le")) return new GeoPoint(16.0155, 108.2038);
+                if (combined.Contains("lien chieu")) return new GeoPoint(16.0718, 108.1507);
 
-                return new GeoPoint(16.0471, 108.2068);
+                return allowCityFallback ? new GeoPoint(16.0471, 108.2068) : null;
             }
 
             return null;
         }
+
+        private static bool HasDistrict(string combined, string compact, int districtNumber)
+        {
+            var number = districtNumber.ToString(CultureInfo.InvariantCulture);
+            return Regex.IsMatch(combined, $@"(^|[^a-z0-9])(quan|q|district)\.?\s*{number}([^0-9]|$)")
+                || Regex.IsMatch(compact, $@"(quan|q|district){number}([^0-9]|$)");
+        }
+
+        private static bool ContainsAny(string value, params string[] tokens) =>
+            tokens.Any(value.Contains);
 
         private static GeoPoint CoordinateOnLeLoiDistrict1(int? houseNumber)
         {
@@ -829,6 +916,7 @@ namespace GlocalCart.API.Services.Implementations
                 ShipmentDate = s.ShipmentDate,
                 EstimatedArrival = s.EstimatedArrival,
                 AssignedAt = s.AssignedAt,
+                DeliveredAt = s.DeliveredAt,
                 BuyerName = s.Order.Buyer.FullName,
                 BuyerPhone = s.Order.Buyer.PhoneNumber ?? "",
                 DeliveryAddress = deliveryAddressText,

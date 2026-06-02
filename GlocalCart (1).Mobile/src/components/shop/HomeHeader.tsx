@@ -5,14 +5,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { useNavigation } from '@react-navigation/native';
 import { useCartStore } from '../../store/useCartStore';
-import { useChatStore } from '../../store/useChatStore';
 import { ChatBadge } from '../common/ChatBadge';
+import { useAuth } from '../../context/AuthContext';
+import { showLoginRequired } from '../../utils/loginRequired';
 
 export const HomeHeader = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { totalItems } = useCartStore();
-  const { totalUnreadCount } = useChatStore();
+  const { isLoggedIn, setGuestMode } = useAuth();
+
+  const handleChatPress = () => {
+    if (!isLoggedIn) {
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để dùng Chat.');
+      return;
+    }
+
+    navigation.navigate('ChatList');
+  };
 
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
@@ -50,10 +60,10 @@ export const HomeHeader = () => {
       {/* Chat Icon */}
       <TouchableOpacity 
         style={styles.iconButton}
-        onPress={() => navigation.navigate('ChatList')}
+        onPress={handleChatPress}
       >
         <Ionicons name="chatbubble-ellipses-outline" size={28} color={colors.white} />
-        <ChatBadge />
+        {isLoggedIn && <ChatBadge />}
       </TouchableOpacity>
     </View>
   );

@@ -10,14 +10,15 @@ using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace GlocalCart.API.Services.Implementations
 {
     public class OrderService : IOrderService
     {
-        private const int MaxAvailablePickupDistanceMeters = 10_000;
+        private const int MaxAvailableEndpointDistanceMeters = 10_000;
         private static readonly TimeSpan ShipperLocationFreshness = TimeSpan.FromMinutes(15);
-        private static readonly GeoPoint FallbackShopCoordinate = new(21.0287, 105.8521);
+        private static readonly GeoPoint FallbackShopCoordinate = new(10.7743, 106.7017);
         private readonly record struct GeoPoint(double Latitude, double Longitude);
         private readonly record struct OrderLine(Product Product, int Quantity, decimal UnitPrice);
 
@@ -216,6 +217,8 @@ namespace GlocalCart.API.Services.Implementations
         {
             var order = await _db.Orders
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Product)
+                .Include(o => o.Payment)
+                .Include(o => o.Shipment)
                 .FirstOrDefaultAsync(o => o.Id == orderId && o.BuyerId == buyerId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
@@ -227,20 +230,13 @@ namespace GlocalCart.API.Services.Implementations
             // Hoàn lại tồn kho
             foreach (var item in order.OrderItems)
                 item.Product.AvailableItemCount += item.Quantity;
+            CancelActiveShipment(order.Shipment);
+            CancelOrRefundPayment(order.Payment);
 
             var logNote = string.IsNullOrEmpty(reason) ? "Người mua hủy đơn." : $"Người mua hủy đơn. Lý do: {reason}";
             _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Canceled, Note = logNote });
 
             // Cập nhật Payment
-            var payment = await _db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
-            if (payment != null)
-            {
-                payment.Status = payment.Status == PaymentStatus.Completed
-                    ? PaymentStatus.Refunded
-                    : PaymentStatus.Canceled;
-                payment.UpdatedAt = DateTime.UtcNow;
-            }
-
             await _db.SaveChangesAsync();
 
             var sellerIds = order.OrderItems.Select(oi => oi.SellerId).Distinct();
@@ -267,19 +263,29 @@ namespace GlocalCart.API.Services.Implementations
         // === SELLER ===
         public async Task<PagedResult<OrderResponseDto>> GetSellerOrdersAsync(int sellerId, int page, int pageSize)
         {
-            var orderIds = await _db.OrderItems
-                .Where(oi => oi.SellerId == sellerId)
-                .Select(oi => oi.OrderId)
-                .Distinct()
-                .ToListAsync();
+            var isAdmin = await IsAdminAsync(sellerId);
+            var orderIds = isAdmin
+                ? null
+                : await _db.OrderItems
+                    .Where(oi => oi.SellerId == sellerId)
+                    .Select(oi => oi.OrderId)
+                    .Distinct()
+                    .ToListAsync();
 
-            return await _db.Orders
+            var query = _db.Orders
                 .Include(o => o.Buyer)
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Product).ThenInclude(p => p.Images)
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Seller)
                 .Include(o => o.ShippingAddress).Include(o => o.Payment)
                 .Include(o => o.Shipment).ThenInclude(s => s!.Shipper)
-                .Where(o => orderIds.Contains(o.Id))
+                .AsQueryable();
+
+            if (!isAdmin)
+            {
+                query = query.Where(o => orderIds!.Contains(o.Id));
+            }
+
+            return await query
                 .OrderByDescending(o => o.OrderDate)
                 .Select(o => MapToDto(o))
                 .ToPagedResultAsync(page, pageSize);
@@ -287,36 +293,44 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<bool> UpdateOrderStatusAsync(int sellerId, int orderId, UpdateOrderStatusDto dto)
         {
+            var isAdmin = await IsAdminAsync(sellerId);
             var order = await _db.Orders
                 .Include(o => o.OrderItems).ThenInclude(oi => oi.Product)
                 .Include(o => o.Payment)
+                .Include(o => o.Shipment)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
-            if (!order.OrderItems.Any(oi => oi.SellerId == sellerId))
+            if (!isAdmin && !order.OrderItems.Any(oi => oi.SellerId == sellerId))
                 throw new UnauthorizedAccessException("Bạn không có quyền cập nhật đơn hàng này.");
 
             if (!Enum.TryParse<OrderStatus>(dto.Status, true, out var newStatus))
                 throw new ArgumentException("Trạng thái không hợp lệ.");
 
-            if (newStatus is OrderStatus.Shipped or OrderStatus.Complete)
+            if (!isAdmin && newStatus is (OrderStatus.Shipped or OrderStatus.Complete))
                 throw new InvalidOperationException("Seller không thể chuyển sang Shipped/Complete. Vui lòng tạo vận đơn và để Shipper xử lý.");
 
-            if (newStatus != OrderStatus.Canceled)
+            if (!isAdmin && newStatus != OrderStatus.Canceled)
                 OrderBusinessRules.EnsureSellerCanFulfill(order.Payment);
 
             if (newStatus == OrderStatus.Canceled)
             {
                 if (order.Status == OrderStatus.Canceled)
                     return true;
-                if (order.Status is OrderStatus.Shipped or OrderStatus.Complete)
-                    throw new InvalidOperationException("Khong the huy don da van chuyen/hoan tat.");
+                if (IsDeliveredOrComplete(order))
+                    throw new InvalidOperationException("Khong the huy don da giao/hoan tat.");
 
                 RestoreOrderStock(order);
+                CancelActiveShipment(order.Shipment);
+                CancelOrRefundPayment(order.Payment);
             }
 
+            if (isAdmin)
+                SyncShipmentForOrderStatus(order, newStatus);
+
+            var statusActor = isAdmin ? "Admin" : "Seller";
             order.Status = newStatus;
-            _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = newStatus, Note = dto.Note ?? $"Seller cập nhật: {newStatus}" });
+            _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = newStatus, Note = dto.Note ?? $"{statusActor} cap nhat: {newStatus}" });
             await _db.SaveChangesAsync();
 
             await _notif.CreateNotificationAsync(order.BuyerId, $"Đơn hàng #{order.OrderNumber} chuyển sang trạng thái: {newStatus}");
@@ -326,48 +340,54 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<bool> RejectOrderAsync(int sellerId, int orderId, RejectOrderDto dto)
         {
+            var isAdmin = await IsAdminAsync(sellerId);
             var order = await _db.Orders.Include(o => o.OrderItems).ThenInclude(oi => oi.Product)
+                .Include(o => o.Shipment)
+                .Include(o => o.Payment)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
-            if (!order.OrderItems.Any(oi => oi.SellerId == sellerId))
+            if (!isAdmin && !order.OrderItems.Any(oi => oi.SellerId == sellerId))
                 throw new UnauthorizedAccessException("Bạn không có quyền.");
 
             if (order.Status == OrderStatus.Canceled)
                 return true;
 
-            if (order.Status == OrderStatus.Shipped || order.Status == OrderStatus.Complete)
-                throw new InvalidOperationException("Không thể từ chối đơn đã vận chuyển.");
+            if (IsDeliveredOrComplete(order))
+                throw new InvalidOperationException("Khong the huy don da giao/hoan tat.");
 
+            var cancelActor = isAdmin ? "Admin" : "Seller";
             order.Status = OrderStatus.Canceled;
             RestoreOrderStock(order);
+            CancelActiveShipment(order.Shipment);
+            CancelOrRefundPayment(order.Payment);
 
-            _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Canceled, Note = $"Seller từ chối: {dto.Reason}" });
-
-            var payment = await _db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
-            if (payment != null)
-            {
-                payment.Status = payment.Status == PaymentStatus.Completed
-                    ? PaymentStatus.Refunded
-                    : PaymentStatus.Canceled;
-                payment.UpdatedAt = DateTime.UtcNow;
-            }
+            _db.OrderLogs.Add(new OrderLog { OrderId = orderId, Status = OrderStatus.Canceled, Note = $"{cancelActor} huy don: {dto.Reason}" });
 
             await _db.SaveChangesAsync();
-            await _notif.CreateNotificationAsync(order.BuyerId, $"Đơn hàng #{order.OrderNumber} bị từ chối. Lý do: {dto.Reason}");
-            await BroadcastOrderUpdatedAsync(order, "OrderRejected");
+            await _notif.CreateNotificationAsync(order.BuyerId, $"Don hang #{order.OrderNumber} da bi huy. Ly do: {dto.Reason}");
+            await BroadcastOrderUpdatedAsync(order, "OrderCanceled");
             return true;
         }
 
         // === SHIPMENT ===
         public async Task<ShipmentInfoDto> CreateShipmentAsync(int sellerId, int orderId, CreateShipmentDto dto)
         {
-            var order = await _db.Orders.Include(o => o.OrderItems).Include(o => o.Shipment).Include(o => o.Payment)
+            var isAdmin = await IsAdminAsync(sellerId);
+            var order = await _db.Orders
+                .Include(o => o.OrderItems)
+                .Include(o => o.Shipment)
+                .Include(o => o.Payment)
+                .Include(o => o.ShippingAddress)
                 .FirstOrDefaultAsync(o => o.Id == orderId)
                 ?? throw new KeyNotFoundException("Không tìm thấy đơn hàng.");
 
-            if (!order.OrderItems.Any(oi => oi.SellerId == sellerId))
+            if (!isAdmin && !order.OrderItems.Any(oi => oi.SellerId == sellerId))
                 throw new UnauthorizedAccessException("Bạn không có quyền.");
+
+            var pickupOwnerId = isAdmin
+                ? order.OrderItems.Select(oi => oi.SellerId).FirstOrDefault()
+                : sellerId;
 
             if (order.Shipment != null)
                 throw new InvalidOperationException("Đơn hàng đã có thông tin vận chuyển.");
@@ -375,7 +395,8 @@ namespace GlocalCart.API.Services.Implementations
             if (order.Status is OrderStatus.Canceled or OrderStatus.Complete)
                 throw new InvalidOperationException("Không thể tạo vận đơn cho đơn đã hủy/hoàn tất.");
 
-            OrderBusinessRules.EnsureSellerCanFulfill(order.Payment);
+            if (!isAdmin)
+                OrderBusinessRules.EnsureSellerCanFulfill(order.Payment);
 
             var shipment = new Shipment
             {
@@ -404,9 +425,19 @@ namespace GlocalCart.API.Services.Implementations
             var pickupAddress = await _db.UserAddresses
                 .OrderByDescending(a => a.IsDefault)
                 .ThenBy(a => a.Id)
-                .FirstOrDefaultAsync(a => a.UserId == sellerId);
-            var pickupCoordinate = ResolveAddressCoordinate(pickupAddress) ?? FallbackShopCoordinate;
-            var nearbyShipperIds = await GetNearbyShipperIdsAsync(pickupCoordinate);
+                .FirstOrDefaultAsync(a => a.UserId == pickupOwnerId);
+            var pickupCoordinate = pickupAddress == null
+                ? FallbackShopCoordinate
+                : ResolveAddressCoordinate(pickupAddress, allowCityFallback: true);
+            var deliveryCoordinate = ResolveAddressCoordinate(order.ShippingAddress, allowCityFallback: true);
+            var nearbyShipperIds = await GetNearbyShipperIdsAsync(pickupCoordinate, deliveryCoordinate);
+            var shipmentAvailablePayload = new
+            {
+                shipmentId = shipment.Id,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                status = shipment.Status.ToString()
+            };
 
             foreach (var sId in nearbyShipperIds)
             {
@@ -417,14 +448,12 @@ namespace GlocalCart.API.Services.Implementations
             {
                 await _deliveryHub.Clients
                     .Groups(nearbyShipperIds.Select(DeliveryHub.UserGroup))
-                    .SendAsync("ShipmentAvailable", new
-                    {
-                        shipmentId = shipment.Id,
-                        orderId = order.Id,
-                        orderNumber = order.OrderNumber,
-                        status = shipment.Status.ToString()
-                    });
+                    .SendAsync("ShipmentAvailable", shipmentAvailablePayload);
             }
+
+            await _deliveryHub.Clients
+                .Group(DeliveryHub.ShipperAvailableGroup)
+                .SendAsync("ShipmentAvailable", shipmentAvailablePayload);
 
             order.Shipment = shipment;
             await BroadcastOrderUpdatedAsync(order, "OrderShipmentCreated");
@@ -453,15 +482,26 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<bool> UpdateShipmentStatusAsync(int sellerId, int shipmentId, UpdateShipmentStatusDto dto)
         {
-            var shipment = await _db.Shipments.Include(s => s.Order).ThenInclude(o => o.OrderItems)
+            var isAdmin = await IsAdminAsync(sellerId);
+            var shipment = await _db.Shipments
+                .Include(s => s.Order).ThenInclude(o => o.OrderItems)
+                .Include(s => s.Order).ThenInclude(o => o.Payment)
                 .FirstOrDefaultAsync(s => s.Id == shipmentId)
                 ?? throw new KeyNotFoundException("Không tìm thấy thông tin vận chuyển.");
 
-            if (!shipment.Order.OrderItems.Any(oi => oi.SellerId == sellerId))
+            if (!isAdmin && !shipment.Order.OrderItems.Any(oi => oi.SellerId == sellerId))
                 throw new UnauthorizedAccessException("Bạn không có quyền.");
 
             if (!Enum.TryParse<ShipmentStatus>(dto.Status, true, out var newStatus))
                 throw new ArgumentException("Trạng thái vận chuyển không hợp lệ.");
+
+            if (isAdmin)
+            {
+                ApplyAdminShipmentStatus(shipment, newStatus, dto.Note);
+                await _db.SaveChangesAsync();
+                await BroadcastShipmentUpdatedAsync(shipment.Order, "ShipmentUpdated");
+                return true;
+            }
 
             if (newStatus is ShipmentStatus.Delivered or ShipmentStatus.Shipped)
                 throw new InvalidOperationException(
@@ -665,8 +705,13 @@ namespace GlocalCart.API.Services.Implementations
             await _deliveryHub.Clients.Groups(targetGroups).SendAsync("OrderUpdated", payload);
         }
 
-        private async Task<List<int>> GetNearbyShipperIdsAsync(GeoPoint pickupCoordinate)
+        private async Task<List<int>> GetNearbyShipperIdsAsync(GeoPoint? pickupCoordinate, GeoPoint? deliveryCoordinate)
         {
+            if (pickupCoordinate == null && deliveryCoordinate == null)
+            {
+                return new List<int>();
+            }
+
             var cutoff = DateTime.UtcNow.Subtract(ShipperLocationFreshness);
             var locations = await _db.ShipperLocations
                 .Include(l => l.Shipper)
@@ -677,15 +722,26 @@ namespace GlocalCart.API.Services.Implementations
                 .Where(location =>
                 {
                     var shipperCoordinate = new GeoPoint(location.Latitude, location.Longitude);
-                    var distanceMeters = CalculateDistanceMeters(shipperCoordinate, pickupCoordinate);
-                    return distanceMeters.HasValue && distanceMeters.Value <= MaxAvailablePickupDistanceMeters;
+                    if (pickupCoordinate.HasValue)
+                    {
+                        return IsWithinAvailableRadius(shipperCoordinate, pickupCoordinate.Value);
+                    }
+
+                    return deliveryCoordinate.HasValue
+                        && IsWithinAvailableRadius(shipperCoordinate, deliveryCoordinate.Value);
                 })
                 .Select(location => location.ShipperId)
                 .Distinct()
                 .ToList();
         }
 
-        private static GeoPoint? ResolveAddressCoordinate(UserAddress? address)
+        private static bool IsWithinAvailableRadius(GeoPoint shipperCoordinate, GeoPoint endpoint)
+        {
+            var distanceMeters = CalculateDistanceMeters(shipperCoordinate, endpoint);
+            return distanceMeters.HasValue && distanceMeters.Value <= MaxAvailableEndpointDistanceMeters;
+        }
+
+        private static GeoPoint? ResolveAddressCoordinate(UserAddress? address, bool allowCityFallback = true)
         {
             if (address == null) return null;
 
@@ -699,21 +755,38 @@ namespace GlocalCart.API.Services.Implementations
                 || combined.Contains("saigon");
             if (isHoChiMinh)
             {
-                var isDistrict1 = combined.Contains("quan 1")
-                    || combined.Contains("district 1")
-                    || compact.Contains("q1");
+                var isDistrict1 = HasDistrict(combined, compact, 1);
                 if (isDistrict1 && combined.Contains("le loi"))
                 {
                     return CoordinateOnLeLoiDistrict1(ReadLeadingNumber(address.StreetAddress));
                 }
 
                 if (isDistrict1) return new GeoPoint(10.7758, 106.7019);
-                if (combined.Contains("quan 3") || compact.Contains("q3")) return new GeoPoint(10.7840, 106.6848);
-                if (combined.Contains("quan 7") || compact.Contains("q7")) return new GeoPoint(10.7325, 106.7219);
-                if (combined.Contains("quan 10") || compact.Contains("q10")) return new GeoPoint(10.7731, 106.6679);
-                if (combined.Contains("thu duc")) return new GeoPoint(10.8494, 106.7537);
+                if (HasDistrict(combined, compact, 2)) return new GeoPoint(10.7873, 106.7498);
+                if (HasDistrict(combined, compact, 3)) return new GeoPoint(10.7840, 106.6848);
+                if (HasDistrict(combined, compact, 4)) return new GeoPoint(10.7578, 106.7050);
+                if (HasDistrict(combined, compact, 5)) return new GeoPoint(10.7540, 106.6634);
+                if (HasDistrict(combined, compact, 6)) return new GeoPoint(10.7460, 106.6358);
+                if (HasDistrict(combined, compact, 7)) return new GeoPoint(10.7325, 106.7219);
+                if (HasDistrict(combined, compact, 8)) return new GeoPoint(10.7247, 106.6286);
+                if (HasDistrict(combined, compact, 9)) return new GeoPoint(10.8428, 106.8287);
+                if (HasDistrict(combined, compact, 10)) return new GeoPoint(10.7731, 106.6679);
+                if (HasDistrict(combined, compact, 11)) return new GeoPoint(10.7629, 106.6501);
+                if (HasDistrict(combined, compact, 12)) return new GeoPoint(10.8672, 106.6413);
+                if (ContainsAny(combined, "binh thanh")) return new GeoPoint(10.8106, 106.7091);
+                if (ContainsAny(combined, "phu nhuan")) return new GeoPoint(10.7993, 106.6805);
+                if (ContainsAny(combined, "tan binh")) return new GeoPoint(10.8016, 106.6522);
+                if (ContainsAny(combined, "tan phu")) return new GeoPoint(10.7916, 106.6273);
+                if (ContainsAny(combined, "go vap", "govap")) return new GeoPoint(10.8387, 106.6653);
+                if (ContainsAny(combined, "binh tan")) return new GeoPoint(10.7653, 106.6038);
+                if (ContainsAny(combined, "thu duc")) return new GeoPoint(10.8494, 106.7537);
+                if (ContainsAny(combined, "nha be", "nhabe")) return new GeoPoint(10.6953, 106.7405);
+                if (ContainsAny(combined, "binh chanh", "binhchanh")) return new GeoPoint(10.6874, 106.5939);
+                if (ContainsAny(combined, "hoc mon", "hocmon")) return new GeoPoint(10.8830, 106.5866);
+                if (ContainsAny(combined, "cu chi", "cuchi")) return new GeoPoint(10.9739, 106.4933);
+                if (ContainsAny(combined, "can gio", "cangio")) return new GeoPoint(10.4112, 106.9547);
 
-                return new GeoPoint(10.7769, 106.7009);
+                return allowCityFallback ? new GeoPoint(10.7769, 106.7009) : null;
             }
 
             if (combined.Contains("ha noi") || combined.Contains("hanoi"))
@@ -722,20 +795,41 @@ namespace GlocalCart.API.Services.Implementations
                 if (combined.Contains("ba dinh")) return new GeoPoint(21.0367, 105.8342);
                 if (combined.Contains("dong da")) return new GeoPoint(21.0181, 105.8293);
                 if (combined.Contains("cau giay")) return new GeoPoint(21.0362, 105.7906);
+                if (combined.Contains("hai ba trung")) return new GeoPoint(21.0091, 105.8607);
+                if (combined.Contains("thanh xuan")) return new GeoPoint(20.9935, 105.8056);
+                if (combined.Contains("ha dong")) return new GeoPoint(20.9714, 105.7788);
+                if (combined.Contains("long bien")) return new GeoPoint(21.0479, 105.8836);
+                if (combined.Contains("tay ho")) return new GeoPoint(21.0684, 105.8230);
+                if (combined.Contains("nam tu liem")) return new GeoPoint(21.0122, 105.7608);
+                if (combined.Contains("bac tu liem")) return new GeoPoint(21.0718, 105.7747);
 
-                return new GeoPoint(21.0278, 105.8342);
+                return allowCityFallback ? new GeoPoint(21.0278, 105.8342) : null;
             }
 
             if (combined.Contains("da nang") || combined.Contains("danang"))
             {
                 if (combined.Contains("hai chau")) return new GeoPoint(16.0678, 108.2208);
                 if (combined.Contains("son tra")) return new GeoPoint(16.1065, 108.2529);
+                if (combined.Contains("thanh khe")) return new GeoPoint(16.0704, 108.1906);
+                if (combined.Contains("ngu hanh son")) return new GeoPoint(16.0168, 108.2530);
+                if (combined.Contains("cam le")) return new GeoPoint(16.0155, 108.2038);
+                if (combined.Contains("lien chieu")) return new GeoPoint(16.0718, 108.1507);
 
-                return new GeoPoint(16.0471, 108.2068);
+                return allowCityFallback ? new GeoPoint(16.0471, 108.2068) : null;
             }
 
             return null;
         }
+
+        private static bool HasDistrict(string combined, string compact, int districtNumber)
+        {
+            var number = districtNumber.ToString(CultureInfo.InvariantCulture);
+            return Regex.IsMatch(combined, $@"(^|[^a-z0-9])(quan|q|district)\.?\s*{number}([^0-9]|$)")
+                || Regex.IsMatch(compact, $@"(quan|q|district){number}([^0-9]|$)");
+        }
+
+        private static bool ContainsAny(string value, params string[] tokens) =>
+            tokens.Any(value.Contains);
 
         private static GeoPoint CoordinateOnLeLoiDistrict1(int? houseNumber)
         {
@@ -828,6 +922,110 @@ namespace GlocalCart.API.Services.Implementations
                 .Distinct()
                 .Select(sellerId => DeliveryHub.UserGroup(sellerId))
                 .ToListAsync();
+        }
+
+        private async Task<bool> IsAdminAsync(int userId)
+        {
+            return await _db.Users.AnyAsync(u => u.Id == userId && u.Role == UserRole.Admin);
+        }
+
+        private static void SyncShipmentForOrderStatus(Order order, OrderStatus newStatus)
+        {
+            var now = DateTime.UtcNow;
+            if (newStatus == OrderStatus.Complete && order.Payment != null)
+            {
+                order.Payment.Status = PaymentStatus.Completed;
+                order.Payment.UpdatedAt = now;
+            }
+
+            if (order.Shipment == null)
+                return;
+
+            if (newStatus == OrderStatus.Shipped && order.Shipment.Status != ShipmentStatus.Delivered)
+            {
+                order.Shipment.Status = ShipmentStatus.Shipped;
+                order.Shipment.PickedUpAt ??= now;
+            }
+            else if (newStatus == OrderStatus.Complete)
+            {
+                order.Shipment.Status = ShipmentStatus.Delivered;
+                order.Shipment.DeliveredAt ??= now;
+            }
+        }
+
+        private void ApplyAdminShipmentStatus(Shipment shipment, ShipmentStatus newStatus, string? note)
+        {
+            var previousOrderStatus = shipment.Order.Status;
+            var now = DateTime.UtcNow;
+
+            shipment.Status = newStatus;
+
+            if (newStatus == ShipmentStatus.Accepted)
+            {
+                shipment.AcceptedAt ??= now;
+            }
+            else if (newStatus == ShipmentStatus.Shipped)
+            {
+                shipment.PickedUpAt ??= now;
+                shipment.Order.Status = OrderStatus.Shipped;
+            }
+            else if (newStatus == ShipmentStatus.Arrived)
+            {
+                shipment.ArrivedAt ??= now;
+                shipment.Order.Status = OrderStatus.Shipped;
+            }
+            else if (newStatus == ShipmentStatus.Delivered)
+            {
+                shipment.DeliveredAt ??= now;
+                shipment.Order.Status = OrderStatus.Complete;
+                if (shipment.Order.Payment != null)
+                {
+                    shipment.Order.Payment.Status = PaymentStatus.Completed;
+                    shipment.Order.Payment.UpdatedAt = now;
+                }
+            }
+
+            _db.ShipmentLogs.Add(new ShipmentLog
+            {
+                ShipmentId = shipment.Id,
+                Status = newStatus,
+                Note = note ?? $"Admin cap nhat van don: {newStatus}"
+            });
+
+            if (shipment.Order.Status != previousOrderStatus)
+            {
+                _db.OrderLogs.Add(new OrderLog
+                {
+                    OrderId = shipment.OrderId,
+                    Status = shipment.Order.Status,
+                    Note = note ?? $"Admin cap nhat theo van don: {newStatus}"
+                });
+            }
+        }
+
+        private static bool IsDeliveredOrComplete(Order order)
+        {
+            return order.Status == OrderStatus.Complete
+                || order.Shipment?.Status == ShipmentStatus.Delivered;
+        }
+
+        private static void CancelActiveShipment(Shipment? shipment)
+        {
+            if (shipment == null || shipment.Status == ShipmentStatus.Delivered)
+                return;
+
+            shipment.Status = ShipmentStatus.OnHold;
+        }
+
+        private static void CancelOrRefundPayment(Payment? payment)
+        {
+            if (payment == null)
+                return;
+
+            payment.Status = payment.Status == PaymentStatus.Completed
+                ? PaymentStatus.Refunded
+                : PaymentStatus.Canceled;
+            payment.UpdatedAt = DateTime.UtcNow;
         }
 
         private static OrderResponseDto MapToDto(Order o) => new()

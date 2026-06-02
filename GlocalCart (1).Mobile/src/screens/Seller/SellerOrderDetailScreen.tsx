@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -22,6 +24,12 @@ import {
 
 const getOrderItems = (order: any) => order?.items || order?.orderItems || [];
 const currency = (value: any) => `${Number(value || 0).toLocaleString('vi-VN')}đ`;
+
+const canCancelOrder = (order: any) => {
+  return order?.status !== 'Canceled'
+    && order?.status !== 'Complete'
+    && order?.shipment?.status !== 'Delivered';
+};
 
 const formatTime = (date?: string | null) => {
   if (!date) return 'Chưa cập nhật';
@@ -51,6 +59,7 @@ export default function SellerOrderDetailScreen({ navigation, route }: any): Rea
   const [order, setOrder] = useState<any>(route?.params?.order || null);
   const [loading, setLoading] = useState(!route?.params?.order);
   const [refreshing, setRefreshing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const items = useMemo(() => getOrderItems(order), [order]);
   const statusLabel = order ? getOrderDisplayLabel(order.status, order.shipment?.status) : '';
@@ -94,6 +103,48 @@ export default function SellerOrderDetailScreen({ navigation, route }: any): Rea
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrder();
+  };
+
+  const cancelOrder = async (reason: string) => {
+    if (!reason.trim()) {
+      if (Platform.OS === 'web') window.alert('Ly do huy don khong duoc de trong.');
+      else Alert.alert('Loi', 'Ly do huy don khong duoc de trong.');
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      await apiClient.patch(`/orders/${orderId}/reject`, { reason });
+      if (Platform.OS === 'web') window.alert('Da huy don hang.');
+      else Alert.alert('Thanh cong', 'Da huy don hang.');
+      fetchOrder();
+    } catch (error: any) {
+      if (Platform.OS === 'web') window.alert(error.message || 'Khong the huy don hang.');
+      else Alert.alert('Loi', error.message || 'Khong the huy don hang.');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleCancelOrder = () => {
+    if (Platform.OS === 'web') {
+      const reason = window.prompt('Nhap ly do huy don:');
+      if (reason !== null) cancelOrder(reason);
+      return;
+    }
+
+    Alert.prompt(
+      'Huy don hang',
+      'Nhap ly do huy don:',
+      [
+        { text: 'Huy', style: 'cancel' },
+        {
+          text: 'Huy don',
+          style: 'destructive',
+          onPress: (reason?: string) => cancelOrder(reason || ''),
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -146,6 +197,16 @@ export default function SellerOrderDetailScreen({ navigation, route }: any): Rea
             <Text style={styles.totalLabel}>Tổng thu</Text>
             <Text style={styles.totalValue}>{currency(order.totalAmount)}</Text>
           </View>
+          {canCancelOrder(order) && (
+            <TouchableOpacity
+              style={[styles.cancelBtn, cancelling && styles.cancelBtnDisabled]}
+              onPress={handleCancelOrder}
+              disabled={cancelling}
+            >
+              <Ionicons name="close-circle-outline" size={18} color={colors.white} />
+              <Text style={styles.cancelBtnText}>{cancelling ? 'Dang huy...' : 'Huy don'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.card}>
@@ -268,6 +329,18 @@ const styles = StyleSheet.create({
   },
   totalLabel: { color: colors.textSecondary, fontSize: 14 },
   totalValue: { color: colors.primary, fontSize: 20, fontWeight: '900' },
+  cancelBtn: {
+    marginTop: 14,
+    minHeight: 44,
+    borderRadius: 6,
+    backgroundColor: colors.danger,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  cancelBtnDisabled: { opacity: 0.65 },
+  cancelBtnText: { color: colors.white, fontSize: 14, fontWeight: '800' },
   card: {
     backgroundColor: colors.white,
     borderRadius: borderRadius.md,

@@ -13,6 +13,7 @@ public static class DatabaseInitializer
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
         await EnsureChatTablesAsync(db);
+        await EnsureFollowAndFavoriteTablesAsync(db);
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
@@ -77,6 +78,49 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ChatMessages_Conversa
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ChatMessages_SenderId' AND object_id = OBJECT_ID(N'[dbo].[ChatMessages]'))
     CREATE INDEX [IX_ChatMessages_SenderId] ON [dbo].[ChatMessages] ([SenderId]);
+");
+    }
+
+    private static Task EnsureFollowAndFavoriteTablesAsync(AppDbContext db)
+    {
+        return db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'[dbo].[ShopFollows]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[ShopFollows] (
+        [Id] int NOT NULL IDENTITY,
+        [UserId] int NOT NULL,
+        [ShopId] int NOT NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        CONSTRAINT [PK_ShopFollows] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_ShopFollows_AspNetUsers_ShopId] FOREIGN KEY ([ShopId]) REFERENCES [dbo].[AspNetUsers] ([Id]),
+        CONSTRAINT [FK_ShopFollows_AspNetUsers_UserId] FOREIGN KEY ([UserId]) REFERENCES [dbo].[AspNetUsers] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF OBJECT_ID(N'[dbo].[ProductFavorites]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[ProductFavorites] (
+        [Id] int NOT NULL IDENTITY,
+        [UserId] int NOT NULL,
+        [ProductId] int NOT NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        CONSTRAINT [PK_ProductFavorites] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_ProductFavorites_AspNetUsers_UserId] FOREIGN KEY ([UserId]) REFERENCES [dbo].[AspNetUsers] ([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_ProductFavorites_Products_ProductId] FOREIGN KEY ([ProductId]) REFERENCES [dbo].[Products] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ShopFollows_ShopId' AND object_id = OBJECT_ID(N'[dbo].[ShopFollows]'))
+    CREATE INDEX [IX_ShopFollows_ShopId] ON [dbo].[ShopFollows] ([ShopId]);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ShopFollows_UserId_ShopId' AND object_id = OBJECT_ID(N'[dbo].[ShopFollows]'))
+    CREATE UNIQUE INDEX [IX_ShopFollows_UserId_ShopId] ON [dbo].[ShopFollows] ([UserId], [ShopId]);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ProductFavorites_ProductId' AND object_id = OBJECT_ID(N'[dbo].[ProductFavorites]'))
+    CREATE INDEX [IX_ProductFavorites_ProductId] ON [dbo].[ProductFavorites] ([ProductId]);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ProductFavorites_UserId_ProductId' AND object_id = OBJECT_ID(N'[dbo].[ProductFavorites]'))
+    CREATE UNIQUE INDEX [IX_ProductFavorites_UserId_ProductId] ON [dbo].[ProductFavorites] ([UserId], [ProductId]);
 ");
     }
 }

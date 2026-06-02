@@ -237,7 +237,11 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<string> UpdateOrderStatusAsync(int id, UpdateOrderStatusDto dto)
         {
-            var order = await _db.Orders.FindAsync(id)
+            var order = await _db.Orders
+                .Include(o => o.OrderItems).ThenInclude(oi => oi.Product)
+                .Include(o => o.Payment)
+                .Include(o => o.Shipment)
+                .FirstOrDefaultAsync(o => o.Id == id)
                 ?? throw new KeyNotFoundException("Khong tim thay don hang.");
 
             if (!Enum.TryParse<OrderStatus>(dto.Status, true, out var newStatus))
@@ -245,6 +249,20 @@ namespace GlocalCart.API.Services.Implementations
                 throw new ArgumentException("Trang thai khong hop le.");
             }
 
+            if (newStatus == OrderStatus.Canceled && order.Status != OrderStatus.Canceled)
+            {
+                if (!IsDeliveredOrComplete(order))
+                    RestoreOrderStock(order);
+
+                CancelActiveShipment(order.Shipment);
+                CancelOrRefundPayment(order.Payment);
+            }
+            else if (newStatus == OrderStatus.Complete)
+            {
+                CompletePayment(order.Payment);
+            }
+
+            SyncShipmentForOrderStatus(order, newStatus);
             order.Status = newStatus;
             _db.OrderLogs.Add(new OrderLog
             {
@@ -346,6 +364,66 @@ namespace GlocalCart.API.Services.Implementations
                 ByCategory = byCategory,
                 ByProduct = byProduct
             };
+        }
+
+        private static bool IsDeliveredOrComplete(Order order)
+        {
+            return order.Status == OrderStatus.Complete
+                || order.Shipment?.Status == ShipmentStatus.Delivered;
+        }
+
+        private static void RestoreOrderStock(Order order)
+        {
+            foreach (var item in order.OrderItems)
+            {
+                item.Product.AvailableItemCount += item.Quantity;
+            }
+        }
+
+        private static void CancelActiveShipment(Shipment? shipment)
+        {
+            if (shipment == null || shipment.Status == ShipmentStatus.Delivered)
+                return;
+
+            shipment.Status = ShipmentStatus.OnHold;
+        }
+
+        private static void CancelOrRefundPayment(Payment? payment)
+        {
+            if (payment == null)
+                return;
+
+            payment.Status = payment.Status == PaymentStatus.Completed
+                ? PaymentStatus.Refunded
+                : PaymentStatus.Canceled;
+            payment.UpdatedAt = DateTime.UtcNow;
+        }
+
+        private static void CompletePayment(Payment? payment)
+        {
+            if (payment == null)
+                return;
+
+            payment.Status = PaymentStatus.Completed;
+            payment.UpdatedAt = DateTime.UtcNow;
+        }
+
+        private static void SyncShipmentForOrderStatus(Order order, OrderStatus newStatus)
+        {
+            if (order.Shipment == null)
+                return;
+
+            var now = DateTime.UtcNow;
+            if (newStatus == OrderStatus.Shipped && order.Shipment.Status != ShipmentStatus.Delivered)
+            {
+                order.Shipment.Status = ShipmentStatus.Shipped;
+                order.Shipment.PickedUpAt ??= now;
+            }
+            else if (newStatus == OrderStatus.Complete)
+            {
+                order.Shipment.Status = ShipmentStatus.Delivered;
+                order.Shipment.DeliveredAt ??= now;
+            }
         }
     }
 }

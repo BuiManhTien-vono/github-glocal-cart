@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import apiClient from '../../services/api/apiClient';
 import { colors, spacing, fontSize, borderRadius, shadow } from '../../theme/colors';
+import { showLoginRequired } from '../../utils/loginRequired';
 
 const { width } = Dimensions.get('window');
 
@@ -37,6 +38,8 @@ const APP_VERSION = '1.0.0';
 export default function ProfileScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { user, updateUser, logout, isLoggedIn, setGuestMode } = useAuth();
+  const role = String(user?.role || '').toLowerCase();
+  const isAdmin = role === 'admin';
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [supportModal, setSupportModal] = useState<'help' | 'contact' | 'blog' | 'about' | null>(null);
@@ -73,7 +76,7 @@ export default function ProfileScreen({ navigation }: any) {
 
   const openAdminSupportChat = () => {
     if (!isLoggedIn) {
-      Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để chat với CSKH.');
+      showLoginRequired(() => setGuestMode(false), 'Vui lòng đăng nhập để chat với CSKH.');
       return;
     }
     setSupportModal(null);
@@ -172,7 +175,7 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const openEditHelpFaq = (index: number) => {
-    if (user?.role !== 'Admin') return;
+    if (!isAdmin) return;
     const faq = helpFaqs[index];
     if (!faq) return;
     setNewFaqQuestion(faq[0]);
@@ -211,7 +214,7 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const openEditBlogPost = (index: number) => {
-    if (user?.role !== 'Admin') return;
+    if (!isAdmin) return;
     const post = blogPosts[index];
     if (!post) return;
     setNewBlogTitle(post[0]);
@@ -264,18 +267,11 @@ export default function ProfileScreen({ navigation }: any) {
     { icon: 'location-outline', label: 'Sổ Địa Chỉ', screen: 'Addresses', color: '#2563EB', bg: '#EFF6FF', requireAuth: true },
     { icon: 'card-outline', label: 'Tài khoản / Thẻ', screen: 'PaymentMethods', color: '#16A34A', bg: '#ECFDF5', requireAuth: true },
   ];
-  const showBuyerUtilities = user?.role !== 'Admin' && !user?.isSeller;
+  const showBuyerUtilities = !isAdmin && !user?.isSeller;
 
   const handleShortcutPress = (item: any) => {
     if (item.requireAuth && !isLoggedIn) {
-      Alert.alert(
-        'Yêu cầu đăng nhập',
-        'Bạn cần đăng nhập để sử dụng tính năng này.',
-        [
-          { text: 'Để sau', style: 'cancel' },
-          { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-        ]
-      );
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để sử dụng tính năng này.');
       return;
     }
 
@@ -346,10 +342,10 @@ export default function ProfileScreen({ navigation }: any) {
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>{user?.fullName || user?.userName}</Text>
                 <Text style={styles.profileEmail}>{user?.email}</Text>
-                <View style={styles.roleBadgeRow}>
+                <View style={[styles.roleBadgeRow, isAdmin && styles.hiddenAdminBadge]}>
                   <View style={styles.roleBadge}>
                     <Text style={styles.roleText}>
-                      {user?.role === 'Admin' ? '👑 Admin' : user?.isSeller ? '🏪 Seller' : '🛒 Member'}
+                      {isAdmin ? '👑 Admin' : user?.isSeller ? '🏪 Seller' : '🛒 Member'}
                     </Text>
                   </View>
                 </View>
@@ -393,7 +389,7 @@ export default function ProfileScreen({ navigation }: any) {
           )}
         </View>
 
-        {!user?.isSeller && (
+        {!isAdmin && !user?.isSeller && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Đơn Mua</Text>
@@ -401,14 +397,7 @@ export default function ProfileScreen({ navigation }: any) {
                 style={styles.viewAllBtn}
                 onPress={() => {
                   if (!isLoggedIn) {
-                    Alert.alert(
-                      'Yêu cầu đăng nhập',
-                      'Vui lòng đăng nhập để tiếp tục.',
-                      [
-                        { text: 'Để sau', style: 'cancel' },
-                        { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-                      ]
-                    );
+                    showLoginRequired(() => setGuestMode(false), 'Vui lòng đăng nhập để tiếp tục.');
                     return;
                   }
                   navigation.navigate('MyOrders', { activeTab: 'Tất cả' });
@@ -422,10 +411,7 @@ export default function ProfileScreen({ navigation }: any) {
               {orderStatusItems.map((item, i) => (
                 <TouchableOpacity key={i} style={styles.orderStatusItem} onPress={() => {
                   if (!isLoggedIn) {
-                    Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để xem đơn hàng.', [
-                      { text: 'Để sau', style: 'cancel' },
-                      { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-                    ]);
+                    showLoginRequired(() => setGuestMode(false), 'Vui lòng đăng nhập để xem đơn hàng.');
                     return;
                   }
                   navigation.navigate('MyOrders', { activeTab: item.label });
@@ -480,7 +466,7 @@ export default function ProfileScreen({ navigation }: any) {
               style={[styles.supportItem, i === 0 && { marginTop: 8 }]}
               activeOpacity={0.7}
               onPress={() => {
-                if (user?.role === 'Admin' && item.modal === 'contact') {
+                if (isAdmin && item.modal === 'contact') {
                   navigation.navigate('ChatList');
                   return;
                 }
@@ -526,7 +512,7 @@ export default function ProfileScreen({ navigation }: any) {
                     {supportModal === 'contact' ? 'Chọn kênh hỗ trợ phù hợp với bạn' : supportModal === 'blog' ? 'Tin mới và mẹo mua sắm' : supportModal === 'about' ? `GlocalCart v${APP_VERSION}` : 'Các câu hỏi thường gặp'}
                   </Text>
                 </View>
-                {user?.role === 'Admin' && (supportModal === 'help' || supportModal === 'blog') && (
+                {isAdmin && (supportModal === 'help' || supportModal === 'blog') && (
                   <TouchableOpacity
                     style={styles.supportAddBtn}
                     onPress={() => {
@@ -556,13 +542,13 @@ export default function ProfileScreen({ navigation }: any) {
                     <TouchableOpacity
                       key={`${title}-${index}`}
                       style={styles.faqItem}
-                      activeOpacity={user?.role === 'Admin' ? 0.75 : 1}
+                      activeOpacity={isAdmin ? 0.75 : 1}
                       onPress={() => openEditHelpFaq(index)}
-                      disabled={user?.role !== 'Admin'}
+                      disabled={!isAdmin}
                     >
                       <View style={styles.faqTitleRow}>
                         <Text style={styles.faqTitle}>{title}</Text>
-                        {user?.role === 'Admin' && <Ionicons name="create-outline" size={17} color={colors.primary} />}
+                        {isAdmin && <Ionicons name="create-outline" size={17} color={colors.primary} />}
                       </View>
                       <Text style={styles.faqBody}>{body}</Text>
                     </TouchableOpacity>
@@ -602,15 +588,15 @@ export default function ProfileScreen({ navigation }: any) {
                     <TouchableOpacity
                       key={`${title}-${index}`}
                       style={styles.blogItem}
-                      activeOpacity={user?.role === 'Admin' ? 0.75 : 1}
+                      activeOpacity={isAdmin ? 0.75 : 1}
                       onPress={() => openEditBlogPost(index)}
-                      disabled={user?.role !== 'Admin'}
+                      disabled={!isAdmin}
                     >
                       <View style={styles.blogDot} />
                       <View style={{ flex: 1 }}>
                         <View style={styles.faqTitleRow}>
                           <Text style={styles.faqTitle}>{title}</Text>
-                          {user?.role === 'Admin' && <Ionicons name="create-outline" size={17} color={colors.primary} />}
+                          {isAdmin && <Ionicons name="create-outline" size={17} color={colors.primary} />}
                         </View>
                         <Text style={styles.faqBody}>{body}</Text>
                       </View>
@@ -841,6 +827,9 @@ const styles = StyleSheet.create({
   roleBadgeRow: {
     flexDirection: 'row',
     marginTop: 6,
+  },
+  hiddenAdminBadge: {
+    display: 'none',
   },
   roleBadge: {
     backgroundColor: 'rgba(255,255,255,0.2)',

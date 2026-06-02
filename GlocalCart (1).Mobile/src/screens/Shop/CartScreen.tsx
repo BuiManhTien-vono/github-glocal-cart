@@ -15,6 +15,7 @@ import { resolveProductImageUrl } from '../../utils/imageUtils';
 import { useChatStore } from '../../store/useChatStore';
 import { ChatBadge } from '../../components/common/ChatBadge';
 import { CartBadge } from '../../components/common/CartBadge';
+import { showLoginRequired } from '../../utils/loginRequired';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -186,19 +187,7 @@ export default function CartScreen() {
       return;
     }
     if (!isLoggedIn) {
-      if (Platform.OS === 'web') {
-        const goLogin = window.confirm('Bạn cần đăng nhập để tiến hành thanh toán.\n\nBấm OK để đăng nhập.');
-        if (goLogin) setGuestMode(false);
-      } else {
-        Alert.alert(
-          'Yêu cầu đăng nhập',
-          'Bạn cần đăng nhập để tiến hành thanh toán.',
-          [
-            { text: 'Để sau', style: 'cancel' },
-            { text: 'Đăng nhập', onPress: () => setGuestMode(false) },
-          ]
-        );
-      }
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để tiến hành thanh toán.');
       return;
     }
     navigation.navigate('Checkout', { selectedItems: items.filter(i => selectedIds.includes(i.id)) });
@@ -279,7 +268,10 @@ export default function CartScreen() {
             <Text style={styles.editBtnText}>{isGlobalEdit ? 'Xong' : 'Sửa'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.chatBtn} onPress={() => {
-            if (!isLoggedIn) { Alert.alert('Yêu cầu đăng nhập', 'Bạn cần đăng nhập để dùng Chat.', [{ text: 'OK', onPress: () => setGuestMode(false) }]); return; }
+            if (!isLoggedIn) {
+              showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để dùng Chat.');
+              return;
+            }
             navigation.navigate('ChatList');
           }}>
             <Ionicons name="chatbubble-ellipses-outline" size={24} color="#EE4D2D" />
