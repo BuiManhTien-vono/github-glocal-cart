@@ -1,9 +1,17 @@
-import { Image } from 'expo-image';
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import apiClient from '../../services/api/apiClient';
-import { colors } from '../../theme/colors';
+import { Image } from "expo-image";
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  TouchableOpacity,
+  ScrollView,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import apiClient from "../../services/api/apiClient";
+import { colors } from "../../theme/colors";
 
 interface ReviewItem {
   id: number;
@@ -23,18 +31,22 @@ interface ReviewSectionProps {
   navigation?: any;
 }
 
-export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, productName, navigation }) => {
+export const ReviewSection: React.FC<ReviewSectionProps> = ({
+  productId,
+  productName,
+  navigation,
+}) => {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalItems, setTotalItems] = useState(0);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState("all");
 
   const FILTERS = [
-    { key: 'all', label: 'Tất cả' },
-    { key: '5', label: '5 Sao' },
-    { key: '4', label: '4 Sao' },
-    { key: 'image', label: 'Có hình ảnh' },
-    { key: 'comment', label: 'Có bình luận' },
+    { key: "all", label: "Tất cả" },
+    { key: "5", label: "5 Sao" },
+    { key: "4", label: "4 Sao" },
+    { key: "image", label: "Có hình ảnh" },
+    { key: "comment", label: "Có bình luận" },
   ];
 
   useEffect(() => {
@@ -48,27 +60,34 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, product
       if (res && res.items) {
         const enhancedReviews = res.items.map((item: any, index: number) => ({
           ...item,
-          comment: item.review || item.comment || '',
+          comment: item.review || item.comment || "",
           avatar: `https://i.pravatar.cc/150?u=${item.userId}`,
-          variant: 'Phân loại: Mặc định',
-          images: index % 2 === 0 ? ['https://via.placeholder.com/150', 'https://via.placeholder.com/150'] : []
+          variant: "Phân loại: Mặc định",
+          images:
+            index % 2 === 0
+              ? [
+                  "https://via.placeholder.com/150",
+                  "https://via.placeholder.com/150",
+                ]
+              : [],
         }));
         setReviews(enhancedReviews);
         setTotalItems(res.totalCount || res.totalItems || 0);
       }
     } catch (error) {
-      console.log('fetchReviews error:', error);
+      console.log("fetchReviews error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filteredReviews = reviews.filter(r => {
-    if (activeFilter === 'all') return true;
-    if (activeFilter === '5') return r.rating === 5;
-    if (activeFilter === '4') return r.rating === 4;
-    if (activeFilter === 'image') return r.images && r.images.length > 0;
-    if (activeFilter === 'comment') return r.comment && r.comment.trim().length > 0;
+  const filteredReviews = reviews.filter((r) => {
+    if (activeFilter === "all") return true;
+    if (activeFilter === "5") return r.rating === 5;
+    if (activeFilter === "4") return r.rating === 4;
+    if (activeFilter === "image") return r.images && r.images.length > 0;
+    if (activeFilter === "comment")
+      return r.comment && r.comment.trim().length > 0;
     return true;
   });
 
@@ -76,14 +95,23 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, product
     const stars = [];
     for (let i = 1; i <= 5; i++) {
       stars.push(
-        <Ionicons key={i} name={i <= rating ? 'star' : 'star-outline'} size={size} color="#FFD700" />
+        <Ionicons
+          key={i}
+          name={i <= rating ? "star" : "star-outline"}
+          size={size}
+          color="#FFD700"
+        />,
       );
     }
-    return <View style={{ flexDirection: 'row' }}>{stars}</View>;
+    return <View style={{ flexDirection: "row" }}>{stars}</View>;
   };
 
   if (isLoading) {
-    return <View style={styles.center}><ActivityIndicator size="small" color={colors.primary} /></View>;
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="small" color={colors.primary} />
+      </View>
+    );
   }
 
   return (
@@ -92,7 +120,13 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, product
         <Text style={styles.title}>Đánh giá sản phẩm</Text>
         <TouchableOpacity
           style={styles.viewAllBtn}
-          onPress={() => navigation?.navigate('AllReviews', { productId, totalItems, productName })}
+          onPress={() =>
+            navigation?.navigate("AllReviews", {
+              productId,
+              totalItems,
+              productName,
+            })
+          }
         >
           <Text style={styles.viewAllText}>Xem tất cả ({totalItems})</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
@@ -101,55 +135,81 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, product
 
       <View style={styles.overviewContainer}>
         <View style={styles.ratingScore}>
-          <Text style={styles.scoreText}>4.9</Text>
+          <Text style={styles.scoreText}>5</Text>
           <Text style={styles.scoreTotal}>/ 5</Text>
         </View>
-        <View style={styles.starsWrap}>
-          {renderStars(5, 18)}
-        </View>
+        <View style={styles.starsWrap}>{renderStars(5, 18)}</View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-        {FILTERS.map(f => (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
+      >
+        {FILTERS.map((f) => (
           <TouchableOpacity
             key={f.key}
-            style={[styles.filterChip, activeFilter === f.key && styles.filterChipActive]}
+            style={[
+              styles.filterChip,
+              activeFilter === f.key && styles.filterChipActive,
+            ]}
             onPress={() => setActiveFilter(f.key)}
           >
-            <Text style={[styles.filterText, activeFilter === f.key && styles.filterTextActive]}>{f.label}</Text>
+            <Text
+              style={[
+                styles.filterText,
+                activeFilter === f.key && styles.filterTextActive,
+              ]}
+            >
+              {f.label}
+            </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
       {filteredReviews.length === 0 ? (
-        <Text style={styles.emptyText}>Chưa có đánh giá nào cho sản phẩm này.</Text>
+        <Text style={styles.emptyText}>
+          Chưa có đánh giá nào cho sản phẩm này.
+        </Text>
       ) : (
         <View style={styles.listContainer}>
           {filteredReviews.slice(0, 2).map((item) => (
-
             <View key={item.id} style={styles.reviewItem}>
               <Image source={{ uri: item.avatar }} style={styles.avatar} />
               <View style={styles.reviewContent}>
                 <Text style={styles.userName}>{item.userName}</Text>
                 {renderStars(item.rating)}
-                
+
                 <View style={styles.metaRow}>
-                  <Text style={styles.metaText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                  <Text style={styles.metaText}>
+                    {new Date(item.createdAt).toLocaleDateString()}
+                  </Text>
                   <Text style={styles.metaText}> | {item.variant}</Text>
                 </View>
-                
-                {item.comment ? <Text style={styles.comment}>{item.comment}</Text> : null}
-                
+
+                {item.comment ? (
+                  <Text style={styles.comment}>{item.comment}</Text>
+                ) : null}
+
                 {item.images && item.images.length > 0 && (
                   <View style={styles.reviewImagesContainer}>
                     {item.images.map((img, idx) => (
-                      <Image key={idx} source={{ uri: img }} style={styles.reviewImage} />
+                      <Image
+                        key={idx}
+                        source={{ uri: img }}
+                        style={styles.reviewImage}
+                      />
                     ))}
                   </View>
                 )}
-                
+
                 <View style={styles.helpfulRow}>
-                  <Ionicons name="thumbs-up-outline" size={16} color={colors.textSecondary} />
+                  <Ionicons
+                    name="thumbs-up-outline"
+                    size={16}
+                    color={colors.textSecondary}
+                  />
                   <Text style={styles.helpfulText}>Hữu ích?</Text>
                 </View>
               </View>
@@ -163,25 +223,25 @@ export const ReviewSection: React.FC<ReviewSectionProps> = ({ productId, product
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     marginTop: 8,
     paddingTop: 16,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     marginBottom: 12,
   },
   title: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.text,
   },
   viewAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   viewAllText: {
     fontSize: 14,
@@ -189,19 +249,19 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   overviewContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     marginBottom: 16,
   },
   ratingScore: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     marginRight: 12,
   },
   scoreText: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: colors.primary,
     lineHeight: 36,
   },
@@ -212,10 +272,10 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   starsWrap: {
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   filterScroll: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
@@ -228,7 +288,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderLight,
     borderRadius: 16,
     marginRight: 8,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   filterChipActive: {
     borderColor: colors.primary,
@@ -240,22 +300,21 @@ const styles = StyleSheet.create({
   },
   filterTextActive: {
     color: colors.primary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   center: {
     padding: 24,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     color: colors.textSecondary,
-    fontStyle: 'italic',
-    textAlign: 'center',
+    fontStyle: "italic",
+    textAlign: "center",
     paddingVertical: 16,
   },
-  listContainer: {
-  },
+  listContainer: {},
   reviewItem: {
-    flexDirection: 'row',
+    flexDirection: "row",
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
@@ -272,13 +331,13 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.text,
     marginBottom: 4,
   },
   metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 4,
     marginBottom: 8,
   },
@@ -293,7 +352,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   reviewImagesContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: 12,
     gap: 8,
   },
@@ -303,8 +362,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   helpfulRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 8,
   },
   helpfulText: {

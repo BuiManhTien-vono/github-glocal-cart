@@ -9,6 +9,17 @@ namespace GlocalCart.API.DTOs.Users
 
         [MaxLength(20)]
         public string? Phone { get; set; }
+
+        [EmailAddress, MaxLength(200)]
+        public string? Email { get; set; }
+
+        [MaxLength(20)]
+        public string? Gender { get; set; }
+
+        public DateTime? DateOfBirth { get; set; }
+
+        [MaxLength(500)]
+        public string? AvatarUrl { get; set; }
     }
 
     public class ChangePasswordDto

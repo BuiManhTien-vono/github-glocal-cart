@@ -12,6 +12,10 @@ interface User {
   email: string;
   fullName: string;
   phone: string;
+  gender?: string | null;
+  dateOfBirth?: string | null;
+  dob?: string | null;
+  avatarUrl?: string | null;
   role: string;
   isSeller: boolean;
 }

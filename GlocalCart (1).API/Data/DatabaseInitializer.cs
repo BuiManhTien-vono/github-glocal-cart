@@ -14,6 +14,8 @@ public static class DatabaseInitializer
         await db.Database.MigrateAsync();
         await EnsureChatTablesAsync(db);
         await EnsureFollowAndFavoriteTablesAsync(db);
+        await EnsurePasswordResetOtpTableAsync(db);
+        await EnsureUserProfileColumnsAsync(db);
 
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<int>>>();
@@ -121,6 +123,49 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ProductFavorites_Prod
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ProductFavorites_UserId_ProductId' AND object_id = OBJECT_ID(N'[dbo].[ProductFavorites]'))
     CREATE UNIQUE INDEX [IX_ProductFavorites_UserId_ProductId] ON [dbo].[ProductFavorites] ([UserId], [ProductId]);
+");
+    }
+
+    private static Task EnsurePasswordResetOtpTableAsync(AppDbContext db)
+    {
+        return db.Database.ExecuteSqlRawAsync(@"
+IF OBJECT_ID(N'[dbo].[PasswordResetOtps]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[PasswordResetOtps] (
+        [Id] int NOT NULL IDENTITY,
+        [UserId] int NOT NULL,
+        [Email] nvarchar(200) NOT NULL,
+        [CodeHash] nvarchar(128) NOT NULL,
+        [ExpiresAt] datetime2 NOT NULL,
+        [CreatedAt] datetime2 NOT NULL,
+        [UsedAt] datetime2 NULL,
+        CONSTRAINT [PK_PasswordResetOtps] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_PasswordResetOtps_AspNetUsers_UserId] FOREIGN KEY ([UserId]) REFERENCES [dbo].[AspNetUsers] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PasswordResetOtps_Email_CodeHash' AND object_id = OBJECT_ID(N'[dbo].[PasswordResetOtps]'))
+    CREATE INDEX [IX_PasswordResetOtps_Email_CodeHash] ON [dbo].[PasswordResetOtps] ([Email], [CodeHash]);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PasswordResetOtps_ExpiresAt' AND object_id = OBJECT_ID(N'[dbo].[PasswordResetOtps]'))
+    CREATE INDEX [IX_PasswordResetOtps_ExpiresAt] ON [dbo].[PasswordResetOtps] ([ExpiresAt]);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PasswordResetOtps_UserId' AND object_id = OBJECT_ID(N'[dbo].[PasswordResetOtps]'))
+    CREATE INDEX [IX_PasswordResetOtps_UserId] ON [dbo].[PasswordResetOtps] ([UserId]);
+");
+    }
+
+    private static Task EnsureUserProfileColumnsAsync(AppDbContext db)
+    {
+        return db.Database.ExecuteSqlRawAsync(@"
+IF COL_LENGTH(N'[dbo].[AspNetUsers]', N'Gender') IS NULL
+    ALTER TABLE [dbo].[AspNetUsers] ADD [Gender] nvarchar(20) NULL;
+
+IF COL_LENGTH(N'[dbo].[AspNetUsers]', N'DateOfBirth') IS NULL
+    ALTER TABLE [dbo].[AspNetUsers] ADD [DateOfBirth] datetime2 NULL;
+
+IF COL_LENGTH(N'[dbo].[AspNetUsers]', N'AvatarUrl') IS NULL
+    ALTER TABLE [dbo].[AspNetUsers] ADD [AvatarUrl] nvarchar(500) NULL;
 ");
     }
 }

@@ -1,6 +1,57 @@
-﻿node_modules/
-.next/
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files
 .env
-.env.local
+.env.*
+!.env.example
+!**/.env.example
+
+# Build output
 dist/
 build/
+.next/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+
+# .NET and Visual Studio
+.vs/
+*.user
+*.suo
+*.rsuser
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snupkg
+*.pdb
+*.cache
+*.log
+TestResult.xml
+[Tt]est[Rr]esult*/
+
+# IDEs
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Local history and temp files
+.history/
+.localhistory/
+*.tmp
+*.swp
+*~

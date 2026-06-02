@@ -29,14 +29,31 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<UserInfoDto> UpdateProfileAsync(int userId, UpdateProfileDto dto)
         {
-            var user = await _userManager.FindByIdAsync(userId.ToString())
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId)
                 ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
 
-            if (dto.FullName != null) user.FullName = dto.FullName;
-            if (dto.Phone != null) user.PhoneNumber = dto.Phone;
-            user.UpdatedAt = DateTime.UtcNow;
+            if (!string.IsNullOrWhiteSpace(dto.FullName)) user.FullName = dto.FullName.Trim();
+            user.PhoneNumber = dto.Phone?.Trim();
+            user.Gender = string.IsNullOrWhiteSpace(dto.Gender) ? null : dto.Gender.Trim();
+            user.DateOfBirth = dto.DateOfBirth?.Date;
+            user.AvatarUrl = string.IsNullOrWhiteSpace(dto.AvatarUrl) ? null : dto.AvatarUrl.Trim();
 
-            await _userManager.UpdateAsync(user);
+            if (!string.IsNullOrWhiteSpace(dto.Email) && !string.Equals(user.Email, dto.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                var email = dto.Email.Trim();
+                var normalizedEmail = _userManager.NormalizeEmail(email);
+                var exists = await _db.Users.AnyAsync(u => u.Id != user.Id && u.NormalizedEmail == normalizedEmail);
+                if (exists)
+                    throw new ArgumentException("Email đã được sử dụng.");
+
+                user.Email = email;
+                user.NormalizedEmail = normalizedEmail;
+                user.EmailConfirmed = false;
+            }
+
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
             var roles = await _userManager.GetRolesAsync(user);
             return MapToUserInfo(user, roles);
         }
@@ -184,6 +201,7 @@ namespace GlocalCart.API.Services.Implementations
         {
             Id = user.Id, UserName = user.UserName!, Email = user.Email!,
             FullName = user.FullName, Phone = user.PhoneNumber,
+            Gender = user.Gender, DateOfBirth = user.DateOfBirth, AvatarUrl = user.AvatarUrl,
             Role = roles.FirstOrDefault() ?? user.Role.ToString(), IsSeller = user.IsSeller,
             AccountStatus = user.AccountStatus.ToString()
         };

@@ -44,6 +44,7 @@ namespace GlocalCart.API.Data
         public DbSet<ShopFollow> ShopFollows { get; set; }
         public DbSet<ChatConversation> ChatConversations { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
+        public DbSet<PasswordResetOtp> PasswordResetOtps { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -56,6 +57,16 @@ namespace GlocalCart.API.Data
             {
                 entity.HasIndex(u => u.Email).IsUnique();
                 entity.HasIndex(u => u.UserName).IsUnique();
+            });
+
+            modelBuilder.Entity<PasswordResetOtp>(entity =>
+            {
+                entity.HasIndex(o => new { o.Email, o.CodeHash });
+                entity.HasIndex(o => o.ExpiresAt);
+                entity.HasOne(o => o.User)
+                    .WithMany()
+                    .HasForeignKey(o => o.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // ========================

@@ -61,7 +61,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
     }
     setLoading(true);
     try {
-      await apiClient.put('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
+      await apiClient.put('/users/change-password', { currentPassword: oldPwd, newPassword: newPwd });
       Alert.alert('✅ Thành công', 'Đã đổi mật khẩu thành công!', [{ text: 'OK', onPress: onClose }]);
     } catch (err: any) {
       Alert.alert('Lỗi', err?.message || 'Không thể đổi mật khẩu. Vui lòng thử lại.');

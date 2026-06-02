@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Alert, Modal, Platform, ActivityIndicator, Image,
+  Alert, Modal, Platform, ActivityIndicator, Image, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,7 @@ const maskPhone = (phone: string) => {
 };
 
 const GENDER_OPTIONS = ['Nam', 'Nữ', 'Khác'];
+type EditableField = 'fullName' | 'phone' | 'email';
 
 // ─── Custom Date Picker ───
 function DatePickerModal({
@@ -114,19 +115,83 @@ export default function EditProfileScreen({ navigation }: any) {
   const [phone, setPhone] = useState(user?.phone || '');
   const [email, setEmail] = useState(user?.email || '');
   const [gender, setGender] = useState((user as any)?.gender || 'Chưa thiết lập');
-  const [dob, setDob] = useState((user as any)?.dob || 'Chưa thiết lập');
+  const [dob, setDob] = useState((user as any)?.dateOfBirth || (user as any)?.dob || 'Chưa thiết lập');
   const [avatarUri, setAvatarUri] = useState<string | null>((user as any)?.avatarUrl || null);
 
   const [saving, setSaving] = useState(false);
   const [showGenderModal, setShowGenderModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [editingField, setEditingField] = useState<string | null>(null); // 'name' | 'phone' | 'email'
+  const [editModal, setEditModal] = useState<{ field: EditableField; title: string; value: string } | null>(null);
 
   const initial = (user?.fullName || user?.userName || '?')[0].toUpperCase();
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadProfile = async () => {
+      try {
+        const profile = await apiClient.get('/users/profile') as any;
+        if (!mounted || !profile) return;
+
+        updateUser({ ...user!, ...profile });
+        setFullName(profile.fullName || '');
+        setPhone(profile.phone || '');
+        setEmail(profile.email || '');
+        setGender(profile.gender || 'Chưa thiết lập');
+        setDob(profile.dateOfBirth || 'Chưa thiết lập');
+        setAvatarUri(profile.avatarUrl || null);
+      } catch (err) {
+        console.log('[EditProfile] Load profile error:', err);
+      }
+    };
+
+    loadProfile();
+    return () => { mounted = false; };
+  }, []);
 
   // ─── Validation ───
   const validatePhone = (val: string) => /^0\d{9}$/.test(val.trim());
   const validateEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
+
+  const openEditModal = (field: EditableField) => {
+    const config = {
+      fullName: { title: 'Tên hiển thị', value: fullName },
+      phone: { title: 'Số điện thoại', value: phone },
+      email: { title: 'Email', value: email },
+    }[field];
+    setEditModal({ field, ...config });
+  };
+
+  const applyEditModal = () => {
+    if (!editModal) return;
+    const value = editModal.value.trim();
+
+    if (editModal.field === 'fullName') {
+      if (!value) {
+        Alert.alert('Lỗi', 'Tên không được để trống.');
+        return;
+      }
+      setFullName(value);
+    }
+
+    if (editModal.field === 'phone') {
+      if (value && !validatePhone(value)) {
+        Alert.alert('Số điện thoại không hợp lệ', 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.');
+        return;
+      }
+      setPhone(value);
+    }
+
+    if (editModal.field === 'email') {
+      if (!validateEmail(value)) {
+        Alert.alert('Email không hợp lệ', 'Vui lòng nhập đúng định dạng email.');
+        return;
+      }
+      setEmail(value);
+    }
+
+    setEditModal(null);
+  };
 
   // ─── Chọn ảnh ───
   const pickImage = async (fromCamera: boolean) => {
@@ -161,6 +226,24 @@ export default function EditProfileScreen({ navigation }: any) {
     ]);
   };
 
+  const uploadAvatarIfNeeded = async () => {
+    if (!avatarUri || avatarUri.startsWith('http://') || avatarUri.startsWith('https://')) {
+      return avatarUri;
+    }
+
+    const extension = avatarUri.split('.').pop()?.split('?')[0] || 'jpg';
+    const formData = new FormData();
+    formData.append('file', {
+      uri: avatarUri,
+      name: `avatar.${extension}`,
+      type: extension.toLowerCase() === 'png' ? 'image/png' : 'image/jpeg',
+    } as any);
+    formData.append('folderName', 'avatars');
+
+    const uploaded = await apiClient.post('/upload', formData) as any;
+    return uploaded?.url || uploaded?.relativeUrl || avatarUri;
+  };
+
   // ─── Lưu profile ───
   const handleSave = async () => {
     if (!fullName.trim()) {
@@ -177,18 +260,41 @@ export default function EditProfileScreen({ navigation }: any) {
     }
     setSaving(true);
     try {
+      const uploadedAvatarUrl = await uploadAvatarIfNeeded();
       const updated = await apiClient.put('/users/profile', {
         fullName: fullName.trim(),
-        phone: phone.trim() || undefined,
+        phone: phone.trim(),
+        email: email.trim(),
+        gender: gender !== 'Chưa thiết lập' ? gender : null,
+        dateOfBirth: dob !== 'Chưa thiết lập' ? dob : null,
+        avatarUrl: uploadedAvatarUrl || null,
       }) as any;
+      const freshProfile = await apiClient.get('/users/profile') as any;
+      const savedProfile = freshProfile || updated;
+      const expectedEmail = email.trim().toLowerCase();
+      const savedEmail = String((savedProfile as any)?.email || '').trim().toLowerCase();
+      if (expectedEmail && savedEmail !== expectedEmail) {
+        throw new Error(`Backend chưa lưu email mới. Email trong DB hiện tại vẫn là ${(savedProfile as any)?.email || 'trống'}.`);
+      }
 
-      updateUser({
+      const nextUser = {
         ...user!,
         fullName: fullName.trim(),
-        phone: phone.trim() || user?.phone,
+        phone: phone.trim() || '',
         email: email.trim() || user?.email,
-        ...(updated || {}),
-      });
+        gender: gender !== 'Chưa thiết lập' ? gender : null,
+        dateOfBirth: dob !== 'Chưa thiết lập' ? dob : null,
+        avatarUrl: uploadedAvatarUrl,
+        ...(savedProfile || {}),
+      };
+
+      updateUser(nextUser);
+      setFullName((savedProfile as any)?.fullName || fullName.trim());
+      setPhone((savedProfile as any)?.phone || '');
+      setEmail((savedProfile as any)?.email || email.trim());
+      setGender((savedProfile as any)?.gender || 'Chưa thiết lập');
+      setDob((savedProfile as any)?.dateOfBirth || 'Chưa thiết lập');
+      setAvatarUri((savedProfile as any)?.avatarUrl || uploadedAvatarUrl || null);
 
       Alert.alert('✅ Thành công', 'Đã cập nhật hồ sơ của bạn!', [
         { text: 'OK', onPress: () => navigation.goBack() }
@@ -241,26 +347,12 @@ export default function EditProfileScreen({ navigation }: any) {
           <Text style={s.cardTitle}>Thông tin cơ bản</Text>
 
           {/* Tên hiển thị */}
-          <TouchableOpacity style={s.row} onPress={() => setEditingField('name')}>
+          <TouchableOpacity style={s.row} onPress={() => openEditModal('fullName')}>
             <Text style={s.rowLabel}>Tên hiển thị</Text>
-            {editingField === 'name' ? (
-              <View style={s.inputWrap}>
-                <View style={s.inlineInput}>
-                  <InlineTextInput
-                    value={fullName}
-                    onChangeText={setFullName}
-                    placeholder="Nhập tên của bạn"
-                    onBlur={() => setEditingField(null)}
-                    autoFocus
-                  />
-                </View>
-              </View>
-            ) : (
-              <View style={s.rowRight}>
-                <Text style={s.rowValue}>{fullName || 'Chưa thiết lập'}</Text>
-                <Ionicons name="chevron-forward" size={16} color="#ccc" />
-              </View>
-            )}
+            <View style={s.rowRight}>
+              <Text style={s.rowValue}>{fullName || 'Chưa thiết lập'}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#ccc" />
+            </View>
           </TouchableOpacity>
 
           {/* Giới tính */}
@@ -289,68 +381,27 @@ export default function EditProfileScreen({ navigation }: any) {
           <Text style={s.cardTitle}>Thông tin liên lạc</Text>
 
           {/* Số điện thoại */}
-          <TouchableOpacity style={s.row} onPress={() => setEditingField('phone')}>
+          <TouchableOpacity style={s.row} onPress={() => openEditModal('phone')}>
             <Text style={s.rowLabel}>Số điện thoại</Text>
-            {editingField === 'phone' ? (
-              <View style={s.inputWrap}>
-                <View style={s.inlineInput}>
-                  <InlineTextInput
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="0xxxxxxxxx"
-                    onBlur={() => {
-                      if (phone && !validatePhone(phone)) {
-                        Alert.alert('Số điện thoại không hợp lệ', 'Phải gồm 10 chữ số và bắt đầu bằng 0.');
-                      }
-                      setEditingField(null);
-                    }}
-                    autoFocus
-                    keyboardType="phone-pad"
-                  />
-                </View>
-              </View>
-            ) : (
-              <View style={s.rowRight}>
-                <Text style={[s.rowValue, !phone && s.placeholder]}>
-                  {phone ? maskPhone(phone) : 'Chưa thiết lập'}
-                </Text>
-                <Ionicons name="pencil-outline" size={14} color="#bbb" style={{ marginLeft: 4 }} />
-                <Ionicons name="chevron-forward" size={16} color="#ccc" />
-              </View>
-            )}
+            <View style={s.rowRight}>
+              <Text style={[s.rowValue, !phone && s.placeholder]}>
+                {phone ? maskPhone(phone) : 'Chưa thiết lập'}
+              </Text>
+              <Ionicons name="pencil-outline" size={14} color="#bbb" style={{ marginLeft: 4 }} />
+              <Ionicons name="chevron-forward" size={16} color="#ccc" />
+            </View>
           </TouchableOpacity>
 
           {/* Email */}
-          <TouchableOpacity style={[s.row, { borderBottomWidth: 0 }]} onPress={() => setEditingField('email')}>
+          <TouchableOpacity style={[s.row, { borderBottomWidth: 0 }]} onPress={() => openEditModal('email')}>
             <Text style={s.rowLabel}>Email</Text>
-            {editingField === 'email' ? (
-              <View style={s.inputWrap}>
-                <View style={s.inlineInput}>
-                  <InlineTextInput
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="user@example.com"
-                    onBlur={() => {
-                      if (email && !validateEmail(email)) {
-                        Alert.alert('Email không hợp lệ', 'Vui lòng nhập đúng định dạng email.');
-                      }
-                      setEditingField(null);
-                    }}
-                    autoFocus
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-              </View>
-            ) : (
-              <View style={s.rowRight}>
-                <Text style={[s.rowValue, !email && s.placeholder]}>
-                  {email ? maskEmail(email) : 'Chưa thiết lập'}
-                </Text>
-                <Ionicons name="pencil-outline" size={14} color="#bbb" style={{ marginLeft: 4 }} />
-                <Ionicons name="chevron-forward" size={16} color="#ccc" />
-              </View>
-            )}
+            <View style={s.rowRight}>
+              <Text style={[s.rowValue, !email && s.placeholder]}>
+                {email ? maskEmail(email) : 'Chưa thiết lập'}
+              </Text>
+              <Ionicons name="pencil-outline" size={14} color="#bbb" style={{ marginLeft: 4 }} />
+              <Ionicons name="chevron-forward" size={16} color="#ccc" />
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -388,6 +439,32 @@ export default function EditProfileScreen({ navigation }: any) {
         onConfirm={(date) => { setDob(date); setShowDatePicker(false); }}
         onClose={() => setShowDatePicker(false)}
       />
+
+      <Modal visible={!!editModal} transparent animationType="fade" onRequestClose={() => setEditModal(null)}>
+        <View style={s.editOverlay}>
+          <View style={s.editSheet}>
+            <Text style={s.editTitle}>{editModal?.title}</Text>
+            <TextInput
+              style={s.editInput}
+              value={editModal?.value || ''}
+              onChangeText={(value) => setEditModal(prev => prev ? { ...prev, value } : prev)}
+              placeholder={editModal?.field === 'phone' ? '0xxxxxxxxx' : editModal?.field === 'email' ? 'user@example.com' : 'Nhập tên của bạn'}
+              placeholderTextColor="#bbb"
+              keyboardType={editModal?.field === 'phone' ? 'phone-pad' : editModal?.field === 'email' ? 'email-address' : 'default'}
+              autoCapitalize={editModal?.field === 'email' ? 'none' : 'words'}
+              autoFocus
+            />
+            <View style={s.editActions}>
+              <TouchableOpacity style={s.editCancel} onPress={() => setEditModal(null)}>
+                <Text style={s.editCancelText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.editConfirm} onPress={applyEditModal}>
+                <Text style={s.editConfirmText}>Xong</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -400,22 +477,6 @@ function formatDisplayDate(dateStr: string) {
   } catch {
     return dateStr;
   }
-}
-
-// TextInput component nhẹ
-function InlineTextInput({ value, onChangeText, placeholder, onBlur, autoFocus }: any) {
-  const { TextInput } = require('react-native');
-  return (
-    <TextInput
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      placeholderTextColor="#ccc"
-      onBlur={onBlur}
-      autoFocus={autoFocus}
-      style={{ fontSize: 15, color: '#333', textAlign: 'right', minWidth: 120, padding: 0 }}
-    />
-  );
 }
 
 const s = StyleSheet.create({
@@ -460,11 +521,38 @@ const s = StyleSheet.create({
   rowValueMuted: { fontSize: 15, color: '#999' },
   placeholder: { color: '#ccc' },
 
-  inputWrap: { flex: 1, alignItems: 'flex-end' },
-  inlineInput: { minWidth: 140 },
-
   tip: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, gap: 8, alignItems: 'flex-start' },
   tipText: { flex: 1, fontSize: 12, color: '#888', lineHeight: 18 },
+
+  editOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  editSheet: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 18,
+  },
+  editTitle: { fontSize: 17, fontWeight: '700', color: '#333', marginBottom: 14 },
+  editInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#fafafa',
+  },
+  editActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16 },
+  editCancel: { paddingVertical: 10, paddingHorizontal: 14 },
+  editCancelText: { color: '#777', fontSize: 15, fontWeight: '600' },
+  editConfirm: { paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#EE4D2D', borderRadius: 8 },
+  editConfirmText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20 },

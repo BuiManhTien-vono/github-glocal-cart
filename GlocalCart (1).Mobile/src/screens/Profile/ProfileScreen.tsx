@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, Animated, Modal, TextInput, Dimensions, Platform,
-  Linking,
+  Linking, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -333,7 +333,11 @@ export default function ProfileScreen({ navigation }: any) {
                 style={styles.avatarCircle}
                 onPress={handleEditProfile}
               >
-                <Text style={styles.avatarText}>{initial}</Text>
+                {(user as any)?.avatarUrl ? (
+                  <Image source={{ uri: (user as any).avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>{initial}</Text>
+                )}
                 <View style={styles.editBadge}>
                   <Ionicons name="camera" size={10} color="#FFF" />
                 </View>
@@ -797,6 +801,11 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 26,
     fontWeight: '800',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
   },
   editBadge: {
     position: 'absolute',

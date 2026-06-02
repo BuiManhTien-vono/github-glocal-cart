@@ -21,6 +21,14 @@ namespace GlocalCart.API.Models
         [Required, MaxLength(150)]
         public string FullName { get; set; } = string.Empty;
 
+        [MaxLength(20)]
+        public string? Gender { get; set; }
+
+        public DateTime? DateOfBirth { get; set; }
+
+        [MaxLength(500)]
+        public string? AvatarUrl { get; set; }
+
         public UserRole Role { get; set; } = UserRole.Member;
 
         /// <summary>
