@@ -100,6 +100,29 @@ export default function ProfileScreen({ navigation }: any) {
     );
   };
 
+  const handleDeactivateSeller = async () => {
+    Alert.alert(
+      'Chuyển về người mua',
+      'Bạn muốn quay lại tài khoản người mua?\n\nSau khi chuyển, giao diện quản lý bán hàng sẽ được ẩn khỏi tài khoản này.',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Chuyển về người mua',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiClient.post('/users/deactivate-seller');
+              updateUser({ ...user!, isSeller: false, role: 'Member' });
+              Alert.alert('Thành công', 'Tài khoản đã chuyển về chế độ người mua.');
+            } catch (err: any) {
+              Alert.alert('Lỗi', err.message || 'Không thể chuyển về người mua.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleSupportPress = (label: string) => {
     switch (label) {
       case 'Trung tâm trợ giúp':
@@ -334,6 +357,11 @@ export default function ProfileScreen({ navigation }: any) {
                       {isAdmin ? '👑 Admin' : user?.isSeller ? '🏪 Seller' : '🛒 Member'}
                     </Text>
                   </View>
+                  {!isAdmin && user?.isSeller && (
+                    <TouchableOpacity style={styles.switchBuyerBtn} onPress={handleDeactivateSeller}>
+                      <Text style={styles.switchBuyerText}>Chuyển về người mua</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
 
@@ -817,6 +845,9 @@ const styles = StyleSheet.create({
   },
   roleBadgeRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 6,
   },
   hiddenAdminBadge: {
@@ -832,6 +863,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FFF',
     fontWeight: '600',
+  },
+  switchBuyerBtn: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: borderRadius.round,
+  },
+  switchBuyerText: {
+    fontSize: 11,
+    color: '#FFF',
+    fontWeight: '700',
   },
   editProfileBtn: {
     flexDirection: 'row',

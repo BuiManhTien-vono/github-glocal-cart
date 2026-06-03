@@ -175,7 +175,11 @@ export default function EditProfileScreen({ navigation }: any) {
     }
 
     if (editModal.field === 'phone') {
-      if (value && !validatePhone(value)) {
+      if (!value.trim()) {
+        Alert.alert('Lỗi', 'Số điện thoại không được để trống.');
+        return;
+      }
+      if (!validatePhone(value)) {
         Alert.alert('Số điện thoại không hợp lệ', 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.');
         return;
       }
@@ -250,7 +254,11 @@ export default function EditProfileScreen({ navigation }: any) {
       Alert.alert('Lỗi', 'Tên không được để trống.');
       return;
     }
-    if (phone && !validatePhone(phone)) {
+    if (!phone.trim()) {
+      Alert.alert('Lỗi', 'Số điện thoại không được để trống.');
+      return;
+    }
+    if (!validatePhone(phone)) {
       Alert.alert('Số điện thoại không hợp lệ', 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.');
       return;
     }
