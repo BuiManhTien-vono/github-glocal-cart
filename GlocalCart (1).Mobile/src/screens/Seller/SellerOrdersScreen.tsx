@@ -17,6 +17,7 @@ import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import apiClient from '../../services/api/apiClient';
 import { resolveProductImageUrl } from '../../utils/imageUtils';
 import { useAuth } from '../../context/AuthContext';
+import ReasonPromptModal from '../../components/common/ReasonPromptModal';
 import {
   ORDER_TAB_LABELS,
   SELLER_ORDER_TABS,
@@ -67,6 +68,7 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [cancelTargetId, setCancelTargetId] = useState<number | null>(null);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -132,28 +134,13 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
     } catch (error: any) {
       if (Platform.OS === 'web') window.alert(error.message || 'Không thể hủy đơn hàng.');
       else Alert.alert('Loi', error.message || 'Không thể hủy đơn hàng.');
+    } finally {
+      setCancelTargetId(null);
     }
   };
 
   const handleCancel = (id: number) => {
-    if (Platform.OS === 'web') {
-      const reason = window.prompt('Nhập lý do hủy đơn:');
-      if (reason !== null) cancelOrder(id, reason);
-      return;
-    }
-
-    Alert.prompt(
-      'Hủy đơn hàng',
-      'Nhập lý do hủy đơn:',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Hủy đơn',
-          style: 'destructive',
-          onPress: (reason?: string) => cancelOrder(id, reason || ''),
-        },
-      ]
-    );
+    setCancelTargetId(id);
   };
 
   const filtered = orders.filter((order) =>
@@ -283,6 +270,16 @@ export default function SellerOrdersScreen({ route, navigation }: any) {
             )}
           </View>
         )}
+      />
+      <ReasonPromptModal
+        visible={cancelTargetId !== null}
+        title="Hủy đơn hàng"
+        message="Nhập lý do hủy đơn để gửi cho người mua."
+        confirmText="Hủy đơn"
+        onCancel={() => setCancelTargetId(null)}
+        onSubmit={(reason) => {
+          if (cancelTargetId !== null) cancelOrder(cancelTargetId, reason);
+        }}
       />
     </View>
   );

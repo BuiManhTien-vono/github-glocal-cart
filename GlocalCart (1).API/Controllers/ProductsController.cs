@@ -35,10 +35,8 @@ namespace GlocalCart.API.Controllers
         /// Tìm kiếm sản phẩm theo tên hoặc danh mục (UML Search interface)
         /// </summary>
         [HttpGet("search")]
-        public async Task<IActionResult> SearchProducts(
-            [FromQuery] string? name, [FromQuery] int? categoryId,
-            [FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
-            Ok(ApiResponse.Ok(await _productService.SearchProductsAsync(name, categoryId, page, pageSize)));
+        public async Task<IActionResult> SearchProducts([FromQuery] ProductSearchDto search) =>
+            Ok(ApiResponse.Ok(await _productService.SearchProductsAsync(search)));
 
         /// <summary>
         /// Seller đăng sản phẩm mới (JSON body - endpoint cũ)

@@ -147,8 +147,16 @@ function mapApiNotification(n: AppNotification): NotificationItem {
     TransferReported: 'Khách đã chuyển khoản',
     OrderDelivered: 'Giao hàng thành công',
     OrderAccepted: 'Shipper đã nhận đơn',
+    ShipmentAccepted: 'Shipper đã nhận đơn',
+    ShipmentPickedUp: 'Shipper đã lấy hàng',
+    ShipmentArrived: 'Đơn hàng đã đến nơi',
+    ShipmentDelivered: 'Giao hàng thành công',
+    ShipmentDeliveryFailed: 'Giao hàng thất bại',
+    PaymentCompleted: 'Thanh toán thành công',
+    PaymentFailed: 'Thanh toán thất bại',
     General: 'Thông báo đơn hàng',
   };
+  const relatedId = n.relatedOrderId ?? n.orderId ?? n.entityId ?? null;
 
   return {
     id: String(n.id),
@@ -156,8 +164,8 @@ function mapApiNotification(n: AppNotification): NotificationItem {
     body: n.content,
     time: formatTime(n.createdAt),
     isRead: n.isRead,
-    isOrder: !!n.relatedOrderId,
-    orderId: n.relatedOrderId,
+    isOrder: !!relatedId || !!n.shipmentId,
+    orderId: relatedId,
     action: n.action,
     productImage: null,
   };
@@ -243,7 +251,7 @@ export default function NotificationsScreen({ navigation }: any): React.JSX.Elem
       return;
     }
 
-    if (item.action === 'OrderArrived') {
+    if (item.action === 'OrderArrived' || item.action === 'ShipmentArrived') {
       navigation.navigate('Profile', {
         screen: 'MyOrders',
         params: { openConfirmReceiptForOrderId: item.orderId },
@@ -253,6 +261,11 @@ export default function NotificationsScreen({ navigation }: any): React.JSX.Elem
 
     if ((item.action === 'CashSelected' || item.action === 'TransferReported') && user?.role === 'Shipper') {
       navigation.navigate('ShipperTabs', { screen: 'Delivering' });
+      return;
+    }
+
+    if (item.action?.startsWith('Shipment')) {
+      navigation.navigate('OrderTracking', { orderId: item.orderId, notification: item });
       return;
     }
 

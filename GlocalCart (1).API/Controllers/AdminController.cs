@@ -3,6 +3,7 @@ using GlocalCart.API.DTOs.Orders;
 using GlocalCart.API.DTOs.Products;
 using GlocalCart.API.Helpers;
 using GlocalCart.API.Services.Interfaces;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,6 +15,7 @@ namespace GlocalCart.API.Controllers
     public class AdminController : ControllerBase
     {
         private readonly IAdminService _adminService;
+        private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         public AdminController(IAdminService adminService)
         {
@@ -51,6 +53,11 @@ namespace GlocalCart.API.Controllers
         [HttpPatch("users/{id}/status")]
         public async Task<IActionResult> UpdateUserStatus(int id, [FromBody] UpdateAccountStatusDto dto)
         {
+            if (id == UserId && !string.Equals(dto.Status, "Active", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Admin khong the tu khoa tai khoan dang dang nhap.");
+            }
+
             var message = await _adminService.UpdateUserStatusAsync(id, dto);
             return Ok(ApiResponse.Ok(message));
         }

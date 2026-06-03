@@ -9,7 +9,7 @@ namespace GlocalCart.API.Services.Interfaces
         Task<PagedResult<ProductResponseDto>> GetProductsAsync(ProductSearchDto search);
         Task<ProductResponseDto> GetProductByIdAsync(int id);
         Task<List<CategoryDto>> GetCategoriesAsync();
-        Task<PagedResult<ProductResponseDto>> SearchProductsAsync(string? name, int? categoryId, int page, int pageSize);
+        Task<PagedResult<ProductResponseDto>> SearchProductsAsync(ProductSearchDto search);
 
         // Seller
         Task<ProductResponseDto> CreateProductAsync(int sellerId, CreateProductDto dto);

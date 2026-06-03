@@ -127,9 +127,15 @@ namespace GlocalCart.API.DTOs.Products
     {
         public string? Name { get; set; }
         public int? CategoryId { get; set; }
+        public string? CategoryIds { get; set; }
         public int? SellerId { get; set; }
         public decimal? MinPrice { get; set; }
         public decimal? MaxPrice { get; set; }
+        public int? MinRating { get; set; }
+        public string? Brands { get; set; }
+        public string? Locations { get; set; }
+        public string? Services { get; set; }
+        public int? Limit { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 20;
     }
