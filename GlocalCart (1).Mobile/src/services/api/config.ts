@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 
 // Web runs on the same computer as the API, so localhost is correct there.
 // Expo Go on a physical phone must use the backend computer's Wi-Fi IPv4 address.
-const LAN_API_HOST = "10.102.195.62";
+const LAN_API_HOST = "192.168.1.10";
 
 export const API_HOST = Platform.OS === "web" ? "localhost" : LAN_API_HOST;
 export const API_PORT = "5100";
