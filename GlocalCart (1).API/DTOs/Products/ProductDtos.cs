@@ -17,6 +17,8 @@ namespace GlocalCart.API.DTOs.Products
         public bool IsActive { get; set; }
         public bool IsLocked { get; set; }
         public string? MediaUrl { get; set; }
+        public bool IsFlashSale { get; set; }
+        public int FlashSaleDiscount { get; set; }
         public List<ProductImageDto> Images { get; set; } = new();
         public double AverageRating { get; set; }
         public int ReviewCount { get; set; }
@@ -102,6 +104,17 @@ namespace GlocalCart.API.DTOs.Products
         public string? MediaUrl { get; set; }
 
         public List<string>? ImageUrls { get; set; }
+
+        /// <summary>
+        /// Bật/tắt Flash Sale cho sản phẩm
+        /// </summary>
+        public bool? IsFlashSale { get; set; }
+
+        /// <summary>
+        /// Phần trăm giảm giá Flash Sale (0-90%)
+        /// </summary>
+        [Range(0, 90)]
+        public int? FlashSaleDiscount { get; set; }
     }
 
     public class UpdateStockDto
@@ -114,9 +127,15 @@ namespace GlocalCart.API.DTOs.Products
     {
         public string? Name { get; set; }
         public int? CategoryId { get; set; }
+        public string? CategoryIds { get; set; }
         public int? SellerId { get; set; }
         public decimal? MinPrice { get; set; }
         public decimal? MaxPrice { get; set; }
+        public int? MinRating { get; set; }
+        public string? Brands { get; set; }
+        public string? Locations { get; set; }
+        public string? Services { get; set; }
+        public int? Limit { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 20;
     }

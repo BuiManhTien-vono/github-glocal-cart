@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using GlocalCart.API.Data;
 using GlocalCart.API.DTOs.Auth;
 using GlocalCart.API.DTOs.Users;
+using GlocalCart.API.Enums;
 using GlocalCart.API.Models;
 using GlocalCart.API.Services.Interfaces;
 
@@ -29,14 +30,31 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<UserInfoDto> UpdateProfileAsync(int userId, UpdateProfileDto dto)
         {
-            var user = await _userManager.FindByIdAsync(userId.ToString())
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId)
                 ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
 
-            if (dto.FullName != null) user.FullName = dto.FullName;
-            if (dto.Phone != null) user.PhoneNumber = dto.Phone;
-            user.UpdatedAt = DateTime.UtcNow;
+            user.FullName = dto.FullName!.Trim();
+            user.PhoneNumber = dto.Phone!.Trim();
+            user.Gender = string.IsNullOrWhiteSpace(dto.Gender) ? null : dto.Gender.Trim();
+            user.DateOfBirth = dto.DateOfBirth?.Date;
+            user.AvatarUrl = string.IsNullOrWhiteSpace(dto.AvatarUrl) ? null : dto.AvatarUrl.Trim();
 
-            await _userManager.UpdateAsync(user);
+            if (!string.IsNullOrWhiteSpace(dto.Email) && !string.Equals(user.Email, dto.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                var email = dto.Email.Trim();
+                var normalizedEmail = _userManager.NormalizeEmail(email);
+                var exists = await _db.Users.AnyAsync(u => u.Id != user.Id && u.NormalizedEmail == normalizedEmail);
+                if (exists)
+                    throw new ArgumentException("Email đã được sử dụng.");
+
+                user.Email = email;
+                user.NormalizedEmail = normalizedEmail;
+                user.EmailConfirmed = false;
+            }
+
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
             var roles = await _userManager.GetRolesAsync(user);
             return MapToUserInfo(user, roles);
         }
@@ -60,8 +78,80 @@ namespace GlocalCart.API.Services.Implementations
 
         public async Task<bool> ActivateSellerAsync(int userId)
         {
-            await Task.CompletedTask;
-            throw new InvalidOperationException("Hệ thống hiện hoạt động theo mô hình một cửa hàng. Quyền quản lý bán hàng chỉ do Admin cấp cho nhân viên cửa hàng.");
+            var user = await _userManager.FindByIdAsync(userId.ToString())
+                ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+
+            if (user.IsSeller && await _userManager.IsInRoleAsync(user, "Seller"))
+            {
+                return true;
+            }
+
+            user.IsSeller = true;
+            user.Role = UserRole.Seller;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            if (!await _userManager.IsInRoleAsync(user, "Seller"))
+            {
+                var addRoleResult = await _userManager.AddToRoleAsync(user, "Seller");
+                if (!addRoleResult.Succeeded)
+                {
+                    var errors = string.Join(", ", addRoleResult.Errors.Select(e => e.Description));
+                    throw new InvalidOperationException($"Kích hoạt người bán thất bại: {errors}");
+                }
+            }
+
+            var updateResult = await _userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+            {
+                var errors = string.Join(", ", updateResult.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"Cập nhật tài khoản người bán thất bại: {errors}");
+            }
+
+            return true;
+        }
+
+        public async Task<bool> DeactivateSellerAsync(int userId)
+        {
+            var user = await _userManager.FindByIdAsync(userId.ToString())
+                ?? throw new KeyNotFoundException("Không tìm thấy người dùng.");
+
+            if (!user.IsSeller && !await _userManager.IsInRoleAsync(user, "Seller"))
+            {
+                return true;
+            }
+
+            user.IsSeller = false;
+            user.Role = UserRole.Member;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            if (await _userManager.IsInRoleAsync(user, "Seller"))
+            {
+                var removeRoleResult = await _userManager.RemoveFromRoleAsync(user, "Seller");
+                if (!removeRoleResult.Succeeded)
+                {
+                    var errors = string.Join(", ", removeRoleResult.Errors.Select(e => e.Description));
+                    throw new InvalidOperationException($"Chuyển về người mua thất bại: {errors}");
+                }
+            }
+
+            if (!await _userManager.IsInRoleAsync(user, "Member"))
+            {
+                var addMemberResult = await _userManager.AddToRoleAsync(user, "Member");
+                if (!addMemberResult.Succeeded)
+                {
+                    var errors = string.Join(", ", addMemberResult.Errors.Select(e => e.Description));
+                    throw new InvalidOperationException($"Cập nhật quyền người mua thất bại: {errors}");
+                }
+            }
+
+            var updateResult = await _userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+            {
+                var errors = string.Join(", ", updateResult.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"Cập nhật tài khoản người mua thất bại: {errors}");
+            }
+
+            return true;
         }
 
         // === ADDRESSES ===
@@ -184,6 +274,7 @@ namespace GlocalCart.API.Services.Implementations
         {
             Id = user.Id, UserName = user.UserName!, Email = user.Email!,
             FullName = user.FullName, Phone = user.PhoneNumber,
+            Gender = user.Gender, DateOfBirth = user.DateOfBirth, AvatarUrl = user.AvatarUrl,
             Role = roles.FirstOrDefault() ?? user.Role.ToString(), IsSeller = user.IsSeller,
             AccountStatus = user.AccountStatus.ToString()
         };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import { useCartStore } from '../../store/useCartStore';
 
@@ -8,9 +8,13 @@ interface CartBadgeProps {
 }
 
 export const CartBadge: React.FC<CartBadgeProps> = ({ containerStyle, textStyle }) => {
-  const { items } = useCartStore();
+  const { items, fetchCart } = useCartStore();
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
-
+  
+  useEffect(() => {
+    fetchCart().catch(() => {});
+  }, [fetchCart]);
+  
   if (count <= 0) return null;
 
   return (

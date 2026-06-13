@@ -61,7 +61,7 @@ function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: 
     }
     setLoading(true);
     try {
-      await apiClient.put('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
+      await apiClient.put('/users/change-password', { currentPassword: oldPwd, newPassword: newPwd });
       Alert.alert('✅ Thành công', 'Đã đổi mật khẩu thành công!', [{ text: 'OK', onPress: onClose }]);
     } catch (err: any) {
       Alert.alert('Lỗi', err?.message || 'Không thể đổi mật khẩu. Vui lòng thử lại.');
@@ -515,10 +515,6 @@ export default function AccountSettingsScreen({ navigation }: any) {
   };
 
   const handleLogout = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Bạn có chắc muốn đăng xuất?')) logout();
-      return;
-    }
     Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
       { text: 'Hủy', style: 'cancel' },
       { text: 'Đăng xuất', style: 'destructive', onPress: logout },

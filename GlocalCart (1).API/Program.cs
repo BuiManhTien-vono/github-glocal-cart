@@ -1,4 +1,7 @@
 using GlocalCart.API.Extensions;
+using GlocalCart.API.Helpers;
+
+EnvFileLoader.LoadDefault();
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -4,11 +4,22 @@ namespace GlocalCart.API.DTOs.Users
 {
     public class UpdateProfileDto
     {
-        [MaxLength(150)]
+        [Required, MaxLength(150)]
         public string? FullName { get; set; }
 
-        [MaxLength(20)]
+        [Required, RegularExpression(@"^0\d{9}$", ErrorMessage = "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0."), MaxLength(20)]
         public string? Phone { get; set; }
+
+        [EmailAddress, MaxLength(200)]
+        public string? Email { get; set; }
+
+        [MaxLength(20)]
+        public string? Gender { get; set; }
+
+        public DateTime? DateOfBirth { get; set; }
+
+        [MaxLength(500)]
+        public string? AvatarUrl { get; set; }
     }
 
     public class ChangePasswordDto

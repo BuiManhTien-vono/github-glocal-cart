@@ -273,6 +273,7 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
     route.params?.shipment || null,
   );
   const [loading, setLoading] = useState(!route.params?.shipment);
+  const [errorMessage, setErrorMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [mapRegion, setMapRegion] = useState(DEFAULT_MAP_REGION);
   const [pickupCoordinate, setPickupCoordinate] = useState<Coordinate>(DEFAULT_PICKUP_COORDINATE);
@@ -285,14 +286,31 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
 
   const shipmentId =
     route.params?.shipmentId || route.params?.shipment?.shipmentId;
+  const numericShipmentId = Number(shipmentId);
+  const hasShipmentId = Number.isFinite(numericShipmentId) && numericShipmentId > 0;
 
   const refresh = async () => {
-    if (!shipmentId) return;
+    if (!hasShipmentId) {
+      if (!shipment) {
+        setErrorMessage("Không xác định được vận đơn cần xem.");
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
-      const data: any = await shipperService.getShipmentDetail(shipmentId);
-      if (data) setShipment(data);
-    } catch (error) {
+      setErrorMessage("");
+      const data: any = await shipperService.getShipmentDetail(numericShipmentId);
+      if (data) {
+        setShipment(data);
+      } else {
+        setShipment(null);
+        setErrorMessage("Không tìm thấy vận đơn này.");
+      }
+    } catch (error: any) {
       console.log("refresh shipment error:", error);
+      setShipment(null);
+      setErrorMessage(error?.message || "Không thể tải chi tiết vận đơn.");
     } finally {
       setLoading(false);
     }
@@ -305,7 +323,7 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
   useEffect(() => {
     startDeliveryRealtime();
     const refreshIfCurrentShipment = (payload: any) => {
-      if (!payload.shipmentId || payload.shipmentId === shipmentId) {
+      if (!payload.shipmentId || Number(payload.shipmentId) === numericShipmentId) {
         refresh();
       }
     };
@@ -592,11 +610,24 @@ export default function ShipperShipmentDetailScreen(): React.JSX.Element {
     );
   };
 
-  if (loading || !shipment) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Đang tải vận đơn...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (errorMessage || !shipment) {
+    return (
+      <SafeAreaView style={styles.center}>
+        <Ionicons name="alert-circle-outline" size={56} color={colors.danger} />
+        <Text style={styles.errorTitle}>Không thể tải vận đơn</Text>
+        <Text style={styles.errorText}>{errorMessage || "Không tìm thấy vận đơn."}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={hasShipmentId ? refresh : () => navigation.goBack()}>
+          <Text style={styles.retryBtnText}>{hasShipmentId ? "Thử lại" : "Quay lại"}</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -855,6 +886,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   loadingText: { marginTop: 12, color: colors.textSecondary },
+  errorTitle: { marginTop: 12, fontSize: 18, fontWeight: "800", color: colors.text },
+  errorText: { marginTop: 8, color: colors.textSecondary, textAlign: "center", paddingHorizontal: 28, lineHeight: 20 },
+  retryBtn: { marginTop: 16, borderRadius: 8, backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 11 },
+  retryBtnText: { color: colors.white, fontWeight: "700" },
   header: {
     height: 54,
     flexDirection: "row",

@@ -31,5 +31,26 @@ namespace GlocalCart.API.Controllers
             var result = await _authService.LoginAsync(dto);
             return StatusCode(result.StatusCode, result);
         }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto dto)
+        {
+            var result = await _authService.ForgotPasswordAsync(dto);
+            return StatusCode(result.StatusCode, result);
+        }
+
+        [HttpPost("verify-reset-otp")]
+        public async Task<IActionResult> VerifyResetOtp([FromBody] VerifyResetOtpDto dto)
+        {
+            var result = await _authService.VerifyResetOtpAsync(dto);
+            return StatusCode(result.StatusCode, result);
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+        {
+            var result = await _authService.ResetPasswordAsync(dto);
+            return StatusCode(result.StatusCode, result);
+        }
     }
 }

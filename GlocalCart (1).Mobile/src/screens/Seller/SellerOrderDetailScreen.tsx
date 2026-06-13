@@ -17,6 +17,7 @@ import apiClient from '../../services/api/apiClient';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
 import { resolveProductImageUrl } from '../../utils/imageUtils';
 import { getOrderDisplayLabel, getShipmentBadgeLabel } from '../../utils/orderDisplayStatus';
+import ReasonPromptModal from '../../components/common/ReasonPromptModal';
 import {
   onDeliveryRealtime,
   startDeliveryRealtime,
@@ -60,6 +61,7 @@ export default function SellerOrderDetailScreen({ navigation, route }: any): Rea
   const [loading, setLoading] = useState(!route?.params?.order);
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelPromptVisible, setCancelPromptVisible] = useState(false);
 
   const items = useMemo(() => getOrderItems(order), [order]);
   const statusLabel = order ? getOrderDisplayLabel(order.status, order.shipment?.status) : '';
@@ -115,6 +117,7 @@ export default function SellerOrderDetailScreen({ navigation, route }: any): Rea
     try {
       setCancelling(true);
       await apiClient.patch(`/orders/${orderId}/reject`, { reason });
+      setCancelPromptVisible(false);
       if (Platform.OS === 'web') window.alert('Da huy don hang.');
       else Alert.alert('Thanh cong', 'Da huy don hang.');
       fetchOrder();
@@ -127,24 +130,7 @@ export default function SellerOrderDetailScreen({ navigation, route }: any): Rea
   };
 
   const handleCancelOrder = () => {
-    if (Platform.OS === 'web') {
-      const reason = window.prompt('Nhap ly do huy don:');
-      if (reason !== null) cancelOrder(reason);
-      return;
-    }
-
-    Alert.prompt(
-      'Huy don hang',
-      'Nhap ly do huy don:',
-      [
-        { text: 'Huy', style: 'cancel' },
-        {
-          text: 'Huy don',
-          style: 'destructive',
-          onPress: (reason?: string) => cancelOrder(reason || ''),
-        },
-      ]
-    );
+    setCancelPromptVisible(true);
   };
 
   if (loading) {
@@ -274,6 +260,15 @@ export default function SellerOrderDetailScreen({ navigation, route }: any): Rea
           <InfoRow icon="bicycle-outline" label="Phí giao" value={currency(order.shippingFee)} />
         </View>
       </ScrollView>
+      <ReasonPromptModal
+        visible={cancelPromptVisible}
+        title="Huy don hang"
+        message="Nhap ly do huy don de gui cho nguoi mua."
+        confirmText="Huy don"
+        errorText="Ly do huy don khong duoc de trong."
+        onCancel={() => setCancelPromptVisible(false)}
+        onSubmit={cancelOrder}
+      />
     </View>
   );
 }

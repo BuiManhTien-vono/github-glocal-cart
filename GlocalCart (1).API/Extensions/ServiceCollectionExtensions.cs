@@ -128,6 +128,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<JwtHelper>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IEmailService, SmtpEmailService>();
         services.AddScoped<IUserService, UserService>();
 
         return services;

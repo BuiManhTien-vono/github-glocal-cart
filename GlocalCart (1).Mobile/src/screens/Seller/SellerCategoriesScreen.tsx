@@ -102,13 +102,23 @@ export default function SellerCategoriesScreen({ route, navigation }: any): Reac
         {
           text: 'Xóa',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            try {
+              try {
+                await apiClient.delete(`/categories/${category.id}`);
+              } catch {
+                await apiClient.delete(`/admin/categories/${category.id}`);
+              }
+
             const removeNode = (nodes: CategoryNode[]): CategoryNode[] =>
               nodes
                 .filter(node => getCategoryId(node) !== getCategoryId(category))
                 .map(node => ({ ...node, subCategories: removeNode(node.subCategories || []) }));
 
             setCategories(prev => removeNode(prev));
+            } catch (error: any) {
+              Alert.alert('Lỗi', error?.message || 'Không thể xóa danh mục. Vui lòng thử lại.');
+            }
           },
         },
       ]

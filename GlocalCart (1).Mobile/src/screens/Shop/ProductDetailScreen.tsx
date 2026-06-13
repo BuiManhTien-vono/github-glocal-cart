@@ -19,23 +19,29 @@ import { CartBadge } from '../../components/common/CartBadge';
 import { colors } from '../../theme/colors';
 import { resolveProductImageUrl } from '../../utils/imageUtils';
 import { showLoginRequired } from '../../utils/loginRequired';
+import { getFlashSalePricing } from '../../utils/flashSalePricing';
 
-type ProductDetailRouteProp = RouteProp<{ params: { productId: number } }, 'params'>;
+type ProductDetailRouteProp = RouteProp<{ params: { productId: number; product?: any } }, 'params'>;
 
 const FOOTER_HEIGHT = 58;
 const HOME_TAB_BAR_GAP = 176.5;
 const getAvailableStock = (item: any) => Number(item?.availableItemCount ?? item?.stock ?? 0);
+const isUnavailableProduct = (item: any) => {
+  const status = String(item?.status || item?.productStatus || '').toLowerCase();
+  return item?.isLocked === true || item?.isActive === false || ['locked', 'inactive', 'hidden', 'deleted'].includes(status);
+};
 
 export default function ProductDetailScreen() {
   const route = useRoute<ProductDetailRouteProp>();
   const navigation = useNavigation<any>();
-  const { productId } = route.params;
+  const { productId, product: routeProduct } = route.params;
   const insets = useSafeAreaInsets();
   const { isLoggedIn, setGuestMode } = useAuth();
 
   const [product, setProduct] = useState<any>(null);
   const [discoveryProducts, setDiscoveryProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [unavailableMessage, setUnavailableMessage] = useState('');
   const [showMenu, setShowMenu] = useState(false); // 3-dot menu
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -62,13 +68,23 @@ export default function ProductDetailScreen() {
   const fetchProductDetail = async () => {
     try {
       setIsLoading(true);
+      setUnavailableMessage('');
       const [res, discoveryRes] = await Promise.all([
         apiClient.get(`/products/${productId}`),
         apiClient.get('/products') as Promise<any>,
       ]);
-      setProduct(res);
-      setDiscoveryProducts(discoveryRes?.items || discoveryRes || []);
+      const mergedProduct = { ...(routeProduct || {}), ...(res || {}) };
+      if (isUnavailableProduct(mergedProduct)) {
+        setProduct(null);
+        setDiscoveryProducts([]);
+        setUnavailableMessage('Sản phẩm này hiện đã bị khóa hoặc ngừng hiển thị.');
+        return;
+      }
+      setProduct(mergedProduct);
+      const discoveryItems = discoveryRes?.items || discoveryRes || [];
+      setDiscoveryProducts(discoveryItems.filter((item: any) => !isUnavailableProduct(item)));
     } catch (error) {
+      setProduct(null);
       Alert.alert('Lỗi', 'Không thể tải chi tiết sản phẩm.');
     } finally {
       setIsLoading(false);
@@ -77,10 +93,19 @@ export default function ProductDetailScreen() {
 
   const handleAddToCart = async () => {
     if (!product) return;
+    if (isUnavailableProduct(product)) { Alert.alert('Thông báo', 'Sản phẩm này hiện không khả dụng.'); return; }
     const stock = getAvailableStock(product);
     if (stock <= 0) { Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.'); return; }
     try {
-      await addToCart({ ...product, stock, availableItemCount: stock }, 1);
+      const currentPricing = getFlashSalePricing(product);
+      const cartPrice = currentPricing.hasDiscount ? currentPricing.salePrice : Number(product.price || 0);
+      await addToCart({
+        ...product,
+        price: cartPrice,
+        originalPrice: currentPricing.hasDiscount ? currentPricing.originalPrice : product.originalPrice,
+        stock,
+        availableItemCount: stock,
+      }, 1);
       Alert.alert('Thành công', 'Đã thêm vào giỏ hàng!', [
         { text: 'Tiếp tục mua sắm', style: 'cancel' },
         { text: 'Đến giỏ hàng', onPress: () => navigation.navigate('Cart') },
@@ -92,6 +117,7 @@ export default function ProductDetailScreen() {
 
   const handleBuyNow = async () => {
     if (!product) return;
+    if (isUnavailableProduct(product)) { Alert.alert('Thông báo', 'Sản phẩm này hiện không khả dụng.'); return; }
     if (!isLoggedIn) {
       showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để mua hàng và tiếp tục thanh toán.');
       return;
@@ -100,13 +126,17 @@ export default function ProductDetailScreen() {
     const stock = getAvailableStock(product);
     if (stock <= 0) { Alert.alert('Thông báo', 'Sản phẩm đã hết hàng.'); return; }
     try {
+      const currentPricing = getFlashSalePricing(product);
+      const checkoutPrice = currentPricing.hasDiscount ? currentPricing.salePrice : Number(product.price || 0);
       navigation.navigate('Checkout', { 
         selectedItems: [{
           id: Date.now(),
           productId: product.id,
           productName: product.name,
           productImage: product.images?.[0]?.imageUrl || product.mediaUrl,
-          priceSnapshot: product.price,
+          priceSnapshot: checkoutPrice,
+          currentPrice: checkoutPrice,
+          originalPrice: currentPricing.hasDiscount ? currentPricing.originalPrice : product.originalPrice,
           sellerId: product.sellerId,
           sellerName: product.sellerName,
           quantity: 1,
@@ -144,7 +174,11 @@ export default function ProductDetailScreen() {
       showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để lưu sản phẩm yêu thích.');
       return;
     }
-    if (product) await toggleFavorite(product);
+    try {
+      if (product) await toggleFavorite(product);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error?.message || 'Không thể cập nhật sản phẩm yêu thích.');
+    }
   };
 
   const handleToggleFollowShop = async () => {
@@ -200,7 +234,7 @@ export default function ProductDetailScreen() {
   if (!product) {
     return (
       <View style={styles.center}>
-        <Text>Không tìm thấy sản phẩm</Text>
+        <Text style={styles.centerMessage}>{unavailableMessage || 'Không tìm thấy sản phẩm'}</Text>
         <TouchableOpacity style={{ marginTop: 16 }} onPress={() => navigation.goBack()}>
           <Text style={{ color: colors.primary }}>Quay lại</Text>
         </TouchableOpacity>
@@ -208,7 +242,9 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const oldPrice = product.price * 1.2;
+  const pricing = getFlashSalePricing(product);
+  const displayPrice = pricing.hasDiscount ? pricing.salePrice : Number(product.price || 0);
+  const originalPrice = pricing.hasDiscount ? pricing.originalPrice : null;
   const productStock = getAvailableStock(product);
   const headerBgOpacity = scrollY.interpolate({
     inputRange: [0, 120],
@@ -270,14 +306,18 @@ export default function ProductDetailScreen() {
         <View style={styles.infoSection}>
           <View style={styles.priceRow}>
             <Text style={styles.price}>
-              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(product.price || 0)}
+              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(displayPrice)}
             </Text>
-            <Text style={styles.oldPrice}>
-              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(oldPrice)}
-            </Text>
-            <View style={styles.discountBadge}>
-              <Text style={styles.discountText}>-20%</Text>
-            </View>
+            {originalPrice ? (
+              <>
+                <Text style={styles.oldPrice}>
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(originalPrice)}
+                </Text>
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountText}>-{pricing.discountPercent}%</Text>
+                </View>
+              </>
+            ) : null}
           </View>
 
           <View style={styles.titleRow}>
@@ -462,6 +502,7 @@ export default function ProductDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centerMessage: { color: colors.textSecondary, fontSize: 15, textAlign: 'center', paddingHorizontal: 28 },
   scrollContent: {},
 
   sliderContainer: { position: 'relative' },

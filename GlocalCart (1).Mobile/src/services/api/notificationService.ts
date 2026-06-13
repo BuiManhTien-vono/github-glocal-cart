@@ -5,6 +5,9 @@ export interface AppNotification {
   type: string;
   action: string;
   relatedOrderId?: number | null;
+  orderId?: number | null;
+  shipmentId?: number | null;
+  entityId?: number | string | null;
   content: string;
   isRead: boolean;
   createdAt: string;

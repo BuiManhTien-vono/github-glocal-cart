@@ -177,6 +177,48 @@ export default function CartScreen() {
   const calculateSelectedTotal = () =>
     items.filter(i => selectedIds.includes(i.id)).reduce((sum, i) => sum + i.priceSnapshot * i.quantity, 0);
 
+  const getActionErrorMessage = (error: any, fallback: string) => error?.message || fallback;
+
+  const handleUpdateQuantity = async (itemId: number, quantity: number) => {
+    try {
+      await updateQuantity(itemId, quantity);
+    } catch (error: any) {
+      Alert.alert('Lỗi', getActionErrorMessage(error, 'Không thể cập nhật số lượng sản phẩm.'));
+    }
+  };
+
+  const handleRemoveItem = async (itemId: number) => {
+    try {
+      await removeFromCart(itemId);
+      setSelectedIds(prev => prev.filter(id => id !== itemId));
+    } catch (error: any) {
+      Alert.alert('Lỗi', getActionErrorMessage(error, 'Không thể xóa sản phẩm khỏi giỏ hàng.'));
+    }
+  };
+
+  const handleSaveFavoriteItem = async (item: any) => {
+    if (!isLoggedIn) {
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để lưu sản phẩm yêu thích.');
+      return;
+    }
+
+    try {
+      await addFavorite({
+        id: item.productId || item.id,
+        name: item.productName,
+        price: item.priceSnapshot,
+        mediaUrl: item.productImage,
+        sellerName: item.sellerName,
+      });
+      await removeFromCart(item.id);
+      setSlidingShop(null);
+      setSelectedIds(prev => prev.filter(id => id !== item.id));
+      Alert.alert('Đã lưu', 'Sản phẩm đã được chuyển vào mục Yêu thích!');
+    } catch (error: any) {
+      Alert.alert('Lỗi', getActionErrorMessage(error, 'Không thể chuyển sản phẩm vào yêu thích.'));
+    }
+  };
+
   const handleCheckout = () => {
     if (selectedIds.length === 0) {
       if (Platform.OS === 'web') {
@@ -197,23 +239,47 @@ export default function CartScreen() {
     if (selectedIds.length === 0) return;
     Alert.alert('Xóa sản phẩm', `Bạn có chắc muốn xóa ${selectedIds.length} sản phẩm đã chọn?`, [
       { text: 'Hủy', style: 'cancel' },
-      { text: 'Xóa', style: 'destructive', onPress: () => { selectedIds.forEach(id => removeFromCart(id)); setSelectedIds([]); } },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: async () => {
+          const idsToDelete = [...selectedIds];
+          try {
+            await Promise.all(idsToDelete.map(id => removeFromCart(id)));
+            setSelectedIds(prev => prev.filter(id => !idsToDelete.includes(id)));
+          } catch (error: any) {
+            Alert.alert('Lỗi', getActionErrorMessage(error, 'Không thể xóa các sản phẩm đã chọn.'));
+            fetchCart();
+          }
+        },
+      },
     ]);
   };
 
-  const handleSaveFavoritesSelected = () => {
+  const handleSaveFavoritesSelected = async () => {
     if (selectedIds.length === 0) return;
+    if (!isLoggedIn) {
+      showLoginRequired(() => setGuestMode(false), 'Bạn cần đăng nhập để lưu sản phẩm yêu thích.');
+      return;
+    }
+
     const selectedItems = items.filter(i => selectedIds.includes(i.id));
-    selectedItems.forEach(item => {
-      addFavorite({
-        id: item.productId || item.id,
-        name: item.productName,
-        price: item.priceSnapshot,
-        mediaUrl: item.productImage,
-        sellerName: item.sellerName,
-      });
-    });
-    Alert.alert('❤️ Đã lưu', `${selectedItems.length} sản phẩm đã được lưu vào yêu thích!`);
+    try {
+      for (const item of selectedItems) {
+        await addFavorite({
+          id: item.productId || item.id,
+          name: item.productName,
+          price: item.priceSnapshot,
+          mediaUrl: item.productImage,
+          sellerName: item.sellerName,
+        });
+      }
+      setSelectedIds([]);
+      setIsGlobalEdit(false);
+      Alert.alert('Đã lưu', `${selectedItems.length} sản phẩm đã được lưu vào yêu thích!`);
+    } catch (error: any) {
+      Alert.alert('Lỗi', getActionErrorMessage(error, 'Không thể lưu sản phẩm vào yêu thích.'));
+    }
   };
 
   const toggleShopSlide = (shopName: string) => {
@@ -313,26 +379,14 @@ export default function CartScreen() {
                   isGlobalEdit={isGlobalEdit}
                   isSelected={selectedIds.includes(item.id)}
                   onSelect={() => toggleSelect(item.id)}
-                  onUpdateQty={qty => updateQuantity(item.id, qty)}
+                  onUpdateQty={qty => handleUpdateQuantity(item.id, qty)}
                   onRemove={() => {
                     Alert.alert('Xóa sản phẩm', 'Bạn có chắc muốn xóa sản phẩm này?', [
                       { text: 'Hủy', style: 'cancel' },
-                      { text: 'Xóa', style: 'destructive', onPress: () => removeFromCart(item.id) },
+                      { text: 'Xóa', style: 'destructive', onPress: () => handleRemoveItem(item.id) },
                     ]);
                   }}
-                  onSaveFavorite={() => {
-                    addFavorite({
-                      id: item.productId || item.id,
-                      name: item.productName,
-                      price: item.priceSnapshot,
-                      mediaUrl: item.productImage,
-                      sellerName: item.sellerName,
-                    });
-                    // Xóa khỏi giỏ hàng sau khi lưu yêu thích
-                    removeFromCart(item.id);
-                    setSlidingShop(null);
-                    Alert.alert('❤️ Đã lưu', 'Sản phẩm đã được chuyển vào mục Yêu thích!');
-                  }}
+                  onSaveFavorite={() => handleSaveFavoriteItem(item)}
 
                 />
               </View>

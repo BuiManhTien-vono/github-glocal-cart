@@ -61,10 +61,12 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
   const [activeRange, setActiveRange] = useState('30d');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const selectedRange = ranges.find(item => item.key === activeRange) || ranges[2];
 
   const fetchData = useCallback(async () => {
     try {
+      setErrorMessage('');
       if (isAdmin) {
         const revenue = await apiClient.get(`/admin/revenue?days=${selectedRange.days}`) as any;
         setAdminRevenue(revenue);
@@ -83,8 +85,12 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
       setOrders(orderItems);
       setProducts(productItems);
       setAdminRevenue(null);
-    } catch (error) {
+    } catch (error: any) {
       console.warn('Seller revenue fetch error:', error);
+      setOrders([]);
+      setProducts([]);
+      setAdminRevenue(null);
+      setErrorMessage(error?.message || 'Không thể tải số liệu doanh thu.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -264,6 +270,15 @@ export default function SellerRevenueScreen({ navigation }: any): React.JSX.Elem
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Đang tải số liệu...</Text>
         </View>
+      ) : errorMessage ? (
+        <View style={styles.loadingWrap}>
+          <Ionicons name="alert-circle-outline" size={56} color={colors.danger} />
+          <Text style={styles.errorTitle}>Không thể tải doanh thu</Text>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={fetchData}>
+            <Text style={styles.retryBtnText}>Thử lại</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -328,6 +343,10 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { marginTop: 12, color: colors.textSecondary },
+  errorTitle: { marginTop: 12, fontSize: 18, fontWeight: '800', color: colors.text },
+  errorText: { marginTop: 8, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 28, lineHeight: 20 },
+  retryBtn: { marginTop: 16, borderRadius: 8, backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 11 },
+  retryBtnText: { color: colors.white, fontWeight: '700' },
   content: { padding: spacing.md, paddingBottom: 40 },
   rangeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   rangeBtn: {

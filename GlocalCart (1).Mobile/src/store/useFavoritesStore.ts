@@ -54,25 +54,25 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
     const current = get().favorites;
     if (current.some(f => f.id === product.id)) return;
 
-    const updated = [...current, product];
-    set({ favorites: updated });
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-
-    // Thử đồng bộ lên API
     try {
       await apiClient.post('/favorites', { productId: product.id });
-    } catch {}
+      const updated = [...current, product];
+      set({ favorites: updated });
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (error) {
+      throw error;
+    }
   },
 
   removeFavorite: async (productId: number) => {
-    const updated = get().favorites.filter(f => f.id !== productId);
-    set({ favorites: updated });
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-
-    // Thử đồng bộ lên API
     try {
       await apiClient.delete(`/favorites/${productId}`);
-    } catch {}
+      const updated = get().favorites.filter(f => f.id !== productId);
+      set({ favorites: updated });
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (error) {
+      throw error;
+    }
   },
 
   toggleFavorite: async (product: FavoriteProduct) => {

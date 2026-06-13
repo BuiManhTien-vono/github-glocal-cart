@@ -97,10 +97,28 @@ export default function ShipperAvailableScreen() {
   }, []);
 
   const updateOnlineState = async (value: boolean) => {
-    setIsOnline(value);
-    await AsyncStorage.setItem("shipper_online", String(value));
-    if (value) loadData(1, true);
-    else setUnassigned([]);
+    if (!value) {
+      setIsOnline(false);
+      await AsyncStorage.setItem("shipper_online", "false");
+      setUnassigned([]);
+      return;
+    }
+
+    const locationSynced = await syncShipperLocation();
+    if (!locationSynced) {
+      setIsOnline(false);
+      await AsyncStorage.setItem("shipper_online", "false");
+      setUnassigned([]);
+      Alert.alert(
+        "Không thể bật Online",
+        "Vui lòng cấp quyền vị trí và đảm bảo app lấy được vị trí hiện tại.",
+      );
+      return;
+    }
+
+    setIsOnline(true);
+    await AsyncStorage.setItem("shipper_online", "true");
+    loadData(1, true);
   };
 
   const loadData = useCallback(
@@ -111,7 +129,18 @@ export default function ShipperAvailableScreen() {
       }
 
       try {
-        await syncShipperLocation();
+        const locationSynced = await syncShipperLocation();
+        if (!locationSynced) {
+          setIsOnline(false);
+          await AsyncStorage.setItem("shipper_online", "false");
+          setUnassigned([]);
+          Alert.alert(
+            "Đã chuyển Offline",
+            "Không thể cập nhật vị trí shipper. Vui lòng kiểm tra quyền vị trí rồi bật Online lại.",
+          );
+          return;
+        }
+
         const availableRes: any = await shipperService.getAvailableShipments(
           nextPage,
           PAGE_SIZE,

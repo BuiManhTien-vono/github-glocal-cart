@@ -42,6 +42,8 @@ const handlers = new Map<
   DeliveryRealtimeEvent,
   Set<(payload: DeliveryRealtimePayload) => void>
 >();
+const recentEvents = new Map<string, number>();
+const DUPLICATE_WINDOW_MS = 1500;
 
 const EVENTS: DeliveryRealtimeEvent[] = [
   "OrderCreated",
@@ -92,6 +94,12 @@ function getConnection() {
 
   EVENTS.forEach((eventName) => {
     connection!.on(eventName, (payload: DeliveryRealtimePayload) => {
+      const eventKey = `${eventName}:${payload?.orderId || ""}:${payload?.shipmentId || ""}:${payload?.orderStatus || ""}:${payload?.shipmentStatus || ""}:${payload?.paymentStatus || ""}`;
+      const now = Date.now();
+      const lastSeenAt = recentEvents.get(eventKey) || 0;
+      if (now - lastSeenAt < DUPLICATE_WINDOW_MS) return;
+
+      recentEvents.set(eventKey, now);
       handlers.get(eventName)?.forEach((handler) => handler(payload || {}));
     });
   });

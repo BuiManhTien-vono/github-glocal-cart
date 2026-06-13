@@ -92,6 +92,7 @@ export default function ShipperCompletedScreen() {
   const [totalCount, setTotalCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const navigation = useNavigation<any>();
@@ -99,6 +100,7 @@ export default function ShipperCompletedScreen() {
   const loadData = useCallback(
     async (nextPage = 1, replace = true, period = activePeriod) => {
       try {
+        if (replace) setErrorMessage("");
         const [response, statsResponse]: any[] = replace
           ? await Promise.all([
             shipperService.getCompletedShipments(nextPage, PAGE_SIZE, period),
@@ -118,8 +120,13 @@ export default function ShipperCompletedScreen() {
         if (statsResponse) setStats({ ...defaultStats, ...statsResponse });
         setPage(nextPage);
         setHasMore(items.length === PAGE_SIZE && nextTotalCount > nextPage * PAGE_SIZE);
-      } catch (e) {
+      } catch (e: any) {
         console.log("Lỗi tải danh sách đã giao", e);
+        if (replace) {
+          setCompletedShipments([]);
+          setTotalCount(0);
+        }
+        setErrorMessage(e?.message || "Không thể tải lịch sử giao hàng.");
       } finally {
         setRefreshing(false);
         setLoadingMore(false);
@@ -351,7 +358,19 @@ export default function ShipperCompletedScreen() {
         ListEmptyComponent={
           !refreshing ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Chưa có đơn đã giao trong mục này.</Text>
+              <Ionicons
+                name={errorMessage ? "alert-circle-outline" : "checkmark-done-circle-outline"}
+                size={54}
+                color={errorMessage ? colors.danger : colors.textSecondary}
+              />
+              <Text style={styles.emptyText}>
+                {errorMessage || "Chưa có đơn đã giao trong mục này."}
+              </Text>
+              {!!errorMessage && (
+                <TouchableOpacity style={styles.retryBtn} onPress={() => loadData(1, true)}>
+                  <Text style={styles.retryBtnText}>Thử lại</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : null
         }
@@ -512,4 +531,6 @@ const styles = StyleSheet.create({
   loadingMore: { paddingVertical: 16 },
   emptyContainer: { flex: 1, padding: 32, alignItems: "center", justifyContent: "center" },
   emptyText: { fontSize: 16, color: colors.textSecondary, textAlign: "center" },
+  retryBtn: { marginTop: 14, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10 },
+  retryBtnText: { color: colors.primary, fontWeight: "700" },
 });

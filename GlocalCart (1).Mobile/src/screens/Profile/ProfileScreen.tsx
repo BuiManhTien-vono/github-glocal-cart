@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, Animated, Modal, TextInput, Dimensions, Platform,
-  Linking,
+  Alert, Animated, Modal, TextInput, Dimensions,
+  Linking, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,11 +63,6 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const handleLogout = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Bạn có chắc muốn đăng xuất?')) logout();
-      return;
-    }
-
     Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
       { text: 'Hủy', style: 'cancel' },
       { text: 'Đăng xuất', style: 'destructive', onPress: logout },
@@ -84,19 +79,6 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const handleActivateSeller = async () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Bạn muốn trở thành Người bán trên GlocalCart?\n\nSau khi kích hoạt, bạn có thể đăng bán sản phẩm và quản lý cửa hàng.')) {
-        try {
-          await apiClient.post('/users/activate-seller');
-          updateUser({ ...user!, isSeller: true, role: 'Seller' });
-          window.alert('🎉 Chúc mừng! Bạn đã trở thành Người bán thành công.');
-        } catch (err: any) {
-          window.alert('Lỗi: ' + err.message);
-        }
-      }
-      return;
-    }
-
     Alert.alert(
       'Đăng Ký Bán Hàng',
       'Bạn muốn trở thành Người bán trên GlocalCart?\n\nSau khi kích hoạt, bạn có thể đăng bán sản phẩm và quản lý cửa hàng.',
@@ -111,6 +93,29 @@ export default function ProfileScreen({ navigation }: any) {
               Alert.alert('🎉 Chúc mừng!', 'Bạn đã trở thành Người bán thành công.');
             } catch (err: any) {
               Alert.alert('Lỗi', err.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeactivateSeller = async () => {
+    Alert.alert(
+      'Chuyển về người mua',
+      'Bạn muốn quay lại tài khoản người mua?\n\nSau khi chuyển, giao diện quản lý bán hàng sẽ được ẩn khỏi tài khoản này.',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Chuyển về người mua',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiClient.post('/users/deactivate-seller');
+              updateUser({ ...user!, isSeller: false, role: 'Member' });
+              Alert.alert('Thành công', 'Tài khoản đã chuyển về chế độ người mua.');
+            } catch (err: any) {
+              Alert.alert('Lỗi', err.message || 'Không thể chuyển về người mua.');
             }
           },
         },
@@ -333,7 +338,11 @@ export default function ProfileScreen({ navigation }: any) {
                 style={styles.avatarCircle}
                 onPress={handleEditProfile}
               >
-                <Text style={styles.avatarText}>{initial}</Text>
+                {(user as any)?.avatarUrl ? (
+                  <Image source={{ uri: (user as any).avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>{initial}</Text>
+                )}
                 <View style={styles.editBadge}>
                   <Ionicons name="camera" size={10} color="#FFF" />
                 </View>
@@ -348,6 +357,11 @@ export default function ProfileScreen({ navigation }: any) {
                       {isAdmin ? '👑 Admin' : user?.isSeller ? '🏪 Seller' : '🛒 Member'}
                     </Text>
                   </View>
+                  {!isAdmin && user?.isSeller && (
+                    <TouchableOpacity style={styles.switchBuyerBtn} onPress={handleDeactivateSeller}>
+                      <Text style={styles.switchBuyerText}>Chuyển về người mua</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
 
@@ -798,6 +812,11 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '800',
   },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
+  },
   editBadge: {
     position: 'absolute',
     bottom: -2,
@@ -826,6 +845,9 @@ const styles = StyleSheet.create({
   },
   roleBadgeRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 6,
   },
   hiddenAdminBadge: {
@@ -841,6 +863,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FFF',
     fontWeight: '600',
+  },
+  switchBuyerBtn: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: borderRadius.round,
+  },
+  switchBuyerText: {
+    fontSize: 11,
+    color: '#FFF',
+    fontWeight: '700',
   },
   editProfileBtn: {
     flexDirection: 'row',

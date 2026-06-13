@@ -39,6 +39,13 @@ namespace GlocalCart.API.Controllers
             return Ok(ApiResponse.Ok("Đã gửi yêu cầu cấp quyền quản lý bán hàng."));
         }
 
+        [HttpPost("deactivate-seller")]
+        public async Task<IActionResult> DeactivateSeller()
+        {
+            await _userService.DeactivateSellerAsync(UserId);
+            return Ok(ApiResponse.Ok("Đã chuyển về tài khoản người mua."));
+        }
+
         // === ADDRESSES ===
         [HttpGet("addresses")]
         public async Task<IActionResult> GetAddresses() =>

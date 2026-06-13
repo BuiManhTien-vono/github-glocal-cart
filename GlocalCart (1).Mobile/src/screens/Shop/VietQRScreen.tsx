@@ -7,7 +7,7 @@ import { paymentApi, PaymentInitiateResponse } from '../../services/api/paymentA
 import { Loading } from '../../components/common/Loading';
 
 export default function VietQRScreen({ navigation, route }: any) {
-    const { orderId } = route.params;
+    const orderId = route?.params?.orderId;
     const insets = useSafeAreaInsets();
     
     const [isLoading, setIsLoading] = useState(true);
@@ -18,6 +18,7 @@ export default function VietQRScreen({ navigation, route }: any) {
         if (orderId) {
             fetchQrCode();
         } else {
+            setIsLoading(false);
             Alert.alert('Lỗi', 'Không tìm thấy thông tin đơn hàng.', [
                 { text: 'Quay lại', onPress: () => navigation.goBack() }
             ]);

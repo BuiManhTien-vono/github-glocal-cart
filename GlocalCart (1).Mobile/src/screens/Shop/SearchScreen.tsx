@@ -10,6 +10,7 @@ import apiClient from '../../services/api/apiClient';
 import { ProductCard } from '../../components/shop/ProductCard';
 import { colors } from '../../theme/colors';
 import { resolveProductImage } from '../../utils/imageUtils';
+import { getFlashSalePricing, getFlashSaleSoldPercentage } from '../../utils/flashSalePricing';
 
 const HOT_SEARCHES = ['iPhone 15', 'Giày thể thao', 'Áo thun nam', 'Tai nghe bluetooth', 'Váy nữ', 'Sạc dự phòng'];
 
@@ -30,6 +31,11 @@ const PRICE_RANGES = [
 const LOCATIONS = ['Hà Nội', 'TP. Hồ Chí Minh', 'Quận Hà Đông', 'Quận Hoàng Mai', 'Hải Phòng', 'Đà Nẵng'];
 const SERVICES = ['Đang giảm giá', 'Hàng có sẵn', 'Mua giá bán buôn', 'Gì Cũng Rẻ', 'Hoàn xu Xtra', 'Freeship Xtra'];
 
+const isUnavailableProduct = (item: any) => {
+  const status = String(item?.status || item?.productStatus || '').toLowerCase();
+  return item?.isLocked === true || item?.isActive === false || ['locked', 'inactive', 'hidden', 'deleted'].includes(status);
+};
+
 export default function SearchScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -40,6 +46,7 @@ export default function SearchScreen() {
   const [history, setHistory] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false); 
+  const [searchError, setSearchError] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
     minPrice: '',
@@ -65,14 +72,16 @@ export default function SearchScreen() {
   const fetchFlashSaleProducts = async () => {
     setIsLoading(true);
     setIsSearching(true);
+    setSearchError('');
     try {
       const res: any = await apiClient.get('/products');
       const items = res?.items || res || [];
-      setProducts(items);
+      setProducts(items.filter((item: any) => !isUnavailableProduct(item) && getFlashSalePricing(item).hasDiscount));
       setActiveTab(0);
     } catch (error) {
       console.log('Fetch Flash Sale error:', error);
       setProducts([]);
+      setSearchError('Không thể tải sản phẩm flash sale. Vui lòng thử lại.');
     } finally {
       setIsLoading(false);
     }
@@ -209,11 +218,12 @@ export default function SearchScreen() {
     if (!query.trim()) return;
     setIsLoading(true);
     setIsSearching(true);
+    setSearchError('');
     Keyboard.dismiss();
     saveToHistory(query);
 
     try {
-      let url = `/products/search?name=${query}`;
+      let url = `/products/search?name=${encodeURIComponent(query)}`;
       if (filters.minPrice) url += `&minPrice=${filters.minPrice}`;
       if (filters.maxPrice) url += `&maxPrice=${filters.maxPrice}`;
       
@@ -232,11 +242,13 @@ export default function SearchScreen() {
       if (filters.rating) url += `&minRating=${filters.rating}`;
 
       const res: any = await apiClient.get(url);
-      setProducts(res?.items || res || []);
+      const items = res?.items || res || [];
+      setProducts(items.filter((item: any) => !isUnavailableProduct(item)));
       setActiveTab(0);
     } catch (error) {
       console.log('Search error:', error);
       setProducts([]);
+      setSearchError('Không thể tìm kiếm sản phẩm. Vui lòng kiểm tra kết nối và thử lại.');
     } finally {
       setIsLoading(false);
     }
@@ -261,6 +273,7 @@ export default function SearchScreen() {
   const onTextChange = (text: string) => {
     setSearchQuery(text);
     setIsSearching(false);
+    setSearchError('');
     fetchSuggestions(text);
   };
 
@@ -396,22 +409,20 @@ export default function SearchScreen() {
                   contentContainerStyle={styles.listContainer}
                   renderItem={({ item, index }) => {
                     if (route.params?.isFlashSale) {
-                      // Fake discount data giống trang chủ để đồng bộ tag giảm giá và giá đỏ
-                      const discount = 20 + ((index % 6) * 5); // 20%, 25%, 30%, 35%, 40%, 45%
-                      const discountedPrice = item.price * (1 - discount / 100);
-                      const soldPercentage = ((item.id * 13) % 60) + 25; // range 25% to 85%
+                      const pricing = getFlashSalePricing(item);
+                      const soldPercentage = getFlashSaleSoldPercentage(item);
                       const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/150';
 
                       return (
                         <View style={{ width: '50%', padding: 4 }}>
                           <TouchableOpacity 
                             style={styles.flashSaleCard}
-                            onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}
+                            onPress={() => navigation.navigate('ProductDetail', { productId: item.id, product: item })}
                           >
                             <View style={styles.flashSaleImageBox}>
                               <Image source={{ uri: mainImage }} style={styles.flashSaleImage} />
                               <View style={styles.flashSaleBadge}>
-                                <Text style={styles.flashSaleBadgeText}>-{discount}%</Text>
+                                <Text style={styles.flashSaleBadgeText}>-{pricing.discountPercent}%</Text>
                               </View>
                               <View style={styles.flashSaleLabelFav}>
                                 <Text style={styles.flashSaleLabelFavText}>Yêu thích</Text>
@@ -425,16 +436,16 @@ export default function SearchScreen() {
                               
                               <View style={styles.flashSalePriceRow}>
                                 <Text style={styles.flashSalePrice}>
-                                  ₫{discountedPrice.toLocaleString('vi-VN')}
+                                  ₫{pricing.salePrice.toLocaleString('vi-VN')}
                                 </Text>
                                 <Text style={styles.flashSaleOriginalPrice}>
-                                  ₫{item.price.toLocaleString('vi-VN')}
+                                  ₫{pricing.originalPrice.toLocaleString('vi-VN')}
                                 </Text>
                               </View>
                               
                               <View style={styles.flashSaleProgressBarBg}>
                                 <View style={[styles.flashSaleProgressBarFill, { width: `${soldPercentage}%` }]} />
-                                <Text style={styles.flashSaleProgressText}>Đang bán chạy</Text>
+                                <Text style={styles.flashSaleProgressText}>{soldPercentage > 0 ? 'Đang bán chạy' : 'Đang mở bán'}</Text>
                               </View>
                             </View>
                           </TouchableOpacity>
@@ -451,9 +462,16 @@ export default function SearchScreen() {
                   ListEmptyComponent={() => (
                     <View style={styles.empty}>
                       <Ionicons name="search-outline" size={80} color={colors.border} />
-                      <Text style={styles.emptyText}>Không tìm thấy sản phẩm nào cho "{searchQuery}"</Text>
-                      <TouchableOpacity style={styles.retryBtn} onPress={() => setIsSearching(false)}>
-                        <Text style={{ color: colors.primary }}>Thử từ khóa khác</Text>
+                      <Text style={styles.emptyText}>
+                        {searchError || `Không tìm thấy sản phẩm nào cho "${searchQuery}"`}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.retryBtn}
+                        onPress={() => (searchError
+                          ? (route.params?.isFlashSale ? fetchFlashSaleProducts() : fetchResults(searchQuery))
+                          : setIsSearching(false))}
+                      >
+                        <Text style={{ color: colors.primary }}>{searchError ? 'Thử lại' : 'Thử từ khóa khác'}</Text>
                       </TouchableOpacity>
                     </View>
                   )}

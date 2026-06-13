@@ -31,16 +31,69 @@ namespace GlocalCart.API.Services.Implementations
                 var allCategoryIds = await GetCategoryIdsRecursive(search.CategoryId.Value);
                 query = query.Where(p => allCategoryIds.Contains(p.CategoryId));
             }
+            if (!string.IsNullOrWhiteSpace(search.CategoryIds))
+            {
+                var categoryIds = search.CategoryIds
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(value => int.TryParse(value, out var id) ? id : (int?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                if (categoryIds.Count > 0)
+                {
+                    var allCategoryIds = new List<int>();
+                    foreach (var categoryId in categoryIds)
+                    {
+                        allCategoryIds.AddRange(await GetCategoryIdsRecursive(categoryId));
+                    }
+
+                    query = query.Where(p => allCategoryIds.Distinct().Contains(p.CategoryId));
+                }
+            }
             if (search.SellerId.HasValue)
                 query = query.Where(p => p.SellerId == search.SellerId.Value);
             if (search.MinPrice.HasValue)
                 query = query.Where(p => p.Price >= search.MinPrice.Value);
             if (search.MaxPrice.HasValue)
                 query = query.Where(p => p.Price <= search.MaxPrice.Value);
+            if (search.MinRating.HasValue)
+                query = query.Where(p => p.Reviews.Any() && p.Reviews.Average(r => r.Rating) >= search.MinRating.Value);
+
+            var brands = SplitQueryList(search.Brands);
+            if (brands.Count > 0)
+            {
+                query = query.Where(p => brands.Any(brand =>
+                    p.Seller.FullName.Contains(brand) ||
+                    p.Name.Contains(brand) ||
+                    (p.Description != null && p.Description.Contains(brand))));
+            }
+
+            var locations = SplitQueryList(search.Locations);
+            if (locations.Count > 0)
+            {
+                query = query.Where(p => p.Seller.Addresses.Any(address =>
+                    locations.Any(location =>
+                        address.City.Contains(location) ||
+                        address.State.Contains(location) ||
+                        address.Country.Contains(location))));
+            }
+
+            var services = SplitQueryList(search.Services);
+            if (services.Count > 0)
+            {
+                query = query.Where(p => services.Any(service =>
+                    p.Name.Contains(service) ||
+                    (p.Description != null && p.Description.Contains(service))));
+            }
 
             query = query.OrderByDescending(p => p.CreatedAt);
 
-            return await query.Select(p => MapToDto(p)).ToPagedResultAsync(search.Page, search.PageSize);
+            var pageSize = search.Limit.HasValue && search.Limit.Value > 0
+                ? search.Limit.Value
+                : search.PageSize;
+
+            return await query.Select(p => MapToDto(p)).ToPagedResultAsync(search.Page, pageSize);
         }
 
         public async Task<ProductResponseDto> GetProductByIdAsync(int id)
@@ -62,9 +115,8 @@ namespace GlocalCart.API.Services.Implementations
             return categories.Select(c => MapCategoryDto(c)).ToList();
         }
 
-        public async Task<PagedResult<ProductResponseDto>> SearchProductsAsync(string? name, int? categoryId, int page, int pageSize)
+        public async Task<PagedResult<ProductResponseDto>> SearchProductsAsync(ProductSearchDto search)
         {
-            var search = new ProductSearchDto { Name = name, CategoryId = categoryId, Page = page, PageSize = pageSize };
             return await GetProductsAsync(search);
         }
 
@@ -195,6 +247,26 @@ namespace GlocalCart.API.Services.Implementations
             if (dto.AvailableItemCount.HasValue) product.AvailableItemCount = dto.AvailableItemCount.Value;
             if (dto.CategoryId.HasValue) product.CategoryId = dto.CategoryId.Value;
             if (dto.MediaUrl != null) product.MediaUrl = dto.MediaUrl;
+
+            // Xử lý Flash Sale
+            if (dto.IsFlashSale.HasValue)
+            {
+                // Không cho phép bật Flash Sale khi sản phẩm hết hàng
+                if (dto.IsFlashSale.Value && product.AvailableItemCount <= 0)
+                    throw new InvalidOperationException("Không thể bật Flash Sale cho sản phẩm hết hàng.");
+                
+                product.IsFlashSale = dto.IsFlashSale.Value;
+            }
+
+            if (dto.FlashSaleDiscount.HasValue)
+            {
+                // Chỉ cập nhật discount nếu Flash Sale đang bật hoặc sẽ bật
+                if (product.IsFlashSale || dto.IsFlashSale == true)
+                {
+                    product.FlashSaleDiscount = Math.Min(Math.Max(dto.FlashSaleDiscount.Value, 0), 90);
+                }
+            }
+
             product.UpdatedAt = DateTime.UtcNow;
 
             // Đồng bộ danh sách ảnh
@@ -314,7 +386,8 @@ namespace GlocalCart.API.Services.Implementations
             CategoryId = p.CategoryId, CategoryName = p.Category.Name,
             Name = p.Name, Description = p.Description, Price = p.Price,
             AvailableItemCount = p.AvailableItemCount, IsActive = p.IsActive, IsLocked = p.IsLocked,
-            MediaUrl = p.MediaUrl, CreatedAt = p.CreatedAt,
+            MediaUrl = p.MediaUrl, IsFlashSale = p.IsFlashSale, FlashSaleDiscount = p.FlashSaleDiscount,
+            CreatedAt = p.CreatedAt,
             Images = p.Images.OrderBy(i => i.DisplayOrder).Select(i => new ProductImageDto
             {
                 Id = i.Id, ImageUrl = i.ImageUrl, DisplayOrder = i.DisplayOrder,
@@ -357,6 +430,15 @@ namespace GlocalCart.API.Services.Implementations
             
             Console.WriteLine($"[DEBUG] Category SEARCH: parent {parentId} -> found IDs: {string.Join(",", result)}");
             return result;
+        }
+
+        private static List<string> SplitQueryList(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? new List<string>()
+                : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(item => !string.IsNullOrWhiteSpace(item))
+                    .ToList();
         }
 
         private static CategoryDto MapCategoryDto(Category c) => new()

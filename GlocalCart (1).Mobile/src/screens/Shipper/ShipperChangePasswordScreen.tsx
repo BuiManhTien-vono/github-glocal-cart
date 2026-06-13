@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../theme/colors';
+import apiClient from '../../services/api/apiClient';
 
 export default function ShipperChangePasswordScreen() {
   const navigation = useNavigation();
@@ -12,21 +13,33 @@ export default function ShipperChangePasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!oldPassword || !newPassword || !confirmPassword) {
       Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
+      return;
+    }
+    if (newPassword.length < 6) {
+      Alert.alert('Lỗi', 'Mật khẩu mới phải có ít nhất 6 ký tự');
       return;
     }
     if (newPassword !== confirmPassword) {
       Alert.alert('Lỗi', 'Mật khẩu mới không khớp');
       return;
     }
-    
-    // Simulate API call
-    Alert.alert('Thành công', 'Mật khẩu đã được thay đổi', [
-      { text: 'OK', onPress: () => navigation.goBack() }
-    ]);
+
+    setLoading(true);
+    try {
+      await apiClient.put('/users/change-password', { currentPassword: oldPassword, newPassword });
+      Alert.alert('Thành công', 'Mật khẩu đã được thay đổi', [
+        { text: 'OK', onPress: () => navigation.goBack() }
+      ]);
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể đổi mật khẩu. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,8 +99,8 @@ export default function ShipperChangePasswordScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.submitBtn} onPress={handleUpdate}>
-          <Text style={styles.submitBtnText}>Cập nhật mật khẩu</Text>
+        <TouchableOpacity style={[styles.submitBtn, loading && { opacity: 0.7 }]} onPress={handleUpdate} disabled={loading}>
+          <Text style={styles.submitBtnText}>{loading ? 'Đang xử lý...' : 'Cập nhật mật khẩu'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

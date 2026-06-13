@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,14 @@ export default function FavoritesScreen() {
       loadFavorites();
     }, [loadFavorites])
   );
+
+  const handleRemoveFavorite = async (productId: number) => {
+    try {
+      await removeFavorite(productId);
+    } catch (error: any) {
+      Alert.alert('Lỗi', error?.message || 'Không thể xóa sản phẩm yêu thích.');
+    }
+  };
 
   const renderItem = ({ item }: any) => {
     const image =
@@ -52,7 +60,7 @@ export default function FavoritesScreen() {
         </View>
         <TouchableOpacity
           style={styles.heartBtn}
-          onPress={() => removeFavorite(item.id)}
+          onPress={() => handleRemoveFavorite(item.id)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="heart" size={24} color={colors.danger} />

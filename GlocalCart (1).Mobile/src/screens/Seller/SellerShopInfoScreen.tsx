@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, shadow } from '../../theme/colors';
+import apiClient from '../../services/api/apiClient';
 
 export default function SellerShopInfoScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
@@ -12,6 +13,7 @@ export default function SellerShopInfoScreen({ navigation }: any) {
     const [description, setDescription] = useState('Gi gỉ gì gi cái gì cũng có');
     const [logoUri, setLogoUri] = useState('https://ui-avatars.com/api/?name=GC&background=FF6B35&color=fff&size=120&bold=true');
     const [bannerUri, setBannerUri] = useState('https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&h=300&fit=crop');
+    const [isSaving, setIsSaving] = useState(false);
 
     const handlePickLogo = () => {
         Alert.alert('Đổi Logo', 'Chức năng chọn ảnh từ thư viện sẽ được tích hợp sau.\n\n(Hiện tại đang dùng dữ liệu mẫu)');
@@ -21,12 +23,26 @@ export default function SellerShopInfoScreen({ navigation }: any) {
         Alert.alert('Đổi ảnh bìa', 'Chức năng chọn ảnh từ thư viện sẽ được tích hợp sau.\n\n(Hiện tại đang dùng dữ liệu mẫu)');
     };
 
-    const handleSave = () => {
-        Alert.alert(
-            'Lưu thành công ✓',
-            `Tên Shop: ${shopName}\nMô tả: ${description}`,
-            [{ text: 'OK' }]
-        );
+    const handleSave = async () => {
+        const trimmedName = shopName.trim();
+        if (!trimmedName) {
+            Alert.alert('Thông báo', 'Tên Shop không được để trống.');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            await apiClient.put('/users/profile', {
+                fullName: trimmedName,
+                avatarUrl: logoUri,
+            });
+            setShopName(trimmedName);
+            Alert.alert('Lưu thành công', `Tên Shop: ${trimmedName}\nMô tả: ${description.trim() || 'Chưa có mô tả'}`);
+        } catch (error: any) {
+            Alert.alert('Lỗi', error?.message || 'Không thể lưu thông tin Shop. Vui lòng thử lại.');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -110,8 +126,8 @@ export default function SellerShopInfoScreen({ navigation }: any) {
                 </View>
 
                 {/* Save Button */}
-                <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-                    <Text style={styles.saveBtnText}>Lưu thay đổi</Text>
+                <TouchableOpacity style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]} onPress={handleSave} disabled={isSaving}>
+                    {isSaving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.saveBtnText}>Lưu thay đổi</Text>}
                 </TouchableOpacity>
             </ScrollView>
         </View>
@@ -181,5 +197,6 @@ const styles = StyleSheet.create({
         paddingVertical: 14, borderRadius: 8, alignItems: 'center',
         marginTop: 8,
     },
+    saveBtnDisabled: { opacity: 0.65 },
     saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

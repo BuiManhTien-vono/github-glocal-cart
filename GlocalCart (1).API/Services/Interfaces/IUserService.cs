@@ -10,6 +10,7 @@ namespace GlocalCart.API.Services.Interfaces
         Task<UserInfoDto> UpdateProfileAsync(int userId, UpdateProfileDto dto);
         Task<bool> ChangePasswordAsync(int userId, ChangePasswordDto dto);
         Task<bool> ActivateSellerAsync(int userId);
+        Task<bool> DeactivateSellerAsync(int userId);
 
         // Addresses
         Task<List<AddressDto>> GetAddressesAsync(int userId);

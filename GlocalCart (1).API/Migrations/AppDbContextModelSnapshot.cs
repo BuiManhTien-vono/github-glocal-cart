@@ -546,6 +546,12 @@ namespace GlocalCart.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsFlashSale")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("FlashSaleDiscount")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsLocked")
                         .HasColumnType("bit");
 

@@ -20,6 +20,7 @@ import { useFollowShopStore } from '../../store/useFollowShopStore';
 import { borderRadius, colors, shadow, spacing } from '../../theme/colors';
 import { resolveProductImage } from '../../utils/imageUtils';
 import { showLoginRequired } from '../../utils/loginRequired';
+import { getFlashSalePricing } from '../../utils/flashSalePricing';
 
 const COVER_HEIGHT = 208;
 
@@ -172,11 +173,11 @@ export default function ShopScreen({ route, navigation }: any) {
     });
   };
 
-  const openProduct = (productId: number) => {
-    navigation.navigate('ProductDetail', { productId });
+  const openProduct = (productId: number, product?: any) => {
+    navigation.navigate('ProductDetail', { productId, product });
   };
 
-  const flashSaleProducts = products.slice(0, 6);
+  const flashSaleProducts = products.filter(item => getFlashSalePricing(item).hasDiscount).slice(0, 6);
   const bestSellers = products.slice(0, 8);
   const recommendedProducts = products.slice(0, 10);
 
@@ -283,19 +284,17 @@ export default function ShopScreen({ route, navigation }: any) {
             </View>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
-            {flashSaleProducts.map((item, idx) => {
-              const discount = 15 + idx * 5;
-              const price = Number(item.price || 0);
-              const salePrice = price * (1 - discount / 100);
+            {flashSaleProducts.map((item) => {
+              const pricing = getFlashSalePricing(item);
               const mainImage = resolveProductImage(item) || 'https://via.placeholder.com/120';
 
               return (
-                <TouchableOpacity key={item.id} style={styles.flashCard} onPress={() => openProduct(item.id)}>
+                <TouchableOpacity key={item.id} style={styles.flashCard} onPress={() => openProduct(item.id, item)}>
                   <View style={styles.flashImgWrap}>
                     <Image source={{ uri: mainImage }} style={styles.flashImg} contentFit="cover" />
-                    <View style={styles.discountBadge}><Text style={styles.discountText}>-{discount}%</Text></View>
+                    <View style={styles.discountBadge}><Text style={styles.discountText}>-{pricing.discountPercent}%</Text></View>
                   </View>
-                  <Text style={styles.flashPrice}>d{salePrice.toLocaleString('vi-VN')}</Text>
+                  <Text style={styles.flashPrice}>đ{pricing.salePrice.toLocaleString('vi-VN')}</Text>
                 </TouchableOpacity>
               );
             })}
